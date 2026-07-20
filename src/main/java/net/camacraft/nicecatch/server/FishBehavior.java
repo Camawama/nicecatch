@@ -212,13 +212,20 @@ public final class FishBehavior
         if (!hooked) state.bobber = null;
     }
 
+    /** A scare source: where it is, and whether it's the always-flee kind (a swimmer). */
+    public record Threat(Vec3 pos, boolean certain) {}
+
     /**
-     * Something worth fleeing from: any non-fish entity splashing about in the water nearby,
-     * or a player closing to melee reach (in the water or not) who is moving or mid-swing.
-     * A fisher standing still on the shore never trips this.
+     * Something worth fleeing from: any non-fish entity splashing about in the water nearby
+     * (a certain scare — every fish bolts from a swimmer), or a player closing to melee reach
+     * (in the water or not) who is moving or mid-swing (chance-based scare). A fisher standing
+     * still on the shore never trips this.
+     *
+     * Movement is measured by last-tick position delta, not getDeltaMovement(): server-side
+     * velocity is stale for players, whose motion arrives via packets.
      */
     @Nullable
-    public static Vec3 findThreat(AbstractFish fish)
+    public static Threat findThreat(AbstractFish fish)
     {
         double swimRadius = NiceCatchConfig.SERVER.swimScareRadius.get();
         double meleeRadius = NiceCatchConfig.SERVER.meleeThreatRadius.get();
@@ -226,13 +233,15 @@ public final class FishBehavior
         AABB box = fish.getBoundingBox().inflate(radius);
         for (LivingEntity e : fish.level().getEntitiesOfClass(LivingEntity.class, box,
                 other -> other != fish && !(other instanceof AbstractFish) && !other.isSpectator())) {
-            boolean moving = e.getDeltaMovement().horizontalDistanceSqr() > 4.0E-4D;
+            double dx = e.getX() - e.xOld;
+            double dz = e.getZ() - e.zOld;
+            boolean moving = dx * dx + dz * dz > 4.0E-4D;
             if (e.isInWater() && moving && fish.distanceToSqr(e) <= swimRadius * swimRadius) {
-                return e.position();
+                return new Threat(e.position(), true);
             }
             if (e instanceof Player player && fish.distanceToSqr(player) <= meleeRadius * meleeRadius
                     && (moving || player.swinging)) {
-                return player.position();
+                return new Threat(player.position(), false);
             }
         }
         return null;

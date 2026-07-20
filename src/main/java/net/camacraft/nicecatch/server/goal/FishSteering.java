@@ -51,7 +51,6 @@ public final class FishSteering
     {
         if (!fish.isInWater()) return;
         dir = avoidWalls(fish, dir);
-        dir = staySubmerged(fish, dir);
 
         Vec3 v = fish.getDeltaMovement().add(dir.scale(accel));
         double horiz = v.horizontalDistance();
@@ -59,38 +58,69 @@ public final class FishSteering
             v = new Vec3(v.x * maxSpeed / horiz, v.y, v.z * maxSpeed / horiz);
         }
         v = new Vec3(v.x, Mth.clamp(v.y, -maxSpeed * 0.6D, maxSpeed * 0.6D), v.z);
+
+        // FishMoveControl adds constant buoyancy every tick, which would beach the fish at the
+        // surface during long steers. If there's no water shortly above the fish, force it back
+        // under instead of letting it bask with its dorsal fin in the sun.
+        if (!waterAt(fish, fish.getX(), fish.getY() + 0.6D, fish.getZ())) {
+            v = new Vec3(v.x, Math.min(v.y, 0.0D) - 0.02D, v.z);
+        }
         fish.setDeltaMovement(v);
         faceMovement(fish);
     }
 
-    /** If the heading runs into a solid block within ~1.5 blocks, rotate away until it doesn't. */
+    /** If the heading runs into non-water within ~1.5 blocks, rotate away until it doesn't. */
     private static Vec3 avoidWalls(AbstractFish fish, Vec3 dir)
     {
-        if (isOpen(fish, dir)) return dir;
+        if (isOpen(fish, dir, 1.5D)) return dir;
         for (int step = 1; step <= 3; step++) {
             double angle = step * (Math.PI / 3.0D);
             Vec3 left = rotateY(dir, angle);
-            if (isOpen(fish, left)) return left;
+            if (isOpen(fish, left, 1.5D)) return left;
             Vec3 right = rotateY(dir, -angle);
-            if (isOpen(fish, right)) return right;
+            if (isOpen(fish, right, 1.5D)) return right;
         }
         return dir.scale(-1.0D);
     }
 
-    private static boolean isOpen(AbstractFish fish, Vec3 dir)
+    /** Probes at the fish's own depth (probing above it would misread the surface as a wall). */
+    private static boolean isOpen(AbstractFish fish, Vec3 dir, double distance)
     {
-        Vec3 probe = fish.position().add(dir.scale(1.5D)).add(0.0D, fish.getBbHeight() * 0.5D, 0.0D);
-        BlockPos pos = BlockPos.containing(probe);
-        return fish.level().getFluidState(pos).is(FluidTags.WATER);
+        Vec3 probe = fish.position().add(dir.x * distance, Math.min(dir.y, 0.0D) * distance, dir.z * distance);
+        return waterAt(fish, probe.x, probe.y, probe.z);
     }
 
-    /** Nudge the heading downward when it would breach the surface. */
-    private static Vec3 staySubmerged(AbstractFish fish, Vec3 dir)
+    private static boolean waterAt(AbstractFish fish, double x, double y, double z)
     {
-        if (dir.y <= 0.0D) return dir;
-        BlockPos above = BlockPos.containing(fish.getX(), fish.getY() + 0.8D, fish.getZ());
-        if (fish.level().getFluidState(above).is(FluidTags.WATER)) return dir;
-        return new Vec3(dir.x, -0.1D, dir.z).normalize();
+        return fish.level().getFluidState(BlockPos.containing(x, y, z)).is(FluidTags.WATER);
+    }
+
+    /**
+     * Pick the most promising horizontal escape heading: samples the compass, favoring routes
+     * with open water both near and far, and weights in the away-from-threat direction — but a
+     * cornered fish will happily pick a route right past the threat over hugging the wall.
+     */
+    public static Vec3 chooseEscapeDir(AbstractFish fish, Vec3 threat)
+    {
+        Vec3 away = fish.position().subtract(threat);
+        away = new Vec3(away.x, 0.0D, away.z);
+        away = away.lengthSqr() < 1.0E-4D ? Vec3.ZERO : away.normalize();
+
+        Vec3 best = away.lengthSqr() > 0.0D ? away : new Vec3(1.0D, 0.0D, 0.0D);
+        double bestScore = -Double.MAX_VALUE;
+        for (int i = 0; i < 8; i++) {
+            double angle = i * (Math.PI / 4.0D);
+            Vec3 dir = new Vec3(Math.cos(angle), 0.0D, Math.sin(angle));
+            double score = (isOpen(fish, dir, 1.5D) ? 1.0D : 0.0D)
+                    + (isOpen(fish, dir, 3.5D) ? 1.0D : 0.0D)
+                    + dir.dot(away) * 0.8D
+                    + fish.getRandom().nextDouble() * 0.3D;
+            if (score > bestScore) {
+                bestScore = score;
+                best = dir;
+            }
+        }
+        return best;
     }
 
     private static Vec3 rotateY(Vec3 v, double angle)
@@ -105,7 +135,7 @@ public final class FishSteering
         Vec3 v = fish.getDeltaMovement();
         if (v.horizontalDistanceSqr() < 1.0E-5D) return;
         float yaw = (float) (Mth.atan2(v.z, v.x) * (180.0D / Math.PI)) - 90.0F;
-        fish.setYRot(Mth.approachDegrees(fish.getYRot(), yaw, 30.0F));
+        fish.setYRot(Mth.approachDegrees(fish.getYRot(), yaw, 45.0F));
         fish.yBodyRot = fish.getYRot();
         fish.yHeadRot = fish.getYRot();
     }

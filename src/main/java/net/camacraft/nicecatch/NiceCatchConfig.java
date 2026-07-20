@@ -164,7 +164,7 @@ public class NiceCatchConfig
                     .defineInRange("swimScareRadius", 3.0D, 0.5D, 8.0D);
             meleeThreatRadius = b.comment("Fish also scatter from any player (in water or not) who is moving or swinging within this distance.")
                     .defineInRange("meleeThreatRadius", 3.5D, 0.5D, 8.0D);
-            swimScareChance = b.comment("Chance (per check, every half second) that a fish scatters from a swimmer. Much higher than the hooked-fish scatter.")
+            swimScareChance = b.comment("Chance (per check, ~4x a second) that a fish scatters from a player looming in melee reach. Swimmers nearby always scatter fish regardless of this.")
                     .defineInRange("swimScareChance", 0.75D, 0.0D, 1.0D);
             meleeScatterChance = b.comment("Chance for each nearby fish to scatter when a player attacks any fish.")
                     .defineInRange("meleeScatterChance", 0.9D, 0.0D, 1.0D);

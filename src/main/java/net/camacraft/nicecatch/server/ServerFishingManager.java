@@ -8,6 +8,7 @@ import net.camacraft.nicecatch.network.BiteMessage;
 import net.camacraft.nicecatch.network.FightEndMessage;
 import net.camacraft.nicecatch.network.FightTickMessage;
 import net.camacraft.nicecatch.network.NiceCatchNet;
+import net.camacraft.nicecatch.server.goal.FishSteering;
 import net.minecraft.core.particles.ParticleTypes;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
@@ -650,9 +651,18 @@ public class ServerFishingManager
             Vec3 toHook = hook.position().subtract(fish.position()).normalize().scale(0.03D);
             fish.setDeltaMovement(fish.getDeltaMovement().add(toHook));
         }
+        FishSteering.faceMovement(fish);
 
-        // The bobber shadows the fish on the surface so the line stays believable.
-        hook.setPos(fish.getX(), hook.getY(), fish.getZ());
+        // The bobber chases the fish across the surface by velocity (teleporting it every tick
+        // starves the client of movement it can interpolate, and the bobber looks frozen).
+        Vec3 toFish = new Vec3(fish.getX() - hook.getX(), 0.0D, fish.getZ() - hook.getZ());
+        double gap = toFish.length();
+        if (gap > 0.25D) {
+            double chase = Math.min(0.5D, gap * 0.3D);
+            Vec3 hv = hook.getDeltaMovement();
+            hook.setDeltaMovement(hv.x * 0.3D + toFish.x / gap * chase, hv.y,
+                    hv.z * 0.3D + toFish.z / gap * chase);
+        }
     }
 
     /** A real fish comes off the line: unhook it and let it bolt. */
