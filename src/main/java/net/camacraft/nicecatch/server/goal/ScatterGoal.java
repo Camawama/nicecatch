@@ -3,25 +3,25 @@ package net.camacraft.nicecatch.server.goal;
 import net.camacraft.nicecatch.NiceCatchConfig;
 import net.camacraft.nicecatch.server.FishBehavior;
 import net.minecraft.world.entity.ai.goal.Goal;
-import net.minecraft.world.entity.ai.util.DefaultRandomPos;
 import net.minecraft.world.entity.animal.AbstractFish;
 import net.minecraft.world.phys.Vec3;
 
 import java.util.EnumSet;
 
 /**
- * Panicked burst away from a threat. Entered either because the manager flagged this fish
- * (hooked neighbor, melee swing, failed bite) or because something big is swimming nearby.
+ * Panicked burst away from a threat: fast, zig-zagging, and steered directly (no pathfinding)
+ * so it actually looks like fleeing. Entered either because the manager flagged this fish
+ * (hooked neighbor, melee swing, damage, failed bite) or because a threat got too close.
  */
 public class ScatterGoal extends Goal
 {
     private final AbstractFish fish;
-    private int repathTicks;
+    private int jinkTicks;
 
     public ScatterGoal(AbstractFish fish)
     {
         this.fish = fish;
-        setFlags(EnumSet.of(Flag.MOVE));
+        setFlags(EnumSet.of(Flag.MOVE, Flag.LOOK));
     }
 
     @Override
@@ -30,9 +30,9 @@ public class ScatterGoal extends Goal
         if (FishBehavior.isHooked(fish)) return false;
         if (FishBehavior.isScattering(fish)) return true;
 
-        // Cheap staggered check for swimmers splashing around near this fish.
-        if ((fish.tickCount + fish.getId()) % 10 != 0) return false;
-        Vec3 threat = FishBehavior.findSwimmerThreat(fish);
+        // Cheap staggered threat check, ~4x a second per fish.
+        if ((fish.tickCount + fish.getId()) % 5 != 0) return false;
+        Vec3 threat = FishBehavior.findThreat(fish);
         if (threat == null) return false;
         if (fish.getRandom().nextFloat() >= NiceCatchConfig.SERVER.swimScareChance.get().floatValue()) return false;
 
@@ -49,13 +49,8 @@ public class ScatterGoal extends Goal
     @Override
     public void start()
     {
-        repathTicks = 0;
-    }
-
-    @Override
-    public void stop()
-    {
         fish.getNavigation().stop();
+        jinkTicks = 4 + fish.getRandom().nextInt(5);
     }
 
     @Override
@@ -67,14 +62,17 @@ public class ScatterGoal extends Goal
     @Override
     public void tick()
     {
-        if (--repathTicks > 0 && !fish.getNavigation().isDone()) return;
-        repathTicks = 10;
-
         Vec3 from = FishBehavior.state(fish).scatterFrom;
         if (from == null) from = fish.position();
-        Vec3 away = DefaultRandomPos.getPosAway(fish, 12, 4, from);
-        if (away != null) {
-            fish.getNavigation().moveTo(away.x, away.y, away.z, NiceCatchConfig.SERVER.scatterSpeed.get());
+
+        // Water friction settles sustained acceleration at ~9x, so 0.024*1.9 ≈ 0.045 accel
+        // tops out just above 0.4 blocks/tick — a genuine sprint without looking teleported.
+        double accel = 0.024D * NiceCatchConfig.SERVER.scatterSpeed.get();
+        FishSteering.swimAway(fish, from, accel, 0.22D * NiceCatchConfig.SERVER.scatterSpeed.get());
+
+        if (--jinkTicks <= 0) {
+            jinkTicks = 4 + fish.getRandom().nextInt(6);
+            FishSteering.jink(fish, 0.12D);
         }
     }
 }

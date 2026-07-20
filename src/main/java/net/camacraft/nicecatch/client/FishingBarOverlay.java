@@ -32,9 +32,10 @@ public class FishingBarOverlay
                 drawBackground(graphics, x, y);
                 boolean flashOn = (ClientFishing.biteTicks() / 4) % 2 == 0;
                 if (flashOn) {
-                    drawFill(graphics, x, y, 1.0F, 0xFFE03434);
+                    drawFill(graphics, x, y, 1.0F, ClientFishing.isEntityBite() ? 0xFFE03434 : 0xFFE8C33A);
                 }
-                drawHint(graphics, window, y, "nicecatch.hint.bite", 0xFFFF6A5A, true);
+                String key = ClientFishing.isEntityBite() ? "nicecatch.hint.bite" : "nicecatch.hint.loot_bite";
+                drawHint(graphics, window, y, key, 0xFFFF6A5A, true);
             }
             case FIGHT -> {
                 float t = (float) (ClientFishing.fightTicks() + partialTick);
@@ -53,6 +54,8 @@ public class FishingBarOverlay
                     drawHint(graphics, window, y, "nicecatch.hint.tension", 0xFFFF4040, true);
                 } else if (ClientFishing.isFishRunning()) {
                     drawHint(graphics, window, y, "nicecatch.hint.run", 0xFFE8C33A, false);
+                } else if (ClientFishing.shownProgress() > 0.95F) {
+                    drawHint(graphics, window, y, "nicecatch.hint.close", 0xFF7EE0C8, false);
                 } else {
                     drawHint(graphics, window, y, "nicecatch.hint.reel", 0xFFB6E8A0, false);
                 }
@@ -67,14 +70,17 @@ public class FishingBarOverlay
         }
     }
 
-    /** One-line coaching text floating above the bar so nobody has to guess the controls. */
+    /**
+     * One-line coaching text so nobody has to guess the controls. Drawn where the vanilla
+     * actionbar text lives (well above the hotbar) so it never overlaps hearts or hunger.
+     */
     private static void drawHint(GuiGraphics graphics, Window window, int barY, String key, int color, boolean flash)
     {
         if (!NiceCatchConfig.CLIENT.showHints.get()) return;
         if (flash && (ClientFishing.biteTicks() + ClientFishing.fightTicks()) / 6 % 2 == 1) return;
         Minecraft mc = Minecraft.getInstance();
         graphics.drawCenteredString(mc.font, Component.translatable(key),
-                window.getGuiScaledWidth() / 2, barY - 12, color);
+                window.getGuiScaledWidth() / 2, window.getGuiScaledHeight() - 68, color);
     }
 
     private static void drawBackground(GuiGraphics graphics, int x, int y)

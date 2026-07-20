@@ -65,6 +65,7 @@ public class ServerFishingManager
         boolean dispatchingUse;
         double pendingCastMultiplier = -1.0D;
         boolean prevBite;
+        boolean prevBiteEntity;
         float biteCarry;
         int suppressBiteTicks;
         FishFight fight;
@@ -102,8 +103,10 @@ public class ServerFishingManager
     }
 
     /**
-     * Right-clicking a rod never casts or reels directly anymore; those flow through our packets.
-     * We only let the vanilla click through for retrieving an idle bobber or a hooked entity/item.
+     * Right-clicking a rod never casts directly anymore; casting flows through our packets.
+     * Everything else — retrieving an idle bobber, reeling in a loot-table nibble (items
+     * never fight back), pulling a snagged entity — stays plain vanilla. Only an active
+     * entity bite or fight locks the click, since those belong to the reel system.
      */
     @SubscribeEvent(priority = EventPriority.HIGHEST)
     public static void onRightClickItem(PlayerInteractEvent.RightClickItem event)
@@ -115,9 +118,7 @@ public class ServerFishingManager
         Session session = session(player);
         if (session.dispatchingUse) return;
 
-        FishingHook hook = player.fishing;
-        boolean fishOnLine = hook != null && hook.getHookedIn() == null && hook.nibble > 0;
-        if (hook == null || session.fight != null || session.pendingFish != null || fishOnLine) {
+        if (player.fishing == null || session.fight != null || session.pendingFish != null) {
             event.setCanceled(true);
             event.setCancellationResult(InteractionResult.CONSUME);
         }
@@ -234,7 +235,7 @@ public class ServerFishingManager
             return;
         }
 
-        // A real fish on the line takes precedence over the loot-table nibble.
+        // Only a real fish starts a fight; loot-table nibbles retrieve vanilla-style instead.
         if (session.pendingFish != null) {
             AbstractFish fish = resolveFish(player.serverLevel(), session.pendingFish);
             session.pendingFish = null;
@@ -245,30 +246,8 @@ public class ServerFishingManager
             if (fish != null) {
                 FishBehavior.scatter(fish, hook.position(), NiceCatchConfig.SERVER.scatterDurationTicks.get());
             }
-            NiceCatchNet.sendTo(player, new FightEndMessage(FightEndMessage.ESCAPED));
-            return;
         }
-
-        if (hook.nibble <= 0 || hook.getHookedIn() != null) {
-            NiceCatchNet.sendTo(player, new FightEndMessage(FightEndMessage.ESCAPED));
-            return;
-        }
-        startLootFight(player, session, hook, hand);
-    }
-
-    private static void startLootFight(ServerPlayer player, Session session, FishingHook hook, InteractionHand hand)
-    {
-        NiceCatchConfig.Server cfg = NiceCatchConfig.SERVER;
-        RandomSource random = player.getRandom();
-        FishFight fight = new FishFight();
-        fight.hand = hand;
-        float min = cfg.fishStrengthMin.get().floatValue();
-        float max = Math.max(min, cfg.fishStrengthMax.get().floatValue());
-        fight.strength = min + random.nextFloat() * (max - min);
-        if (hook.isOpenWaterFishing()) {
-            fight.strength = Math.min(1.0F, fight.strength + 0.1F);
-        }
-        beginFight(player, session, hook, fight);
+        NiceCatchNet.sendTo(player, new FightEndMessage(FightEndMessage.ESCAPED));
     }
 
     private static void startEntityFight(ServerPlayer player, Session session, FishingHook hook,
@@ -351,7 +330,8 @@ public class ServerFishingManager
                 clearPendingBite(player.serverLevel(), session);
                 if (session.prevBite) {
                     session.prevBite = false;
-                    NiceCatchNet.sendTo(player, new BiteMessage(false));
+                    session.prevBiteEntity = false;
+                    NiceCatchNet.sendTo(player, new BiteMessage(false, false));
                 }
                 session.biteCarry = 0.0F;
                 session.suppressBiteTicks = 0;
@@ -392,9 +372,11 @@ public class ServerFishingManager
         }
 
         boolean biting = nibbleBite || session.pendingFish != null;
-        if (biting != session.prevBite) {
+        boolean biteEntity = session.pendingFish != null;
+        if (biting != session.prevBite || biteEntity != session.prevBiteEntity) {
             session.prevBite = biting;
-            NiceCatchNet.sendTo(player, new BiteMessage(biting));
+            session.prevBiteEntity = biteEntity;
+            NiceCatchNet.sendTo(player, new BiteMessage(biting, biteEntity));
         }
     }
 
@@ -495,7 +477,6 @@ public class ServerFishingManager
             InteractionHand other = RodUtil.findRodHand(player);
             if (other == null) {
                 // Rod put away mid-fight; the hook will discard itself, just end cleanly.
-                releaseFish(hook);
                 unhookFish(level, fight);
                 endFight(player, session, FightEndMessage.ESCAPED);
                 return;
@@ -503,20 +484,15 @@ public class ServerFishingManager
             fight.hand = other;
         }
 
-        AbstractFish fish = null;
-        if (fight.fishId != null) {
-            fish = resolveFish(level, fight.fishId);
-            if (fish == null) {
-                // The fish died or unloaded mid-fight; nothing left on the line.
-                endFight(player, session, FightEndMessage.ESCAPED);
-                return;
-            }
-            // No loot-fish may sneak onto the line while a real one is hooked.
-            hook.timeUntilHooked = 0;
-            if (hook.timeUntilLured < 100) hook.timeUntilLured = 100;
-        } else {
-            hook.nibble = 60; // keep the invisible fish on the line for the duration of the fight
+        AbstractFish fish = resolveFish(level, fight.fishId);
+        if (fish == null) {
+            // The fish died or unloaded mid-fight; nothing left on the line.
+            endFight(player, session, FightEndMessage.ESCAPED);
+            return;
         }
+        // No loot-fish may sneak onto the line while a real one is hooked.
+        hook.timeUntilHooked = 0;
+        if (hook.timeUntilLured < 100) hook.timeUntilLured = 100;
 
         fight.ticks++;
         if (fight.graceTicks > 0) fight.graceTicks--;
@@ -573,9 +549,7 @@ public class ServerFishingManager
                 InteractionHand hand = fight.hand;
                 rod.hurtAndBreak(snapDamage, player, p -> p.broadcastBreakEvent(hand));
             }
-            if (fish != null) {
-                freeFish(fish, hook.position());
-            }
+            freeFish(fish, hook.position());
             hook.discard(); // the line broke: bobber and fish are gone
             endFight(player, session, FightEndMessage.SNAPPED);
             return;
@@ -583,11 +557,7 @@ public class ServerFishingManager
 
         // Fish escapes when all progress is lost.
         if (fight.progress <= 0.0F && fight.graceTicks <= 0) {
-            if (fish != null) {
-                freeFish(fish, hook.position());
-            } else {
-                releaseFish(hook);
-            }
+            freeFish(fish, hook.position());
             level.playSound(null, hook.getX(), hook.getY(), hook.getZ(),
                     SoundEvents.FISHING_BOBBER_SPLASH, SoundSource.NEUTRAL, 0.3F, 0.6F);
             endFight(player, session, FightEndMessage.ESCAPED);
@@ -595,34 +565,24 @@ public class ServerFishingManager
         }
         fight.progress = Math.max(fight.progress, fight.graceTicks > 0 ? 0.02F : 0.0F);
 
-        // Landed it!
+        // Worn down — but you still have to bring it in close before it counts as landed.
         if (fight.progress >= 1.0F) {
-            if (fish != null) {
+            double landDist = cfg.landDistance.get();
+            if (fish.distanceToSqr(player) <= landDist * landDist) {
                 landEntityFish(player, session, hook, fight, fish, level);
-            } else {
-                session.dispatchingUse = true;
-                try {
-                    player.gameMode.useItem(player, level, player.getItemInHand(fight.hand), fight.hand);
-                } finally {
-                    session.dispatchingUse = false;
+                if (cfg.bonusXp.get() && fight.strength > 0.6F) {
+                    int bonus = Math.round((fight.strength - 0.6F) * 8.0F);
+                    if (bonus > 0) {
+                        level.addFreshEntity(new ExperienceOrb(level, player.getX(), player.getY() + 0.5D, player.getZ(), bonus));
+                    }
                 }
-                player.swing(fight.hand, true);
+                endFight(player, session, FightEndMessage.CAUGHT);
+                return;
             }
-            if (cfg.bonusXp.get() && fight.strength > 0.6F) {
-                int bonus = Math.round((fight.strength - 0.6F) * 8.0F);
-                if (bonus > 0) {
-                    level.addFreshEntity(new ExperienceOrb(level, player.getX(), player.getY() + 0.5D, player.getZ(), bonus));
-                }
-            }
-            endFight(player, session, FightEndMessage.CAUGHT);
-            return;
+            fight.progress = 1.0F; // hold full: the fish is beaten, keep cranking it closer
         }
 
-        if (fish != null) {
-            moveHookedFish(player, fight, hook, fish, level, random, run, crank);
-        } else {
-            moveHook(player, fight, hook, level, random, run, crank);
-        }
+        moveHookedFish(player, fight, hook, fish, level, random, run, crank);
         NiceCatchNet.sendTo(player, new FightTickMessage(fight.progress, fight.tension, run));
     }
 
@@ -679,8 +639,8 @@ public class ServerFishingManager
                 level.playSound(null, fish.getX(), fish.getY(), fish.getZ(),
                         SoundEvents.GENERIC_SPLASH, SoundSource.NEUTRAL, 0.25F, 1.2F + random.nextFloat() * 0.3F);
             }
-        } else if (fight.holding && crank > 0.001F && dist > 1.5D) {
-            double pull = Math.min(0.1D, crank * 1.2D);
+        } else if (fight.holding && crank > 0.001F && dist > 1.2D) {
+            double pull = Math.min(0.16D, crank * 1.8D);
             fish.setDeltaMovement(fish.getDeltaMovement().scale(0.8D).add(toPlayer.normalize().scale(pull)));
             if (fight.ticks % 6 == 0) {
                 level.sendParticles(ParticleTypes.FISHING, fish.getX(), fish.getY() + 0.1D, fish.getZ(),
@@ -693,45 +653,6 @@ public class ServerFishingManager
 
         // The bobber shadows the fish on the surface so the line stays believable.
         hook.setPos(fish.getX(), hook.getY(), fish.getZ());
-    }
-
-    /** Drags the bobber around so a loot-table fight is visible in the world. */
-    private static void moveHook(ServerPlayer player, FishFight fight, FishingHook hook,
-                                 ServerLevel level, RandomSource random, boolean run, float crank)
-    {
-        if (!hook.isInWater()) return;
-
-        Vec3 toPlayer = new Vec3(player.getX() - hook.getX(), 0.0D, player.getZ() - hook.getZ());
-        double dist = toPlayer.length();
-
-        if (run) {
-            if (dist > 0.01D && dist < 28.0D) { // vanilla breaks the line beyond 32 blocks; stay inside that
-                Vec3 away = toPlayer.normalize().scale(-(0.045D + 0.05D * fight.strength));
-                Vec3 wobble = new Vec3((random.nextDouble() - 0.5D) * 0.05D, 0.0D, (random.nextDouble() - 0.5D) * 0.05D);
-                hook.setDeltaMovement(hook.getDeltaMovement().add(away).add(wobble));
-            }
-            if (fight.ticks % 4 == 0) {
-                level.sendParticles(ParticleTypes.SPLASH, hook.getX(), hook.getY() + 0.2D, hook.getZ(),
-                        4, 0.15D, 0.05D, 0.15D, 0.0D);
-            }
-            if (fight.ticks % 14 == 0) {
-                level.playSound(null, hook.getX(), hook.getY(), hook.getZ(),
-                        SoundEvents.GENERIC_SPLASH, SoundSource.NEUTRAL, 0.25F, 1.2F + random.nextFloat() * 0.3F);
-            }
-        } else if (fight.holding && crank > 0.001F && dist > 1.5D) {
-            double pull = Math.min(0.09D, crank * 1.2D);
-            hook.setDeltaMovement(hook.getDeltaMovement().add(toPlayer.normalize().scale(pull)));
-            if (fight.ticks % 6 == 0) {
-                level.sendParticles(ParticleTypes.FISHING, hook.getX(), hook.getY() + 0.1D, hook.getZ(),
-                        2, 0.1D, 0.05D, 0.1D, 0.0D);
-            }
-        }
-    }
-
-    /** Lets vanilla clean up the bite naturally on the hook's next tick. */
-    private static void releaseFish(FishingHook hook)
-    {
-        if (hook.nibble > 1) hook.nibble = 1;
     }
 
     /** A real fish comes off the line: unhook it and let it bolt. */

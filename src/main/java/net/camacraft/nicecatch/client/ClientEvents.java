@@ -51,7 +51,14 @@ public class ClientEvents
         if (player == null) return;
 
         switch (ClientFishing.phase()) {
-            case CHARGING, BITE, FIGHT -> {
+            case BITE -> {
+                // A loot nibble retrieves vanilla-style; only a real fish locks the click for the hook-set.
+                if (ClientFishing.isEntityBite()) {
+                    event.setCanceled(true);
+                    event.setSwingHand(false);
+                }
+            }
+            case CHARGING, FIGHT -> {
                 event.setCanceled(true);
                 event.setSwingHand(false);
             }
@@ -88,7 +95,13 @@ public class ClientEvents
                 }
                 // else: bobber is out with no bite -> vanilla retrieve
             }
-            case CHARGING, BITE, FIGHT -> {
+            case BITE -> {
+                if (ClientFishing.isEntityBite()) {
+                    event.setCanceled(true);
+                    event.setCancellationResult(InteractionResult.CONSUME);
+                }
+            }
+            case CHARGING, FIGHT -> {
                 event.setCanceled(true);
                 event.setCancellationResult(InteractionResult.CONSUME);
             }

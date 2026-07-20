@@ -9,7 +9,9 @@ import net.camacraft.nicecatch.server.goal.ScatterGoal;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.world.InteractionHand;
+import net.minecraft.world.entity.LivingEntity;
 import net.minecraft.world.entity.ai.goal.AvoidEntityGoal;
+import net.minecraft.world.entity.ai.goal.PanicGoal;
 import net.minecraft.world.entity.animal.AbstractFish;
 import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.entity.projectile.FishingHook;
@@ -19,6 +21,7 @@ import net.minecraft.world.item.enchantment.Enchantments;
 import net.minecraft.world.phys.AABB;
 import net.minecraft.world.phys.Vec3;
 import net.minecraftforge.event.entity.EntityJoinLevelEvent;
+import net.minecraftforge.event.entity.living.LivingHurtEvent;
 import net.minecraftforge.event.entity.player.AttackEntityEvent;
 import net.minecraftforge.event.server.ServerStoppedEvent;
 import net.minecraftforge.eventbus.api.SubscribeEvent;
@@ -73,9 +76,10 @@ public final class FishBehavior
         state.goalsInjected = true;
 
         // Vanilla fish flee any player within 8 blocks, which would keep them from ever
-        // approaching a bobber cast near its owner. Our scatter system replaces that fear
-        // with a meaner, situational one (swimmers and attacks), so drop the vanilla goal.
-        fish.goalSelector.removeAllGoals(g -> g instanceof AvoidEntityGoal);
+        // approaching a bobber cast near its owner, and their panic is a slow pathfinding
+        // crawl. Our scatter system replaces both with a meaner, faster, situational fear
+        // (close players, swimmers, attacks, damage), so drop the vanilla goals.
+        fish.goalSelector.removeAllGoals(g -> g instanceof AvoidEntityGoal || g instanceof PanicGoal);
         fish.goalSelector.addGoal(0, new HookedFishGoal(fish));
         fish.goalSelector.addGoal(1, new ScatterGoal(fish));
         fish.goalSelector.addGoal(2, new FollowBobberGoal(fish));
@@ -93,6 +97,21 @@ public final class FishBehavior
         scatter(target, event.getEntity().position(), cfg.scatterDurationTicks.get());
         scatterAround((ServerLevel) target.level(), target.position(), cfg.scatterRadius.get(),
                 cfg.meleeScatterChance.get().floatValue(), target);
+    }
+
+    /** Any damage (arrows, tridents, cacti, whatever) also sends the school running. */
+    @SubscribeEvent
+    public static void onHurt(LivingHurtEvent event)
+    {
+        if (event.getEntity().level().isClientSide) return;
+        if (!(event.getEntity() instanceof AbstractFish fish) || isHooked(fish)) return;
+
+        NiceCatchConfig.Server cfg = NiceCatchConfig.SERVER;
+        Vec3 from = event.getSource().getSourcePosition() != null
+                ? event.getSource().getSourcePosition() : fish.position();
+        scatter(fish, from, cfg.scatterDurationTicks.get());
+        scatterAround((ServerLevel) fish.level(), fish.position(), cfg.scatterRadius.get(),
+                cfg.meleeScatterChance.get().floatValue(), fish);
     }
 
     @SubscribeEvent
@@ -193,17 +212,29 @@ public final class FishBehavior
         if (!hooked) state.bobber = null;
     }
 
-    /** True when something that is not a fish or a floating item is splashing about near this fish. */
+    /**
+     * Something worth fleeing from: any non-fish entity splashing about in the water nearby,
+     * or a player closing to melee reach (in the water or not) who is moving or mid-swing.
+     * A fisher standing still on the shore never trips this.
+     */
     @Nullable
-    public static Vec3 findSwimmerThreat(AbstractFish fish)
+    public static Vec3 findThreat(AbstractFish fish)
     {
-        double radius = NiceCatchConfig.SERVER.swimScareRadius.get();
+        double swimRadius = NiceCatchConfig.SERVER.swimScareRadius.get();
+        double meleeRadius = NiceCatchConfig.SERVER.meleeThreatRadius.get();
+        double radius = Math.max(swimRadius, meleeRadius);
         AABB box = fish.getBoundingBox().inflate(radius);
-        var threats = fish.level().getEntitiesOfClass(net.minecraft.world.entity.LivingEntity.class, box,
-                e -> e != fish && !(e instanceof AbstractFish) && !e.isSpectator()
-                        && e.isInWater()
-                        && e.getDeltaMovement().lengthSqr() > 0.004D);
-        if (!threats.isEmpty()) return threats.get(0).position();
+        for (LivingEntity e : fish.level().getEntitiesOfClass(LivingEntity.class, box,
+                other -> other != fish && !(other instanceof AbstractFish) && !other.isSpectator())) {
+            boolean moving = e.getDeltaMovement().horizontalDistanceSqr() > 4.0E-4D;
+            if (e.isInWater() && moving && fish.distanceToSqr(e) <= swimRadius * swimRadius) {
+                return e.position();
+            }
+            if (e instanceof Player player && fish.distanceToSqr(player) <= meleeRadius * meleeRadius
+                    && (moving || player.swinging)) {
+                return player.position();
+            }
+        }
         return null;
     }
 

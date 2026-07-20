@@ -54,6 +54,7 @@ public class NiceCatchConfig
         public final ForgeConfigSpec.DoubleValue scatterOnHookChance;
         public final ForgeConfigSpec.DoubleValue scatterRadius;
         public final ForgeConfigSpec.DoubleValue swimScareRadius;
+        public final ForgeConfigSpec.DoubleValue meleeThreatRadius;
         public final ForgeConfigSpec.DoubleValue swimScareChance;
         public final ForgeConfigSpec.DoubleValue meleeScatterChance;
         public final ForgeConfigSpec.DoubleValue scatterSpeed;
@@ -64,6 +65,7 @@ public class NiceCatchConfig
         public final ForgeConfigSpec.DoubleValue sizeReferenceArea;
         public final ForgeConfigSpec.IntValue entityCatchRodDamage;
         public final ForgeConfigSpec.DoubleValue convertDistance;
+        public final ForgeConfigSpec.DoubleValue landDistance;
         public final ForgeConfigSpec.IntValue pullTimeoutTicks;
         public final ForgeConfigSpec.IntValue releaseWindowTicks;
 
@@ -147,7 +149,7 @@ public class NiceCatchConfig
             followFollowerRadius = b.comment("How close a fish must be to an interested fish to consider following it.")
                     .defineInRange("followFollowerRadius", 6.0D, 1.0D, 16.0D);
             biteChancePerSecond = b.comment("Chance per second that a fish milling at the bobber commits to a bite.")
-                    .defineInRange("biteChancePerSecond", 0.10D, 0.005D, 1.0D);
+                    .defineInRange("biteChancePerSecond", 0.22D, 0.005D, 1.0D);
             biteRange = b.comment("How close to the bobber a fish must be to bite.")
                     .defineInRange("biteRange", 1.8D, 0.5D, 5.0D);
             biteWindowTicks = b.comment("How long a biting fish stays on before you must set the hook.")
@@ -160,6 +162,8 @@ public class NiceCatchConfig
                     .defineInRange("scatterRadius", 6.0D, 1.0D, 16.0D);
             swimScareRadius = b.comment("Fish scatter from non-fish entities swimming within this distance.")
                     .defineInRange("swimScareRadius", 3.0D, 0.5D, 8.0D);
+            meleeThreatRadius = b.comment("Fish also scatter from any player (in water or not) who is moving or swinging within this distance.")
+                    .defineInRange("meleeThreatRadius", 3.5D, 0.5D, 8.0D);
             swimScareChance = b.comment("Chance (per check, every half second) that a fish scatters from a swimmer. Much higher than the hooked-fish scatter.")
                     .defineInRange("swimScareChance", 0.75D, 0.0D, 1.0D);
             meleeScatterChance = b.comment("Chance for each nearby fish to scatter when a player attacks any fish.")
@@ -179,6 +183,8 @@ public class NiceCatchConfig
                     .defineInRange("entityCatchRodDamage", 2, 0, 16);
             convertDistance = b.comment("Distance from the player at which the reeled-in fish turns into its item.")
                     .defineInRange("convertDistance", 2.2D, 0.5D, 8.0D);
+            landDistance = b.comment("The fight cannot be won until the fish has been reeled to within this distance of the player.")
+                    .defineInRange("landDistance", 5.0D, 1.5D, 16.0D);
             pullTimeoutTicks = b.comment("Failsafe: convert the flying fish to an item after this many ticks even if it never got close.")
                     .defineInRange("pullTimeoutTicks", 40, 10, 200);
             releaseWindowTicks = b.comment("Catch-and-release: for this many ticks after a catch, tossing the fish item into water revives the fish.")

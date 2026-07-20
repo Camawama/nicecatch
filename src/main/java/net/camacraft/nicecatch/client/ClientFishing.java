@@ -23,6 +23,7 @@ public class ClientFishing
     private static int chargeTicks;
     private static int castCooldown;
     private static int biteTicks;
+    private static boolean biteIsEntity;
     private static int fightTicks;
     private static boolean reelHeld;
 
@@ -54,6 +55,12 @@ public class ClientFishing
     public static int biteTicks()
     {
         return biteTicks;
+    }
+
+    /** True when the current bite is a real fish (hook-set flow); false for vanilla loot nibbles. */
+    public static boolean isEntityBite()
+    {
+        return biteIsEntity;
     }
 
     public static int fightTicks()
@@ -169,7 +176,9 @@ public class ClientFishing
                     phase = Phase.IDLE;
                     break;
                 }
-                if (mc.screen == null && mc.options.keyUse.isDown()) {
+                // Only real fish get a hook-set; a loot nibble's right-click is a vanilla
+                // retrieve and passes through the click handlers untouched.
+                if (biteIsEntity && mc.screen == null && mc.options.keyUse.isDown()) {
                     NiceCatchNet.sendToServer(new HookSetMessage());
                     startFight();
                 }
@@ -199,9 +208,10 @@ public class ClientFishing
 
     // ---- Packet handlers (client main thread) ----
 
-    public static void handleBite(boolean biting)
+    public static void handleBite(boolean biting, boolean entity)
     {
         if (biting) {
+            biteIsEntity = entity;
             if (phase == Phase.IDLE) {
                 phase = Phase.BITE;
                 biteTicks = 0;
@@ -210,6 +220,7 @@ public class ClientFishing
             }
         } else if (phase == Phase.BITE) {
             phase = Phase.IDLE;
+            biteIsEntity = false;
         }
     }
 
