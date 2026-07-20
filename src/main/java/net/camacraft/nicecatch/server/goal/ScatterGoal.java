@@ -47,11 +47,15 @@ public class ScatterGoal extends Goal
             return false;
         }
 
-        FishBehavior.scatter(fish, threat.pos(), NiceCatchConfig.SERVER.scatterDurationTicks.get());
+        // Proximity scares are startling, not traumatic: fish flee fast but only sit out
+        // biting briefly, so a busy pond doesn't go dead for half a minute.
+        int dur = NiceCatchConfig.SERVER.scatterDurationTicks.get();
+        FishBehavior.scatter(fish, threat.pos(), dur, FishBehavior.LIGHT_SCARE_COOLDOWN);
         // Panic is contagious: one spooked fish sends the school around it running too.
         FishBehavior.scatterAround((net.minecraft.server.level.ServerLevel) fish.level(), fish.position(),
                 NiceCatchConfig.SERVER.scatterRadius.get(),
-                NiceCatchConfig.SERVER.schoolPanicChance.get().floatValue(), fish);
+                NiceCatchConfig.SERVER.schoolPanicChance.get().floatValue(), fish,
+                FishBehavior.LIGHT_SCARE_COOLDOWN);
         return true;
     }
 

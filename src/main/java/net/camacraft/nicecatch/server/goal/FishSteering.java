@@ -4,6 +4,7 @@ import net.minecraft.core.BlockPos;
 import net.minecraft.tags.FluidTags;
 import net.minecraft.util.Mth;
 import net.minecraft.world.entity.animal.AbstractFish;
+import net.minecraft.world.entity.animal.Pufferfish;
 import net.minecraft.world.phys.Vec3;
 
 /**
@@ -50,6 +51,13 @@ public final class FishSteering
     private static void steer(AbstractFish fish, Vec3 dir, double accel, double maxSpeed)
     {
         if (!fish.isInWater()) return;
+
+        // A puffed-up pufferfish is a spiky balloon, not a torpedo.
+        if (fish instanceof Pufferfish puffer && puffer.getPuffState() > 0) {
+            double drag = puffer.getPuffState() >= 2 ? 0.3D : 0.55D;
+            accel *= drag;
+            maxSpeed *= drag;
+        }
         dir = avoidWalls(fish, dir);
 
         Vec3 v = fish.getDeltaMovement().add(dir.scale(accel));

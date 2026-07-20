@@ -15,12 +15,21 @@ beneath it. Fish that see other fish heading over may tag along. If nothing live
 water, you're loot-fishing: vanilla wait times apply and you can pull up junk or treasure
 (enchanted books etc.) — **but never fish items**. Fish only come from actual fish.
 
+Each fish tracks its own **interest**: every time it notices a bobber its curiosity grows
+(faster with Aquaculture bait), and interested fish approach sooner and bite far more often.
+Getting spooked knocks interest back down.
+
 Keep still! Moving or swinging within a few blocks of fish scares them off, as does
-swimming near them or hurting one. A spooked fish bolts and won't bite again for a while.
+swimming near them or hurting one. Startled fish sit out briefly; genuinely hurt or
+escaped fish avoid biting much longer.
 
 ## 3. The bite
 
-- **A real fish bites** — the bobber tugs, bubbles rise, the bar flashes **red**:
+- **A tease** — sometimes the bobber dips a couple of times with soft bubbles but nothing
+  is there to hook: a fish is just nibbling. Hold your nerve; a nibble occasionally turns
+  into the real thing (and makes that fish more interested).
+- **A real fish bites** — you'll first see the vanilla V-shaped wake streaking toward your
+  bobber as the fish closes in. Then the bobber tugs, bubbles rise, the bar flashes **red**:
   **right-click once to set the hook** before the window (~2.5 s) closes, or the fish
   spooks and flees. Setting the hook starts the fight (section 4).
 - **A loot nibble** (no fish around) — the bar flashes **gold**: right-click to reel it in

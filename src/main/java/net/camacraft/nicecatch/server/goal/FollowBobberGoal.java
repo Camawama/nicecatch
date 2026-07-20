@@ -50,15 +50,27 @@ public class FollowBobberGoal extends Goal
         RandomSource random = fish.getRandom();
 
         FishingHook hook = FishBehavior.findNearbyBobber(fish);
-        if (hook != null && random.nextFloat() < NiceCatchConfig.SERVER.interestChance.get().floatValue()) {
-            state.bobber = hook;
-            return true;
+        if (hook != null) {
+            // Seeing a bobber builds curiosity every check (faster with Aquaculture bait);
+            // the more interested the fish, the sooner it commits to approaching.
+            state.interest = Math.min(1.0F, state.interest
+                    + NiceCatchConfig.SERVER.interestGainPerCheck.get().floatValue()
+                    * FishBehavior.interestGainMultiplier(hook));
+            float approach = NiceCatchConfig.SERVER.interestChance.get().floatValue()
+                    * (0.25F + 0.75F * state.interest * 2.0F);
+            if (random.nextFloat() < approach) {
+                state.bobber = hook;
+                return true;
+            }
+        } else {
+            state.interest = Math.max(0.0F, state.interest - 0.01F);
         }
 
         // Follow a neighbor that is already interested, even without seeing the bobber ourselves.
         FishingHook followed = FishBehavior.findFollowableBobber(fish);
         if (followed != null && random.nextFloat() < NiceCatchConfig.SERVER.followFollowerChance.get().floatValue()) {
             state.bobber = followed;
+            state.interest = Math.max(state.interest, 0.2F);
             return true;
         }
         return false;
@@ -145,7 +157,13 @@ public class FollowBobberGoal extends Goal
             FishSteering.faceMovement(fish);
             return;
         }
-        if (++behaviorTicks % 60 == 0) {
+        // Hanging around the bait keeps curiosity simmering upward.
+        if (++behaviorTicks % 20 == 0) {
+            state.interest = Math.min(1.0F, state.interest
+                    + 0.5F * NiceCatchConfig.SERVER.interestGainPerCheck.get().floatValue()
+                    * FishBehavior.interestGainMultiplier(hook));
+        }
+        if (behaviorTicks % 60 == 0) {
             RandomSource random = fish.getRandom();
             rerollOrbit(random);
             if (random.nextFloat() < 0.4F) {

@@ -45,6 +45,9 @@ public class NiceCatchConfig
         public final ForgeConfigSpec.DoubleValue interestRadius;
         public final ForgeConfigSpec.IntValue maxFishPerBobber;
         public final ForgeConfigSpec.DoubleValue interestChance;
+        public final ForgeConfigSpec.DoubleValue interestGainPerCheck;
+        public final ForgeConfigSpec.DoubleValue nibbleChancePerSecond;
+        public final ForgeConfigSpec.DoubleValue nibbleToBiteChance;
         public final ForgeConfigSpec.DoubleValue followFollowerChance;
         public final ForgeConfigSpec.DoubleValue followFollowerRadius;
         public final ForgeConfigSpec.DoubleValue biteChancePerSecond;
@@ -143,8 +146,14 @@ public class NiceCatchConfig
                     .defineInRange("interestRadius", 12.0D, 2.0D, 32.0D);
             maxFishPerBobber = b.comment("How many fish can crowd around one bobber at a time.")
                     .defineInRange("maxFishPerBobber", 5, 1, 20);
-            interestChance = b.comment("Chance (per check, roughly every half second) that an eligible fish decides to approach a bobber.")
+            interestChance = b.comment("Base chance (per check, roughly every half second) that an eligible fish decides to approach a bobber; scaled by that fish's accumulated interest.")
                     .defineInRange("interestChance", 0.35D, 0.0D, 1.0D);
+            interestGainPerCheck = b.comment("Interest (0..1) a fish gains each time it notices a bobber. Aquaculture bait multiplies this; getting spooked costs 0.35.")
+                    .defineInRange("interestGainPerCheck", 0.06D, 0.0D, 1.0D);
+            nibbleChancePerSecond = b.comment("Chance per second that a fish at the bobber gives it a teasing nibble (bobber dips, but no hookable bite).")
+                    .defineInRange("nibbleChancePerSecond", 0.45D, 0.0D, 1.0D);
+            nibbleToBiteChance = b.comment("Chance that a nibble turns into a real, hookable bite.")
+                    .defineInRange("nibbleToBiteChance", 0.15D, 0.0D, 1.0D);
             followFollowerChance = b.comment("Chance that a fish outside the interest radius follows a nearby fish that is already interested.")
                     .defineInRange("followFollowerChance", 0.25D, 0.0D, 1.0D);
             followFollowerRadius = b.comment("How close a fish must be to an interested fish to consider following it.")
@@ -157,8 +166,8 @@ public class NiceCatchConfig
                     .defineInRange("biteWindowTicks", 50, 10, 200);
             fishBiteCooldownTicks = b.comment("How long a fish that escaped or got spooked waits before it can bite again.")
                     .defineInRange("fishBiteCooldownTicks", 400, 0, 6000);
-            scatterOnHookChance = b.comment("Chance for each nearby fish to scatter when another fish is hooked.")
-                    .defineInRange("scatterOnHookChance", 0.5D, 0.0D, 1.0D);
+            scatterOnHookChance = b.comment("Chance for each nearby fish to scatter when another fish is hooked. Kept low so a bite doesn't empty the spot.")
+                    .defineInRange("scatterOnHookChance", 0.2D, 0.0D, 1.0D);
             scatterRadius = b.comment("Radius of the scatter shockwave around a hooked or attacked fish.")
                     .defineInRange("scatterRadius", 6.0D, 1.0D, 16.0D);
             swimScareRadius = b.comment("Fish scatter from non-fish entities swimming within this distance (always, no chance roll).")

@@ -76,6 +76,12 @@ public class ServerFishingManager
         /** A fish that committed to biting and is closing in behind the vanilla particle wake. */
         @Nullable UUID approachFish;
         int approachTicks;
+        /** A fish teasing the bobber — dips and bubbles, but nothing to hook. */
+        @Nullable UUID nibbleFish;
+        int nibbleTicks;
+        /** Cached "any fish near the bobber" check, refreshed every 20 ticks. */
+        boolean fishNearby;
+        int fishNearbyCheckIn;
     }
 
     private static Session session(Player player)
@@ -268,8 +274,10 @@ public class ServerFishingManager
         fight.doubleCatchChance = AquacultureCompat.doubleCatchChance(rod);
 
         FishBehavior.setHooked(fish, true);
+        // Only a few neighbors spook, and only briefly — a bite shouldn't empty the spot.
         FishBehavior.scatterAround(player.serverLevel(), hook.position(),
-                cfg.scatterRadius.get(), cfg.scatterOnHookChance.get().floatValue(), fish);
+                cfg.scatterRadius.get(), cfg.scatterOnHookChance.get().floatValue(), fish,
+                FishBehavior.LIGHT_SCARE_COOLDOWN);
         beginFight(player, session, hook, fight);
     }
 
@@ -390,7 +398,24 @@ public class ServerFishingManager
         NiceCatchConfig.Server cfg = NiceCatchConfig.SERVER;
         ServerLevel level = player.serverLevel();
 
-        // An active nibble window: keep it honest and keep the bobber jiggling.
+        // Loot-table fishing only exists where no fish live. With any fish around the bobber,
+        // vanilla's invisible loot-fish never lures; in truly fishless water the "something
+        // approaching" wake is skipped instead (items don't swim) — collapsing the timer to 1
+        // lands the loot nibble on the next tick, splash and all.
+        if (--session.fishNearbyCheckIn <= 0) {
+            session.fishNearbyCheckIn = 20;
+            session.fishNearby = FishBehavior.anyFishNear(hook);
+        }
+        if (hook.nibble <= 0) {
+            if (session.fishNearby) {
+                hook.timeUntilHooked = 0;
+                if (hook.timeUntilLured < 100) hook.timeUntilLured = 100;
+            } else if (hook.timeUntilHooked > 1) {
+                hook.timeUntilHooked = 1;
+            }
+        }
+
+        // An active bite window: keep it honest and keep the bobber jiggling.
         if (session.pendingFish != null) {
             AbstractFish fish = resolveFish(level, session.pendingFish);
             if (fish == null || FishBehavior.isScattering(fish) || fish.distanceToSqr(hook) > 25.0D) {
@@ -426,51 +451,99 @@ public class ServerFishingManager
                 beginBite(session, level, hook, fish);
                 return;
             }
-            if ((session.approachTicks & 1) == 0) {
-                sendWakeParticles(level, hook, fish);
+            sendWakeParticles(level, hook, fish);
+            return;
+        }
+
+        // A teasing nibble: the bobber dips a few times but there is nothing to hook (yet).
+        if (session.nibbleFish != null) {
+            AbstractFish fish = resolveFish(level, session.nibbleFish);
+            if (fish == null || FishBehavior.isScattering(fish) || fish.distanceToSqr(hook) > 9.0D) {
+                clearBiteFlow(level, session);
+                return;
+            }
+            session.nibbleTicks--;
+            if (session.nibbleTicks % 5 == 0) {
+                hook.setDeltaMovement(hook.getDeltaMovement().add(0.0D, -0.07D, 0.0D));
+                level.sendParticles(ParticleTypes.BUBBLE, hook.getX(), hook.getY() + 0.1D, hook.getZ(),
+                        2, 0.08D, 0.03D, 0.08D, 0.02D);
+                level.playSound(null, hook.getX(), hook.getY(), hook.getZ(),
+                        SoundEvents.FISHING_BOBBER_SPLASH, SoundSource.NEUTRAL, 0.12F, 1.6F);
+            }
+            if (session.nibbleTicks <= 0) {
+                session.nibbleFish = null;
+                FishBehavior.FishState state = FishBehavior.state(fish);
+                if (level.random.nextFloat() < cfg.nibbleToBiteChance.get().floatValue()) {
+                    beginBite(session, level, hook, fish);
+                } else {
+                    // Just tasting. It liked it, though.
+                    state.biteBobber = null;
+                    state.interest = Math.min(1.0F, state.interest + 0.1F);
+                    state.nibbleCooldownUntil = level.getGameTime() + 80 + level.random.nextInt(80);
+                }
             }
             return;
         }
 
-        // While fish are being courted, vanilla's invisible loot-fish never lures. In fishless
-        // water, vanilla's "something approaching" wake is skipped instead (items don't swim):
-        // collapsing the timer to 1 lands the loot nibble on the next tick, splash and all.
-        if (hook.nibble <= 0) {
-            if (FishBehavior.claimedCount(hook) > 0) {
-                hook.timeUntilHooked = 0;
-                if (hook.timeUntilLured < 100) hook.timeUntilLured = 100;
-            } else if (hook.timeUntilHooked > 1) {
-                hook.timeUntilHooked = 1;
-            }
-        }
         if (hook.nibble > 0) return; // an already-started loot bite plays out normally
 
-        List<AbstractFish> candidates = FishBehavior.biteCandidates(hook);
+        // Bites can come from any interested fish in wake range, so the approach is visible.
+        List<AbstractFish> candidates = FishBehavior.biteCandidates(hook, Math.max(cfg.biteRange.get(), 5.0D));
         if (candidates.isEmpty()) return;
 
         InteractionHand hand = RodUtil.findRodHand(player);
         ItemStack rod = hand != null ? player.getItemInHand(hand) : ItemStack.EMPTY;
         int lure = EnchantmentHelper.getItemEnchantmentLevel(Enchantments.FISHING_SPEED, rod);
+        float topInterest = 0.0F;
+        for (AbstractFish fish : candidates) {
+            topInterest = Math.max(topInterest, FishBehavior.state(fish).interest);
+        }
         float chancePerTick = cfg.biteChancePerSecond.get().floatValue() / 20.0F
                 * (1.0F + 0.35F * lure)
-                * AquacultureCompat.biteChanceMultiplier(rod);
-        if (level.random.nextFloat() >= chancePerTick) return;
-
-        // Luck of the Sea nudges the bite toward the biggest fish in the group.
-        int luck = EnchantmentHelper.getItemEnchantmentLevel(Enchantments.FISHING_LUCK, rod);
-        AbstractFish biter;
-        if (luck > 0 && level.random.nextFloat() < 0.25F * luck) {
-            biter = candidates.stream()
-                    .max((a, b) -> Float.compare(a.getBbWidth() * a.getBbHeight(), b.getBbWidth() * b.getBbHeight()))
-                    .orElse(candidates.get(0));
-        } else {
-            biter = candidates.get(level.random.nextInt(candidates.size()));
+                * AquacultureCompat.biteChanceMultiplier(rod)
+                * (0.3F + 0.7F * topInterest);
+        if (level.random.nextFloat() < chancePerTick) {
+            AbstractFish biter = pickBiter(level, candidates, rod);
+            // The fish commits: it beelines for the hook behind a vanilla wake, then bites on arrival.
+            session.approachFish = biter.getUUID();
+            session.approachTicks = (int) Mth.clamp(Math.sqrt(biter.distanceToSqr(hook)) * 8.0D, 15.0D, 70.0D);
+            FishBehavior.state(biter).biteBobber = hook;
+            return;
         }
 
-        // The fish commits: it beelines for the hook behind a vanilla wake, then bites on arrival.
-        session.approachFish = biter.getUUID();
-        session.approachTicks = 20 + level.random.nextInt(20);
-        FishBehavior.state(biter).biteBobber = hook;
+        // No bite this tick — maybe a tease from a fish already at the bobber.
+        long now = level.getGameTime();
+        List<AbstractFish> close = candidates.stream()
+                .filter(f -> f.distanceToSqr(hook) < cfg.biteRange.get() * cfg.biteRange.get()
+                        && now >= FishBehavior.state(f).nibbleCooldownUntil)
+                .toList();
+        if (!close.isEmpty() && level.random.nextFloat() < cfg.nibbleChancePerSecond.get().floatValue() / 20.0F) {
+            AbstractFish nibbler = close.get(level.random.nextInt(close.size()));
+            session.nibbleFish = nibbler.getUUID();
+            session.nibbleTicks = 12 + level.random.nextInt(10);
+            FishBehavior.state(nibbler).biteBobber = hook;
+        }
+    }
+
+    /** Luck of the Sea favors the biggest fish; otherwise the most interested ones bite first. */
+    private static AbstractFish pickBiter(ServerLevel level, List<AbstractFish> candidates, ItemStack rod)
+    {
+        int luck = EnchantmentHelper.getItemEnchantmentLevel(Enchantments.FISHING_LUCK, rod);
+        if (luck > 0 && level.random.nextFloat() < 0.25F * luck) {
+            return candidates.stream()
+                    .max((a, b) -> Float.compare(a.getBbWidth() * a.getBbHeight(), b.getBbWidth() * b.getBbHeight()))
+                    .orElse(candidates.get(0));
+        }
+        float total = 0.0F;
+        for (AbstractFish fish : candidates) {
+            total += FishBehavior.state(fish).interest + 0.2F;
+        }
+        float roll = level.random.nextFloat() * total;
+        for (AbstractFish fish : candidates) {
+            roll -= FishBehavior.state(fish).interest + 0.2F;
+            if (roll <= 0.0F) return fish;
+        }
+        return candidates.get(candidates.size() - 1);
     }
 
     /** The moment of the bite itself: bobber dips, splash, and the hook-set window opens. */
@@ -499,10 +572,11 @@ public class ServerFishingManager
         level.sendParticles(ParticleTypes.FISHING, fish.getX(), y, fish.getZ(), 0, -f4, 0.01D, f3, 1.0D);
     }
 
-    /** Clears any in-flight bite (approach or nibble window) and frees the fish involved. */
+    /** Clears any in-flight bite (approach, nibble, or bite window) and frees the fish involved. */
     private static void clearBiteFlow(ServerLevel level, Session session)
     {
-        UUID involved = session.pendingFish != null ? session.pendingFish : session.approachFish;
+        UUID involved = session.pendingFish != null ? session.pendingFish
+                : session.approachFish != null ? session.approachFish : session.nibbleFish;
         if (involved != null) {
             AbstractFish fish = resolveFish(level, involved);
             if (fish != null) {
@@ -513,6 +587,8 @@ public class ServerFishingManager
         session.pendingBiteTicks = 0;
         session.approachFish = null;
         session.approachTicks = 0;
+        session.nibbleFish = null;
+        session.nibbleTicks = 0;
     }
 
     @Nullable
@@ -708,16 +784,19 @@ public class ServerFishingManager
         }
         FishSteering.faceMovement(fish);
 
-        // The bobber chases the fish across the surface by velocity (teleporting it every tick
-        // starves the client of movement it can interpolate, and the bobber looks frozen).
+        // The bobber moves in lockstep with the fish: it inherits the fish's velocity outright
+        // (feed-forward) plus a gap-closing correction, instead of forever chasing from behind.
+        Vec3 fv = fish.getDeltaMovement();
         Vec3 toFish = new Vec3(fish.getX() - hook.getX(), 0.0D, fish.getZ() - hook.getZ());
         double gap = toFish.length();
-        if (gap > 0.25D) {
-            double chase = Math.min(0.5D, gap * 0.3D);
-            Vec3 hv = hook.getDeltaMovement();
-            hook.setDeltaMovement(hv.x * 0.3D + toFish.x / gap * chase, hv.y,
-                    hv.z * 0.3D + toFish.z / gap * chase);
+        double kx = 0.0D;
+        double kz = 0.0D;
+        if (gap > 0.05D) {
+            double k = Math.min(0.45D, gap * 0.5D);
+            kx = toFish.x / gap * k;
+            kz = toFish.z / gap * k;
         }
+        hook.setDeltaMovement(fv.x + kx, hook.getDeltaMovement().y, fv.z + kz);
     }
 
     /** A real fish comes off the line: unhook it and let it bolt. */

@@ -60,6 +60,13 @@ public final class FishBehavior
         public long scatterUntil;
         @Nullable public Vec3 scatterFrom;
         public long biteCooldownUntil;
+        /**
+         * 0..1 curiosity about bobbers: grows every time this fish notices one (faster with
+         * Aquaculture bait), grows a little more with each nibble, and drops when spooked.
+         * High interest means quicker approaches and much more frequent bites.
+         */
+        public float interest;
+        public long nibbleCooldownUntil;
     }
 
     public static FishState state(AbstractFish fish)
@@ -180,10 +187,9 @@ public final class FishBehavior
         return count;
     }
 
-    /** Fish claimed by this bobber that are close enough to bite and allowed to. */
-    public static List<AbstractFish> biteCandidates(FishingHook hook)
+    /** Fish claimed by this bobber that are within the given range and allowed to bite. */
+    public static List<AbstractFish> biteCandidates(FishingHook hook, double range)
     {
-        double range = NiceCatchConfig.SERVER.biteRange.get();
         long now = hook.level().getGameTime();
         List<AbstractFish> out = new ArrayList<>();
         for (Map.Entry<AbstractFish, FishState> entry : STATES.entrySet()) {
@@ -211,22 +217,39 @@ public final class FishBehavior
 
     // ---- Mutations ----
 
+    /** Ticks a lightly-spooked fish waits before biting again; proximity scares use this. */
+    public static final int LIGHT_SCARE_COOLDOWN = 100;
+
+    /** Full-cooldown scatter: for real trouble (damage, failed bites, thrown hooks). */
     public static void scatter(AbstractFish fish, Vec3 from, int durationTicks)
     {
+        scatter(fish, from, durationTicks, NiceCatchConfig.SERVER.fishBiteCooldownTicks.get());
+    }
+
+    public static void scatter(AbstractFish fish, Vec3 from, int durationTicks, int biteCooldownTicks)
+    {
         FishState state = state(fish);
-        state.scatterUntil = fish.level().getGameTime() + durationTicks;
+        long now = fish.level().getGameTime();
+        state.scatterUntil = now + durationTicks;
         state.scatterFrom = from;
         state.bobber = null;
         state.biteBobber = null;
-        state.biteCooldownUntil = fish.level().getGameTime() + NiceCatchConfig.SERVER.fishBiteCooldownTicks.get();
+        state.biteCooldownUntil = Math.max(state.biteCooldownUntil, now + biteCooldownTicks);
+        state.interest = Math.max(0.0F, state.interest - 0.35F);
     }
 
     public static void scatterAround(ServerLevel level, Vec3 center, double radius, float chance, @Nullable AbstractFish except)
     {
+        scatterAround(level, center, radius, chance, except, NiceCatchConfig.SERVER.fishBiteCooldownTicks.get());
+    }
+
+    public static void scatterAround(ServerLevel level, Vec3 center, double radius, float chance,
+                                     @Nullable AbstractFish except, int biteCooldownTicks)
+    {
         AABB box = AABB.ofSize(center, radius * 2.0D, radius * 2.0D, radius * 2.0D);
         for (AbstractFish fish : level.getEntitiesOfClass(AbstractFish.class, box, f -> f != except && !isHooked(f))) {
             if (level.random.nextFloat() < chance) {
-                scatter(fish, center, NiceCatchConfig.SERVER.scatterDurationTicks.get());
+                scatter(fish, center, NiceCatchConfig.SERVER.scatterDurationTicks.get(), biteCooldownTicks);
             }
         }
     }
@@ -237,6 +260,36 @@ public final class FishBehavior
         state.hooked = hooked;
         state.biteBobber = null;
         if (!hooked) state.bobber = null;
+    }
+
+    /** Any live fish near the bobber at all? Controls whether loot-table fishing is available. */
+    public static boolean anyFishNear(FishingHook hook)
+    {
+        double radius = attractRadius(hook);
+        AABB box = hook.getBoundingBox().inflate(radius);
+        return !hook.level().getEntitiesOfClass(AbstractFish.class, box, f -> f.isAlive() && f.isInWater()).isEmpty();
+    }
+
+    /** How fast this bobber grows fish interest (Aquaculture bait speeds it up). */
+    public static float interestGainMultiplier(FishingHook hook)
+    {
+        Player owner = hook.getPlayerOwner();
+        if (owner == null) return 1.0F;
+        InteractionHand hand = RodUtil.findRodHand(owner);
+        if (hand == null) return 1.0F;
+        return net.camacraft.nicecatch.compat.AquacultureCompat.biteChanceMultiplier(owner.getItemInHand(hand));
+    }
+
+    /** Fish swim way faster now, and vanilla's swim sound at that speed is a racket — hush it. */
+    @SubscribeEvent
+    public static void onFishSwimSound(net.minecraftforge.event.PlayLevelSoundEvent.AtEntity event)
+    {
+        if (!(event.getEntity() instanceof AbstractFish)) return;
+        var sound = event.getSound();
+        if (sound != null && sound.value().getLocation().equals(
+                net.minecraft.sounds.SoundEvents.FISH_SWIM.getLocation())) {
+            event.setNewVolume(event.getNewVolume() * 0.25F);
+        }
     }
 
     /** A scare source: where it is, and whether it's the always-flee kind (a swimmer). */
