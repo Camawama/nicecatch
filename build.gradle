@@ -66,11 +66,19 @@ mixin {
 }
 
 repositories {
+    maven {
+        name = 'CurseMaven'
+        url = 'https://cursemaven.com'
+        content { includeGroup 'curse.maven' }
+    }
 }
 
 dependencies {
     minecraft "net.minecraftforge:forge:${minecraft_version}-${forge_version}"
     annotationProcessor 'org.spongepowered:mixin:0.8.5:processor'
+
+    // Optional compat target; present in the dev runtime, never bundled or required.
+    implementation fg.deobf("curse.maven:aquaculture-60028:7331172")
 }
 
 tasks.named('processResources', ProcessResources).configure {

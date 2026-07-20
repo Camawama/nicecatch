@@ -17,8 +17,10 @@ public class FishFight
     public float progress;
     /** 0..1, line tension. The line snaps at 1 if snapping is enabled. */
     public float tension;
-    /** Tension gain is divided by this; >1 with sturdy Aquaculture hooks. */
+    /** Tension gain is divided by this; >1 with Aquaculture line, hooks, and rod tiers. */
     public float tensionScale = 1.0F;
+    /** Crank progress is multiplied by this; >1 with higher-tier Aquaculture rods. */
+    public float reelScale = 1.0F;
     /** Chance to double the caught item (Aquaculture double hook). */
     public float doubleCatchChance;
     public int runTicks;

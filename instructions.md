@@ -78,8 +78,18 @@ very same fish, which darts off scared. After the minute it's just an item.
 
 - **Lure** — fish notice the bobber from further away and bite more often.
 - **Luck of the Sea** — bites skew toward the biggest fish around; better treasure when loot-fishing.
-- **Aquaculture bait** — more bites while equipped.
-- **Aquaculture hooks** — tension builds slower (heavier hooks = much slower), so the line
-  snaps later. The double hook sometimes doubles the caught item.
+
+### Aquaculture (optional, full integration)
+
+- **Bait** — graded by its lure speed: better bait builds fish interest faster and draws
+  more bites while equipped.
+- **Hooks** — better hooks convert nibbles into real bites far more often, ease tension
+  build-up, carry their own luck bonus (gold, nether star) into bite selection and
+  treasure, use their real double-catch chance, and can spare the rod's durability on a
+  catch (diamond and friends).
+- **Fishing line** — with a line equipped, tension builds much slower: the line snaps
+  far later.
+- **Rod tier** — higher-tier rods (iron → neptunium) reel more effectively and add extra
+  snap protection on top of everything above.
 
 Almost every number above lives in `nicecatch-server.toml` / `-client.toml`.

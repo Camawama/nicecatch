@@ -277,7 +277,7 @@ public final class FishBehavior
         if (owner == null) return 1.0F;
         InteractionHand hand = RodUtil.findRodHand(owner);
         if (hand == null) return 1.0F;
-        return net.camacraft.nicecatch.compat.AquacultureCompat.biteChanceMultiplier(owner.getItemInHand(hand));
+        return net.camacraft.nicecatch.compat.AquacultureCompat.interestGainMultiplier(owner.getItemInHand(hand));
     }
 
     /** Fish swim way faster now, and vanilla's swim sound at that speed is a racket — hush it. */

@@ -79,10 +79,14 @@ public class NiceCatchConfig
         public final ForgeConfigSpec.DoubleValue luckTreasureBonus;
 
         // Aquaculture
-        public final ForgeConfigSpec.DoubleValue baitBiteMultiplier;
+        public final ForgeConfigSpec.DoubleValue baitInterestPerLureLevel;
+        public final ForgeConfigSpec.DoubleValue baitBitePerLureLevel;
+        public final ForgeConfigSpec.DoubleValue lineTensionScale;
+        public final ForgeConfigSpec.DoubleValue rodTierTensionBonus;
+        public final ForgeConfigSpec.DoubleValue rodTierReelBonus;
         public final ForgeConfigSpec.DoubleValue defaultHookTensionScale;
         public final ForgeConfigSpec.ConfigValue<java.util.List<? extends String>> hookTensionScales;
-        public final ForgeConfigSpec.DoubleValue doubleHookDoubleChance;
+        public final ForgeConfigSpec.ConfigValue<java.util.List<? extends String>> hookNibbleScales;
 
         Server(ForgeConfigSpec.Builder b)
         {
@@ -213,16 +217,27 @@ public class NiceCatchConfig
             b.pop();
 
             b.push("aquaculture");
-            baitBiteMultiplier = b.comment("Bite chance multiplier while an Aquaculture rod has bait/lure equipped.")
-                    .defineInRange("baitBiteMultiplier", 1.6D, 1.0D, 5.0D);
-            defaultHookTensionScale = b.comment("Tension is divided by this while any Aquaculture hook is equipped (line snaps later). Overridden per hook below.")
+            baitInterestPerLureLevel = b.comment("Extra fish-interest gain per lure-speed level of the equipped Aquaculture bait (interest multiplier = 1 + this * level).")
+                    .defineInRange("baitInterestPerLureLevel", 0.35D, 0.0D, 3.0D);
+            baitBitePerLureLevel = b.comment("Extra bite chance per lure-speed level of the equipped Aquaculture bait (bite multiplier = 1 + this * level).")
+                    .defineInRange("baitBitePerLureLevel", 0.25D, 0.0D, 3.0D);
+            lineTensionScale = b.comment("Tension is divided by this while a fishing line is equipped on the Aquaculture rod (the line snaps much later).")
+                    .defineInRange("lineTensionScale", 1.5D, 1.0D, 5.0D);
+            rodTierTensionBonus = b.comment("Additional snap protection per rod material tier level (scale += this * tier).")
+                    .defineInRange("rodTierTensionBonus", 0.08D, 0.0D, 1.0D);
+            rodTierReelBonus = b.comment("Extra crank progress per rod material tier level (reel multiplier = 1 + this * tier).")
+                    .defineInRange("rodTierReelBonus", 0.05D, 0.0D, 1.0D);
+            defaultHookTensionScale = b.comment("Tension divisor for equipped hooks not listed below.")
                     .defineInRange("defaultHookTensionScale", 1.15D, 1.0D, 5.0D);
             hookTensionScales = b.comment("Per-hook tension scales as 'hookname=scale', e.g. heavy=1.8.")
                     .defineListAllowEmpty("hookTensionScales",
-                            java.util.List.of("heavy=1.8", "double=1.2", "gold=1.3", "diamond=1.6", "neptunium=2.0"),
+                            java.util.List.of("heavy=1.8", "double=1.2", "gold=1.3", "diamond=1.6", "nether_star=2.2"),
                             o -> o instanceof String s && s.contains("="));
-            doubleHookDoubleChance = b.comment("Chance the Aquaculture double hook yields two of the caught fish item.")
-                    .defineInRange("doubleHookDoubleChance", 0.3D, 0.0D, 1.0D);
+            hookNibbleScales = b.comment("Per-hook multipliers on nibble-to-bite conversion as 'hookname=multiplier'; better hooks set themselves when a fish tastes the bait.")
+                    .defineListAllowEmpty("hookNibbleScales",
+                            java.util.List.of("iron=1.25", "gold=1.5", "diamond=1.75", "light=1.4", "heavy=1.1",
+                                    "double=1.25", "redstone=1.2", "note=1.2", "nether_star=2.5"),
+                            o -> o instanceof String s && s.contains("="));
             b.pop();
         }
     }

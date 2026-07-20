@@ -178,7 +178,8 @@ public class ServerFishingManager
         InteractionHand hand = RodUtil.findRodHand(player);
         ItemStack rod = hand != null ? player.getItemInHand(hand) : ItemStack.EMPTY;
 
-        int luck = EnchantmentHelper.getItemEnchantmentLevel(Enchantments.FISHING_LUCK, rod);
+        int luck = EnchantmentHelper.getItemEnchantmentLevel(Enchantments.FISHING_LUCK, rod)
+                + AquacultureCompat.bonusLuck(rod);
         float treasureChance = NiceCatchConfig.SERVER.treasureReplacementChance.get().floatValue()
                 + luck * NiceCatchConfig.SERVER.luckTreasureBonus.get().floatValue()
                 + player.getLuck() * 0.02F;
@@ -271,6 +272,7 @@ public class ServerFishingManager
 
         ItemStack rod = player.getItemInHand(hand);
         fight.tensionScale = Math.max(1.0F, AquacultureCompat.tensionScale(rod));
+        fight.reelScale = Math.max(1.0F, AquacultureCompat.reelEffectiveness(rod));
         fight.doubleCatchChance = AquacultureCompat.doubleCatchChance(rod);
 
         FishBehavior.setHooked(fish, true);
@@ -473,7 +475,11 @@ public class ServerFishingManager
             if (session.nibbleTicks <= 0) {
                 session.nibbleFish = null;
                 FishBehavior.FishState state = FishBehavior.state(fish);
-                if (level.random.nextFloat() < cfg.nibbleToBiteChance.get().floatValue()) {
+                InteractionHand nibbleHand = RodUtil.findRodHand(player);
+                ItemStack nibbleRod = nibbleHand != null ? player.getItemInHand(nibbleHand) : ItemStack.EMPTY;
+                float setChance = Math.min(0.9F, cfg.nibbleToBiteChance.get().floatValue()
+                        * AquacultureCompat.nibbleBiteMultiplier(nibbleRod));
+                if (level.random.nextFloat() < setChance) {
                     beginBite(session, level, hook, fish);
                 } else {
                     // Just tasting. It liked it, though.
@@ -528,7 +534,8 @@ public class ServerFishingManager
     /** Luck of the Sea favors the biggest fish; otherwise the most interested ones bite first. */
     private static AbstractFish pickBiter(ServerLevel level, List<AbstractFish> candidates, ItemStack rod)
     {
-        int luck = EnchantmentHelper.getItemEnchantmentLevel(Enchantments.FISHING_LUCK, rod);
+        int luck = EnchantmentHelper.getItemEnchantmentLevel(Enchantments.FISHING_LUCK, rod)
+                + AquacultureCompat.bonusLuck(rod);
         if (luck > 0 && level.random.nextFloat() < 0.25F * luck) {
             return candidates.stream()
                     .max((a, b) -> Float.compare(a.getBbWidth() * a.getBbHeight(), b.getBbWidth() * b.getBbHeight()))
@@ -652,7 +659,7 @@ public class ServerFishingManager
         fight.pendingCrank = 0.0F;
         fight.pendingLift = 0.0F;
 
-        float revRate = cfg.progressPerRevolution.get().floatValue();
+        float revRate = cfg.progressPerRevolution.get().floatValue() * fight.reelScale;
         if (fight.holding) {
             if (run) {
                 fight.progress += crank * revRate * cfg.runReelEffectiveness.get().floatValue();
@@ -734,8 +741,11 @@ public class ServerFishingManager
         int rodDamage = NiceCatchConfig.SERVER.entityCatchRodDamage.get();
         if (rodDamage > 0) {
             ItemStack rod = player.getItemInHand(fight.hand);
-            InteractionHand hand = fight.hand;
-            rod.hurtAndBreak(rodDamage, player, p -> p.broadcastBreakEvent(hand));
+            // Aquaculture hooks with a durability bonus can spare the rod entirely.
+            if (!AquacultureCompat.skipRodDamage(rod, player.getRandom())) {
+                InteractionHand hand = fight.hand;
+                rod.hurtAndBreak(rodDamage, player, p -> p.broadcastBreakEvent(hand));
+            }
         }
         level.playSound(null, fish.getX(), fish.getY(), fish.getZ(),
                 SoundEvents.GENERIC_SPLASH, SoundSource.NEUTRAL, 0.6F, 1.0F);
