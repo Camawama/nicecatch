@@ -6,8 +6,10 @@ import net.camacraft.nicecatch.RodUtil;
 import net.camacraft.nicecatch.server.goal.FollowBobberGoal;
 import net.camacraft.nicecatch.server.goal.HookedFishGoal;
 import net.camacraft.nicecatch.server.goal.ScatterGoal;
+import net.minecraft.core.BlockPos;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
+import net.minecraft.tags.FluidTags;
 import net.minecraft.world.InteractionHand;
 import net.minecraft.world.entity.LivingEntity;
 import net.minecraft.world.entity.ai.goal.AvoidEntityGoal;
@@ -20,7 +22,9 @@ import net.minecraft.world.item.enchantment.EnchantmentHelper;
 import net.minecraft.world.item.enchantment.Enchantments;
 import net.minecraft.world.phys.AABB;
 import net.minecraft.world.phys.Vec3;
+import net.minecraft.world.level.material.FluidState;
 import net.minecraftforge.event.entity.EntityJoinLevelEvent;
+import net.minecraftforge.event.entity.living.LivingEvent;
 import net.minecraftforge.event.entity.living.LivingHurtEvent;
 import net.minecraftforge.event.entity.player.AttackEntityEvent;
 import net.minecraftforge.event.server.ServerStoppedEvent;
@@ -97,6 +101,29 @@ public final class FishBehavior
         scatter(target, event.getEntity().position(), cfg.scatterDurationTicks.get());
         scatterAround((ServerLevel) target.level(), target.position(), cfg.scatterRadius.get(),
                 cfg.meleeScatterChance.get().floatValue(), target);
+    }
+
+    /**
+     * Fish never break the surface: if the top of a fish would poke above the actual water
+     * plane, it gets eased back under. Runs for every fish (vanilla wander included) —
+     * except a hooked one, whose catch launch out of the water must not be suppressed.
+     */
+    @SubscribeEvent
+    public static void onFishTick(LivingEvent.LivingTickEvent event)
+    {
+        if (!(event.getEntity() instanceof AbstractFish fish) || fish.level().isClientSide) return;
+        if (!fish.isInWater() || isHooked(fish)) return;
+
+        BlockPos pos = fish.blockPosition();
+        FluidState fluid = fish.level().getFluidState(pos);
+        if (!fluid.is(FluidTags.WATER)) return;
+        if (fish.level().getFluidState(pos.above()).is(FluidTags.WATER)) return; // deep water, fine
+
+        double surfaceY = pos.getY() + fluid.getHeight(fish.level(), pos);
+        if (fish.getY() + fish.getBbHeight() > surfaceY - 0.03D) {
+            Vec3 v = fish.getDeltaMovement();
+            fish.setDeltaMovement(v.x, Math.min(v.y, 0.0D) - 0.03D, v.z);
+        }
     }
 
     /** Any damage (arrows, tridents, cacti, whatever) also sends the school running. */

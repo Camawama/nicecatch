@@ -65,6 +65,15 @@ public final class FishSteering
         if (!waterAt(fish, fish.getX(), fish.getY() + 0.6D, fish.getZ())) {
             v = new Vec3(v.x, Math.min(v.y, 0.0D) - 0.02D, v.z);
         }
+
+        // A fish can't thrust backwards: when the new heading disagrees hard with the body,
+        // it turns nearly in place first, then accelerates — no more moonwalking cod.
+        if (v.horizontalDistanceSqr() > 1.0E-5D) {
+            float desiredYaw = (float) (Mth.atan2(v.z, v.x) * (180.0D / Math.PI)) - 90.0F;
+            if (Math.abs(Mth.degreesDifference(fish.getYRot(), desiredYaw)) > 100.0F) {
+                v = new Vec3(v.x * 0.35D, v.y, v.z * 0.35D);
+            }
+        }
         fish.setDeltaMovement(v);
         faceMovement(fish);
     }
@@ -135,7 +144,7 @@ public final class FishSteering
         Vec3 v = fish.getDeltaMovement();
         if (v.horizontalDistanceSqr() < 1.0E-5D) return;
         float yaw = (float) (Mth.atan2(v.z, v.x) * (180.0D / Math.PI)) - 90.0F;
-        fish.setYRot(Mth.approachDegrees(fish.getYRot(), yaw, 45.0F));
+        fish.setYRot(Mth.approachDegrees(fish.getYRot(), yaw, 60.0F));
         fish.yBodyRot = fish.getYRot();
         fish.yHeadRot = fish.getYRot();
     }

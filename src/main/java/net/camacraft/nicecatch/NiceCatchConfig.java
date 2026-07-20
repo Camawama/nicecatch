@@ -56,6 +56,7 @@ public class NiceCatchConfig
         public final ForgeConfigSpec.DoubleValue swimScareRadius;
         public final ForgeConfigSpec.DoubleValue meleeThreatRadius;
         public final ForgeConfigSpec.DoubleValue swimScareChance;
+        public final ForgeConfigSpec.DoubleValue schoolPanicChance;
         public final ForgeConfigSpec.DoubleValue meleeScatterChance;
         public final ForgeConfigSpec.DoubleValue scatterSpeed;
         public final ForgeConfigSpec.IntValue scatterDurationTicks;
@@ -160,12 +161,14 @@ public class NiceCatchConfig
                     .defineInRange("scatterOnHookChance", 0.5D, 0.0D, 1.0D);
             scatterRadius = b.comment("Radius of the scatter shockwave around a hooked or attacked fish.")
                     .defineInRange("scatterRadius", 6.0D, 1.0D, 16.0D);
-            swimScareRadius = b.comment("Fish scatter from non-fish entities swimming within this distance.")
-                    .defineInRange("swimScareRadius", 3.0D, 0.5D, 8.0D);
+            swimScareRadius = b.comment("Fish scatter from non-fish entities swimming within this distance (always, no chance roll).")
+                    .defineInRange("swimScareRadius", 6.0D, 0.5D, 16.0D);
             meleeThreatRadius = b.comment("Fish also scatter from any player (in water or not) who is moving or swinging within this distance.")
-                    .defineInRange("meleeThreatRadius", 3.5D, 0.5D, 8.0D);
+                    .defineInRange("meleeThreatRadius", 4.5D, 0.5D, 16.0D);
             swimScareChance = b.comment("Chance (per check, ~4x a second) that a fish scatters from a player looming in melee reach. Swimmers nearby always scatter fish regardless of this.")
                     .defineInRange("swimScareChance", 0.75D, 0.0D, 1.0D);
+            schoolPanicChance = b.comment("When a fish spooks from a threat, chance for each schoolmate within scatterRadius to bolt with it.")
+                    .defineInRange("schoolPanicChance", 0.8D, 0.0D, 1.0D);
             meleeScatterChance = b.comment("Chance for each nearby fish to scatter when a player attacks any fish.")
                     .defineInRange("meleeScatterChance", 0.9D, 0.0D, 1.0D);
             scatterSpeed = b.comment("Swim speed multiplier while scattering.")

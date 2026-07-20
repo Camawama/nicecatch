@@ -48,6 +48,10 @@ public class ScatterGoal extends Goal
         }
 
         FishBehavior.scatter(fish, threat.pos(), NiceCatchConfig.SERVER.scatterDurationTicks.get());
+        // Panic is contagious: one spooked fish sends the school around it running too.
+        FishBehavior.scatterAround((net.minecraft.server.level.ServerLevel) fish.level(), fish.position(),
+                NiceCatchConfig.SERVER.scatterRadius.get(),
+                NiceCatchConfig.SERVER.schoolPanicChance.get().floatValue(), fish);
         return true;
     }
 

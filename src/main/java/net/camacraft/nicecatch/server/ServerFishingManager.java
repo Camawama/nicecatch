@@ -73,6 +73,9 @@ public class ServerFishingManager
         /** A real fish currently nibbling at the bobber, waiting for the hook-set. */
         @Nullable UUID pendingFish;
         int pendingBiteTicks;
+        /** A fish that committed to biting and is closing in behind the vanilla particle wake. */
+        @Nullable UUID approachFish;
+        int approachTicks;
     }
 
     private static Session session(Player player)
@@ -93,7 +96,7 @@ public class ServerFishingManager
         Session session = SESSIONS.remove(event.getEntity().getUUID());
         if (session != null && event.getEntity() instanceof ServerPlayer player) {
             unhookFish(player.serverLevel(), session.fight);
-            clearPendingBite(player.serverLevel(), session);
+            clearBiteFlow(player.serverLevel(), session);
         }
     }
 
@@ -328,7 +331,7 @@ public class ServerFishingManager
                     session.fight = null;
                     NiceCatchNet.sendTo(player, new FightEndMessage(FightEndMessage.ESCAPED));
                 }
-                clearPendingBite(player.serverLevel(), session);
+                clearBiteFlow(player.serverLevel(), session);
                 if (session.prevBite) {
                     session.prevBite = false;
                     session.prevBiteEntity = false;
@@ -391,12 +394,12 @@ public class ServerFishingManager
         if (session.pendingFish != null) {
             AbstractFish fish = resolveFish(level, session.pendingFish);
             if (fish == null || FishBehavior.isScattering(fish) || fish.distanceToSqr(hook) > 25.0D) {
-                clearPendingBite(level, session);
+                clearBiteFlow(level, session);
                 return;
             }
             session.pendingBiteTicks--;
             if (session.pendingBiteTicks <= 0) {
-                clearPendingBite(level, session);
+                clearBiteFlow(level, session);
                 FishBehavior.scatter(fish, hook.position(), cfg.scatterDurationTicks.get());
                 level.playSound(null, hook.getX(), hook.getY(), hook.getZ(),
                         SoundEvents.FISHING_BOBBER_SPLASH, SoundSource.NEUTRAL, 0.3F, 0.8F);
@@ -410,10 +413,35 @@ public class ServerFishingManager
             return;
         }
 
-        // While fish are being courted, vanilla's invisible loot-fish never lures.
-        if (hook.nibble <= 0 && FishBehavior.claimedCount(hook) > 0) {
-            hook.timeUntilHooked = 0;
-            if (hook.timeUntilLured < 100) hook.timeUntilLured = 100;
+        // A committed fish closing in behind the vanilla wake; the bite lands when it arrives.
+        if (session.approachFish != null) {
+            AbstractFish fish = resolveFish(level, session.approachFish);
+            if (fish == null || FishBehavior.isScattering(fish) || fish.distanceToSqr(hook) > 64.0D) {
+                clearBiteFlow(level, session);
+                return;
+            }
+            session.approachTicks--;
+            if (fish.distanceToSqr(hook) < 0.81D || session.approachTicks <= 0) {
+                session.approachFish = null;
+                beginBite(session, level, hook, fish);
+                return;
+            }
+            if ((session.approachTicks & 1) == 0) {
+                sendWakeParticles(level, hook, fish);
+            }
+            return;
+        }
+
+        // While fish are being courted, vanilla's invisible loot-fish never lures. In fishless
+        // water, vanilla's "something approaching" wake is skipped instead (items don't swim):
+        // collapsing the timer to 1 lands the loot nibble on the next tick, splash and all.
+        if (hook.nibble <= 0) {
+            if (FishBehavior.claimedCount(hook) > 0) {
+                hook.timeUntilHooked = 0;
+                if (hook.timeUntilLured < 100) hook.timeUntilLured = 100;
+            } else if (hook.timeUntilHooked > 1) {
+                hook.timeUntilHooked = 1;
+            }
         }
         if (hook.nibble > 0) return; // an already-started loot bite plays out normally
 
@@ -439,9 +467,18 @@ public class ServerFishingManager
             biter = candidates.get(level.random.nextInt(candidates.size()));
         }
 
-        session.pendingFish = biter.getUUID();
-        session.pendingBiteTicks = cfg.biteWindowTicks.get();
+        // The fish commits: it beelines for the hook behind a vanilla wake, then bites on arrival.
+        session.approachFish = biter.getUUID();
+        session.approachTicks = 20 + level.random.nextInt(20);
         FishBehavior.state(biter).biteBobber = hook;
+    }
+
+    /** The moment of the bite itself: bobber dips, splash, and the hook-set window opens. */
+    private static void beginBite(Session session, ServerLevel level, FishingHook hook, AbstractFish fish)
+    {
+        session.pendingFish = fish.getUUID();
+        session.pendingBiteTicks = NiceCatchConfig.SERVER.biteWindowTicks.get();
+        FishBehavior.state(fish).biteBobber = hook;
         hook.setDeltaMovement(hook.getDeltaMovement().add(0.0D, -0.18D, 0.0D));
         level.playSound(null, hook.getX(), hook.getY(), hook.getZ(),
                 SoundEvents.FISHING_BOBBER_SPLASH, SoundSource.NEUTRAL, 0.35F, 1.0F);
@@ -449,15 +486,33 @@ public class ServerFishingManager
                 4, 0.12D, 0.05D, 0.12D, 0.0D);
     }
 
-    private static void clearPendingBite(ServerLevel level, Session session)
+    /** The vanilla V-shaped surface wake, trailing the approaching fish toward the bobber. */
+    private static void sendWakeParticles(ServerLevel level, FishingHook hook, AbstractFish fish)
     {
-        if (session.pendingFish == null) return;
-        AbstractFish fish = resolveFish(level, session.pendingFish);
-        if (fish != null) {
-            FishBehavior.state(fish).biteBobber = null;
+        Vec3 to = hook.position().subtract(fish.position());
+        if (to.horizontalDistanceSqr() < 1.0E-4D) return;
+        to = new Vec3(to.x, 0.0D, to.z).normalize();
+        double f3 = to.x * 0.04D;
+        double f4 = to.z * 0.04D;
+        double y = hook.getY() + 0.1D;
+        level.sendParticles(ParticleTypes.FISHING, fish.getX(), y, fish.getZ(), 0, f4, 0.01D, -f3, 1.0D);
+        level.sendParticles(ParticleTypes.FISHING, fish.getX(), y, fish.getZ(), 0, -f4, 0.01D, f3, 1.0D);
+    }
+
+    /** Clears any in-flight bite (approach or nibble window) and frees the fish involved. */
+    private static void clearBiteFlow(ServerLevel level, Session session)
+    {
+        UUID involved = session.pendingFish != null ? session.pendingFish : session.approachFish;
+        if (involved != null) {
+            AbstractFish fish = resolveFish(level, involved);
+            if (fish != null) {
+                FishBehavior.state(fish).biteBobber = null;
+            }
         }
         session.pendingFish = null;
         session.pendingBiteTicks = 0;
+        session.approachFish = null;
+        session.approachTicks = 0;
     }
 
     @Nullable
