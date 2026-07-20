@@ -1,7 +1,10 @@
 package net.camacraft.nicecatch.client;
 
 import com.mojang.blaze3d.platform.Window;
+import net.camacraft.nicecatch.NiceCatchConfig;
+import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.GuiGraphics;
+import net.minecraft.network.chat.Component;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.util.Mth;
 
@@ -23,6 +26,7 @@ public class FishingBarOverlay
             case CHARGING -> {
                 drawBackground(graphics, x, y);
                 drawFill(graphics, x, y, ClientFishing.chargeValue(partialTick), 0xFF3CB4E7);
+                drawHint(graphics, window, y, "nicecatch.hint.charge", 0xFF9BDCF5, false);
             }
             case BITE -> {
                 drawBackground(graphics, x, y);
@@ -30,6 +34,7 @@ public class FishingBarOverlay
                 if (flashOn) {
                     drawFill(graphics, x, y, 1.0F, 0xFFE03434);
                 }
+                drawHint(graphics, window, y, "nicecatch.hint.bite", 0xFFFF6A5A, true);
             }
             case FIGHT -> {
                 float t = (float) (ClientFishing.fightTicks() + partialTick);
@@ -43,14 +48,33 @@ public class FishingBarOverlay
                     color = 0xFFFF2020;
                 }
                 drawFill(graphics, x, y, ClientFishing.shownProgress(), color);
+
+                if (ClientFishing.tension() > 0.8F) {
+                    drawHint(graphics, window, y, "nicecatch.hint.tension", 0xFFFF4040, true);
+                } else if (ClientFishing.isFishRunning()) {
+                    drawHint(graphics, window, y, "nicecatch.hint.run", 0xFFE8C33A, false);
+                } else {
+                    drawHint(graphics, window, y, "nicecatch.hint.reel", 0xFFB6E8A0, false);
+                }
             }
             default -> {
                 if (ClientFishing.celebrateTicks() > 0) {
                     drawBackground(graphics, x, y);
                     drawFill(graphics, x, y, 1.0F, 0xFF7EE044);
+                    drawHint(graphics, window, y, "nicecatch.hint.caught", 0xFF7EE044, false);
                 }
             }
         }
+    }
+
+    /** One-line coaching text floating above the bar so nobody has to guess the controls. */
+    private static void drawHint(GuiGraphics graphics, Window window, int barY, String key, int color, boolean flash)
+    {
+        if (!NiceCatchConfig.CLIENT.showHints.get()) return;
+        if (flash && (ClientFishing.biteTicks() + ClientFishing.fightTicks()) / 6 % 2 == 1) return;
+        Minecraft mc = Minecraft.getInstance();
+        graphics.drawCenteredString(mc.font, Component.translatable(key),
+                window.getGuiScaledWidth() / 2, barY - 12, color);
     }
 
     private static void drawBackground(GuiGraphics graphics, int x, int y)

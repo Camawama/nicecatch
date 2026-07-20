@@ -36,6 +36,11 @@ public class ClientFishing
     private static float revFeedback;
     private static int celebrateTicks;
 
+    // Sensitivity ramp after leaving reel mode, so a still-spinning hand can't whip the camera.
+    private static boolean wasCapturing;
+    private static int mouseRampTicks;
+    private static int mouseRampTotal;
+
     public static Phase phase()
     {
         return phase;
@@ -111,6 +116,17 @@ public class ClientFishing
         TRACKER.addDelta(dx, dy);
     }
 
+    /**
+     * 0..1 multiplier on camera input right after reel capture ends: starts at 0 and eases
+     * back to full sensitivity over the configured ramp, absorbing leftover spin momentum.
+     */
+    public static float mouseDampFactor()
+    {
+        if (mouseRampTicks <= 0 || mouseRampTotal <= 0) return 1.0F;
+        float t = 1.0F - (float) mouseRampTicks / (float) mouseRampTotal;
+        return t * t;
+    }
+
     public static void clientTick(Minecraft mc)
     {
         LocalPlayer player = mc.player;
@@ -120,6 +136,17 @@ public class ClientFishing
         }
         if (castCooldown > 0) castCooldown--;
         if (celebrateTicks > 0) celebrateTicks--;
+
+        boolean capturing = isCapturingMouse();
+        if (wasCapturing && !capturing) {
+            mouseRampTotal = NiceCatchConfig.CLIENT.mouseRampTicks.get();
+            mouseRampTicks = mouseRampTotal;
+        } else if (capturing) {
+            mouseRampTicks = 0;
+        } else if (mouseRampTicks > 0) {
+            mouseRampTicks--;
+        }
+        wasCapturing = capturing;
 
         switch (phase) {
             case IDLE -> {}
@@ -208,6 +235,8 @@ public class ClientFishing
     {
         phase = Phase.IDLE;
         reelHeld = false;
+        // wasCapturing intentionally survives reset(): the tick after a fight ends must still
+        // see the capture->free transition to start the sensitivity ramp.
         fishRunning = false;
         progress = shownProgress = 0.0F;
         tension = 0.0F;

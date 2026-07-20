@@ -40,6 +40,44 @@ public class NiceCatchConfig
         public final ForgeConfigSpec.DoubleValue maxRevolutionsPerTick;
         public final ForgeConfigSpec.IntValue escapeGraceTicks;
 
+        // Fish AI
+        public final ForgeConfigSpec.BooleanValue entityFishingEnabled;
+        public final ForgeConfigSpec.DoubleValue interestRadius;
+        public final ForgeConfigSpec.IntValue maxFishPerBobber;
+        public final ForgeConfigSpec.DoubleValue interestChance;
+        public final ForgeConfigSpec.DoubleValue followFollowerChance;
+        public final ForgeConfigSpec.DoubleValue followFollowerRadius;
+        public final ForgeConfigSpec.DoubleValue biteChancePerSecond;
+        public final ForgeConfigSpec.DoubleValue biteRange;
+        public final ForgeConfigSpec.IntValue biteWindowTicks;
+        public final ForgeConfigSpec.IntValue fishBiteCooldownTicks;
+        public final ForgeConfigSpec.DoubleValue scatterOnHookChance;
+        public final ForgeConfigSpec.DoubleValue scatterRadius;
+        public final ForgeConfigSpec.DoubleValue swimScareRadius;
+        public final ForgeConfigSpec.DoubleValue swimScareChance;
+        public final ForgeConfigSpec.DoubleValue meleeScatterChance;
+        public final ForgeConfigSpec.DoubleValue scatterSpeed;
+        public final ForgeConfigSpec.IntValue scatterDurationTicks;
+
+        // Entity catches
+        public final ForgeConfigSpec.DoubleValue sizeStrengthExponent;
+        public final ForgeConfigSpec.DoubleValue sizeReferenceArea;
+        public final ForgeConfigSpec.IntValue entityCatchRodDamage;
+        public final ForgeConfigSpec.DoubleValue convertDistance;
+        public final ForgeConfigSpec.IntValue pullTimeoutTicks;
+        public final ForgeConfigSpec.IntValue releaseWindowTicks;
+
+        // Loot
+        public final ForgeConfigSpec.BooleanValue removeFishFromLoot;
+        public final ForgeConfigSpec.DoubleValue treasureReplacementChance;
+        public final ForgeConfigSpec.DoubleValue luckTreasureBonus;
+
+        // Aquaculture
+        public final ForgeConfigSpec.DoubleValue baitBiteMultiplier;
+        public final ForgeConfigSpec.DoubleValue defaultHookTensionScale;
+        public final ForgeConfigSpec.ConfigValue<java.util.List<? extends String>> hookTensionScales;
+        public final ForgeConfigSpec.DoubleValue doubleHookDoubleChance;
+
         Server(ForgeConfigSpec.Builder b)
         {
             b.push("casting");
@@ -94,6 +132,80 @@ public class NiceCatchConfig
             bonusXp = b.comment("Grant a little bonus XP for landing strong fish.")
                     .define("bonusXp", true);
             b.pop();
+
+            b.push("fishAI");
+            entityFishingEnabled = b.comment("Real fish entities are lured to bobbers and are what you actually catch. Disable for pure loot-table fishing.")
+                    .define("entityFishingEnabled", true);
+            interestRadius = b.comment("Radius in which fish notice a bobber and swim over.")
+                    .defineInRange("interestRadius", 12.0D, 2.0D, 32.0D);
+            maxFishPerBobber = b.comment("How many fish can crowd around one bobber at a time.")
+                    .defineInRange("maxFishPerBobber", 5, 1, 20);
+            interestChance = b.comment("Chance (per check, roughly every half second) that an eligible fish decides to approach a bobber.")
+                    .defineInRange("interestChance", 0.35D, 0.0D, 1.0D);
+            followFollowerChance = b.comment("Chance that a fish outside the interest radius follows a nearby fish that is already interested.")
+                    .defineInRange("followFollowerChance", 0.25D, 0.0D, 1.0D);
+            followFollowerRadius = b.comment("How close a fish must be to an interested fish to consider following it.")
+                    .defineInRange("followFollowerRadius", 6.0D, 1.0D, 16.0D);
+            biteChancePerSecond = b.comment("Chance per second that a fish milling at the bobber commits to a bite.")
+                    .defineInRange("biteChancePerSecond", 0.10D, 0.005D, 1.0D);
+            biteRange = b.comment("How close to the bobber a fish must be to bite.")
+                    .defineInRange("biteRange", 1.8D, 0.5D, 5.0D);
+            biteWindowTicks = b.comment("How long a biting fish stays on before you must set the hook.")
+                    .defineInRange("biteWindowTicks", 50, 10, 200);
+            fishBiteCooldownTicks = b.comment("How long a fish that escaped or got spooked waits before it can bite again.")
+                    .defineInRange("fishBiteCooldownTicks", 400, 0, 6000);
+            scatterOnHookChance = b.comment("Chance for each nearby fish to scatter when another fish is hooked.")
+                    .defineInRange("scatterOnHookChance", 0.5D, 0.0D, 1.0D);
+            scatterRadius = b.comment("Radius of the scatter shockwave around a hooked or attacked fish.")
+                    .defineInRange("scatterRadius", 6.0D, 1.0D, 16.0D);
+            swimScareRadius = b.comment("Fish scatter from non-fish entities swimming within this distance.")
+                    .defineInRange("swimScareRadius", 3.0D, 0.5D, 8.0D);
+            swimScareChance = b.comment("Chance (per check, every half second) that a fish scatters from a swimmer. Much higher than the hooked-fish scatter.")
+                    .defineInRange("swimScareChance", 0.75D, 0.0D, 1.0D);
+            meleeScatterChance = b.comment("Chance for each nearby fish to scatter when a player attacks any fish.")
+                    .defineInRange("meleeScatterChance", 0.9D, 0.0D, 1.0D);
+            scatterSpeed = b.comment("Swim speed multiplier while scattering.")
+                    .defineInRange("scatterSpeed", 1.9D, 1.0D, 4.0D);
+            scatterDurationTicks = b.comment("How long a scatter lasts.")
+                    .defineInRange("scatterDurationTicks", 90, 20, 600);
+            b.pop();
+
+            b.push("entityCatch");
+            sizeStrengthExponent = b.comment("Exponent on (hitbox area / reference area) when computing fight strength. Below 1.0 makes small size differences matter a lot.")
+                    .defineInRange("sizeStrengthExponent", 0.6D, 0.1D, 3.0D);
+            sizeReferenceArea = b.comment("Hitbox area (width * height) that maps to maximum fight strength. Salmon is ~0.28, cod ~0.15.")
+                    .defineInRange("sizeReferenceArea", 0.45D, 0.05D, 4.0D);
+            entityCatchRodDamage = b.comment("Rod durability cost for landing a real fish.")
+                    .defineInRange("entityCatchRodDamage", 2, 0, 16);
+            convertDistance = b.comment("Distance from the player at which the reeled-in fish turns into its item.")
+                    .defineInRange("convertDistance", 2.2D, 0.5D, 8.0D);
+            pullTimeoutTicks = b.comment("Failsafe: convert the flying fish to an item after this many ticks even if it never got close.")
+                    .defineInRange("pullTimeoutTicks", 40, 10, 200);
+            releaseWindowTicks = b.comment("Catch-and-release: for this many ticks after a catch, tossing the fish item into water revives the fish.")
+                    .defineInRange("releaseWindowTicks", 1200, 0, 24000);
+            b.pop();
+
+            b.push("loot");
+            removeFishFromLoot = b.comment("Remove fish items from rod loot; fish only come from real fish entities. Loot-table fishing still yields junk and treasure.")
+                    .define("removeFishFromLoot", true);
+            treasureReplacementChance = b.comment("When a loot-table fish is filtered out, chance the replacement roll uses the treasure table instead of junk.")
+                    .defineInRange("treasureReplacementChance", 0.15D, 0.0D, 1.0D);
+            luckTreasureBonus = b.comment("Extra treasure chance per level of Luck of the Sea on the replacement roll.")
+                    .defineInRange("luckTreasureBonus", 0.04D, 0.0D, 0.5D);
+            b.pop();
+
+            b.push("aquaculture");
+            baitBiteMultiplier = b.comment("Bite chance multiplier while an Aquaculture rod has bait/lure equipped.")
+                    .defineInRange("baitBiteMultiplier", 1.6D, 1.0D, 5.0D);
+            defaultHookTensionScale = b.comment("Tension is divided by this while any Aquaculture hook is equipped (line snaps later). Overridden per hook below.")
+                    .defineInRange("defaultHookTensionScale", 1.15D, 1.0D, 5.0D);
+            hookTensionScales = b.comment("Per-hook tension scales as 'hookname=scale', e.g. heavy=1.8.")
+                    .defineListAllowEmpty("hookTensionScales",
+                            java.util.List.of("heavy=1.8", "double=1.2", "gold=1.3", "diamond=1.6", "neptunium=2.0"),
+                            o -> o instanceof String s && s.contains("="));
+            doubleHookDoubleChance = b.comment("Chance the Aquaculture double hook yields two of the caught fish item.")
+                    .defineInRange("doubleHookDoubleChance", 0.3D, 0.0D, 1.0D);
+            b.pop();
         }
     }
 
@@ -105,6 +217,8 @@ public class NiceCatchConfig
         public final ForgeConfigSpec.DoubleValue reelFovMultiplier;
         public final ForgeConfigSpec.BooleanValue reelClickSounds;
         public final ForgeConfigSpec.BooleanValue cameraShake;
+        public final ForgeConfigSpec.BooleanValue showHints;
+        public final ForgeConfigSpec.IntValue mouseRampTicks;
 
         Client(ForgeConfigSpec.Builder b)
         {
@@ -120,6 +234,10 @@ public class NiceCatchConfig
                     .define("reelClickSounds", true);
             cameraShake = b.comment("Subtle camera shake while a hooked fish is running.")
                     .define("cameraShake", true);
+            showHints = b.comment("Show contextual hint text above the fishing bar (release to cast, set the hook, ease off...).")
+                    .define("showHints", true);
+            mouseRampTicks = b.comment("Ticks over which camera sensitivity ramps back up after leaving reel mode, so a spinning hand doesn't whip the camera.")
+                    .defineInRange("mouseRampTicks", 10, 0, 60);
         }
     }
 }

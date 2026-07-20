@@ -1,0 +1,248 @@
+package net.camacraft.nicecatch.server;
+
+import net.camacraft.nicecatch.NiceCatch;
+import net.camacraft.nicecatch.NiceCatchConfig;
+import net.camacraft.nicecatch.RodUtil;
+import net.camacraft.nicecatch.server.goal.FollowBobberGoal;
+import net.camacraft.nicecatch.server.goal.HookedFishGoal;
+import net.camacraft.nicecatch.server.goal.ScatterGoal;
+import net.minecraft.server.level.ServerLevel;
+import net.minecraft.server.level.ServerPlayer;
+import net.minecraft.world.InteractionHand;
+import net.minecraft.world.entity.ai.goal.AvoidEntityGoal;
+import net.minecraft.world.entity.animal.AbstractFish;
+import net.minecraft.world.entity.player.Player;
+import net.minecraft.world.entity.projectile.FishingHook;
+import net.minecraft.world.item.ItemStack;
+import net.minecraft.world.item.enchantment.EnchantmentHelper;
+import net.minecraft.world.item.enchantment.Enchantments;
+import net.minecraft.world.phys.AABB;
+import net.minecraft.world.phys.Vec3;
+import net.minecraftforge.event.entity.EntityJoinLevelEvent;
+import net.minecraftforge.event.entity.player.AttackEntityEvent;
+import net.minecraftforge.event.server.ServerStoppedEvent;
+import net.minecraftforge.eventbus.api.SubscribeEvent;
+import net.minecraftforge.fml.common.Mod;
+
+import javax.annotation.Nullable;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Map;
+import java.util.WeakHashMap;
+
+/**
+ * Server-side brain for how fish react to bobbers and threats.
+ *
+ * State lives in a WeakHashMap keyed by the fish entity itself, so it evaporates with the
+ * entity on unload; everything is re-derived from live entity references, which keeps the
+ * system safe with any number of players fishing side by side.
+ */
+@Mod.EventBusSubscriber(modid = NiceCatch.MODID)
+public final class FishBehavior
+{
+    private static final Map<AbstractFish, FishState> STATES = new WeakHashMap<>();
+
+    public static class FishState
+    {
+        public boolean goalsInjected;
+        /** The bobber this fish is drawn to (interest claim). */
+        @Nullable public FishingHook bobber;
+        /** Non-null while the fish is actively nibbling at that bobber. */
+        @Nullable public FishingHook biteBobber;
+        public boolean hooked;
+        public long scatterUntil;
+        @Nullable public Vec3 scatterFrom;
+        public long biteCooldownUntil;
+    }
+
+    public static FishState state(AbstractFish fish)
+    {
+        return STATES.computeIfAbsent(fish, f -> new FishState());
+    }
+
+    // ---- Goal injection ----
+
+    @SubscribeEvent
+    public static void onEntityJoin(EntityJoinLevelEvent event)
+    {
+        if (event.getLevel().isClientSide) return;
+        if (!(event.getEntity() instanceof AbstractFish fish)) return;
+
+        FishState state = state(fish);
+        if (state.goalsInjected) return;
+        state.goalsInjected = true;
+
+        // Vanilla fish flee any player within 8 blocks, which would keep them from ever
+        // approaching a bobber cast near its owner. Our scatter system replaces that fear
+        // with a meaner, situational one (swimmers and attacks), so drop the vanilla goal.
+        fish.goalSelector.removeAllGoals(g -> g instanceof AvoidEntityGoal);
+        fish.goalSelector.addGoal(0, new HookedFishGoal(fish));
+        fish.goalSelector.addGoal(1, new ScatterGoal(fish));
+        fish.goalSelector.addGoal(2, new FollowBobberGoal(fish));
+    }
+
+    /** Swinging at any fish spooks the school; melee fishing should feel nearly hopeless. */
+    @SubscribeEvent
+    public static void onAttack(AttackEntityEvent event)
+    {
+        if (event.getEntity().level().isClientSide) return;
+        if (!(event.getTarget() instanceof AbstractFish target)) return;
+        if (isHooked(target)) return;
+
+        NiceCatchConfig.Server cfg = NiceCatchConfig.SERVER;
+        scatter(target, event.getEntity().position(), cfg.scatterDurationTicks.get());
+        scatterAround((ServerLevel) target.level(), target.position(), cfg.scatterRadius.get(),
+                cfg.meleeScatterChance.get().floatValue(), target);
+    }
+
+    @SubscribeEvent
+    public static void onServerStopped(ServerStoppedEvent event)
+    {
+        STATES.clear();
+    }
+
+    // ---- Queries ----
+
+    /** A bobber attracts fish while it sits in water, its owner is online, and no fight is running on it. */
+    public static boolean isAttracting(@Nullable FishingHook hook)
+    {
+        if (hook == null || !hook.isAlive() || !hook.isInWater()) return false;
+        if (!(hook.getPlayerOwner() instanceof ServerPlayer owner) || owner.fishing != hook) return false;
+        return !ServerFishingManager.isFighting(owner);
+    }
+
+    public static double attractRadius(FishingHook hook)
+    {
+        double radius = NiceCatchConfig.SERVER.interestRadius.get();
+        Player owner = hook.getPlayerOwner();
+        if (owner != null) {
+            InteractionHand hand = RodUtil.findRodHand(owner);
+            if (hand != null) {
+                ItemStack rod = owner.getItemInHand(hand);
+                radius += 1.5D * EnchantmentHelper.getItemEnchantmentLevel(Enchantments.FISHING_SPEED, rod);
+            }
+        }
+        return radius;
+    }
+
+    public static int claimedCount(FishingHook hook)
+    {
+        int count = 0;
+        for (Map.Entry<AbstractFish, FishState> entry : STATES.entrySet()) {
+            if (entry.getValue().bobber == hook && entry.getKey().isAlive()) count++;
+        }
+        return count;
+    }
+
+    /** Fish claimed by this bobber that are close enough to bite and allowed to. */
+    public static List<AbstractFish> biteCandidates(FishingHook hook)
+    {
+        double range = NiceCatchConfig.SERVER.biteRange.get();
+        long now = hook.level().getGameTime();
+        List<AbstractFish> out = new ArrayList<>();
+        for (Map.Entry<AbstractFish, FishState> entry : STATES.entrySet()) {
+            AbstractFish fish = entry.getKey();
+            FishState state = entry.getValue();
+            if (state.bobber != hook || state.hooked || state.biteBobber != null) continue;
+            if (!fish.isAlive() || isScattering(fish) || now < state.biteCooldownUntil) continue;
+            if (fish.distanceToSqr(hook) > range * range) continue;
+            out.add(fish);
+        }
+        return out;
+    }
+
+    public static boolean isScattering(AbstractFish fish)
+    {
+        FishState state = STATES.get(fish);
+        return state != null && fish.level().getGameTime() < state.scatterUntil;
+    }
+
+    public static boolean isHooked(AbstractFish fish)
+    {
+        FishState state = STATES.get(fish);
+        return state != null && state.hooked;
+    }
+
+    // ---- Mutations ----
+
+    public static void scatter(AbstractFish fish, Vec3 from, int durationTicks)
+    {
+        FishState state = state(fish);
+        state.scatterUntil = fish.level().getGameTime() + durationTicks;
+        state.scatterFrom = from;
+        state.bobber = null;
+        state.biteBobber = null;
+        state.biteCooldownUntil = fish.level().getGameTime() + NiceCatchConfig.SERVER.fishBiteCooldownTicks.get();
+    }
+
+    public static void scatterAround(ServerLevel level, Vec3 center, double radius, float chance, @Nullable AbstractFish except)
+    {
+        AABB box = AABB.ofSize(center, radius * 2.0D, radius * 2.0D, radius * 2.0D);
+        for (AbstractFish fish : level.getEntitiesOfClass(AbstractFish.class, box, f -> f != except && !isHooked(f))) {
+            if (level.random.nextFloat() < chance) {
+                scatter(fish, center, NiceCatchConfig.SERVER.scatterDurationTicks.get());
+            }
+        }
+    }
+
+    public static void setHooked(AbstractFish fish, boolean hooked)
+    {
+        FishState state = state(fish);
+        state.hooked = hooked;
+        state.biteBobber = null;
+        if (!hooked) state.bobber = null;
+    }
+
+    /** True when something that is not a fish or a floating item is splashing about near this fish. */
+    @Nullable
+    public static Vec3 findSwimmerThreat(AbstractFish fish)
+    {
+        double radius = NiceCatchConfig.SERVER.swimScareRadius.get();
+        AABB box = fish.getBoundingBox().inflate(radius);
+        var threats = fish.level().getEntitiesOfClass(net.minecraft.world.entity.LivingEntity.class, box,
+                e -> e != fish && !(e instanceof AbstractFish) && !e.isSpectator()
+                        && e.isInWater()
+                        && e.getDeltaMovement().lengthSqr() > 0.004D);
+        if (!threats.isEmpty()) return threats.get(0).position();
+        return null;
+    }
+
+    /** Nearby fish already interested in a valid bobber; used for follow-the-follower spreading. */
+    @Nullable
+    public static FishingHook findFollowableBobber(AbstractFish fish)
+    {
+        double radius = NiceCatchConfig.SERVER.followFollowerRadius.get();
+        AABB box = fish.getBoundingBox().inflate(radius);
+        for (AbstractFish other : fish.level().getEntitiesOfClass(AbstractFish.class, box, f -> f != fish)) {
+            FishState state = STATES.get(other);
+            if (state == null || state.bobber == null || state.hooked) continue;
+            if (isAttracting(state.bobber)
+                    && claimedCount(state.bobber) < NiceCatchConfig.SERVER.maxFishPerBobber.get()) {
+                return state.bobber;
+            }
+        }
+        return null;
+    }
+
+    /** Nearest bobber this fish could take an interest in on its own. */
+    @Nullable
+    public static FishingHook findNearbyBobber(AbstractFish fish)
+    {
+        double maxRadius = NiceCatchConfig.SERVER.interestRadius.get() + 8.0D; // upper bound incl. Lure bonus
+        AABB box = fish.getBoundingBox().inflate(maxRadius);
+        FishingHook best = null;
+        double bestDist = Double.MAX_VALUE;
+        for (FishingHook hook : fish.level().getEntitiesOfClass(FishingHook.class, box)) {
+            if (!isAttracting(hook)) continue;
+            double dist = fish.distanceToSqr(hook);
+            double radius = attractRadius(hook);
+            if (dist > radius * radius) continue;
+            if (claimedCount(hook) >= NiceCatchConfig.SERVER.maxFishPerBobber.get()) continue;
+            if (dist < bestDist) {
+                bestDist = dist;
+                best = hook;
+            }
+        }
+        return best;
+    }
+}
