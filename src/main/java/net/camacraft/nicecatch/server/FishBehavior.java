@@ -76,6 +76,47 @@ public final class FishBehavior
         return STATES.computeIfAbsent(fish, f -> new FishState());
     }
 
+    // ---- Blacklist ----
+
+    /** Memoized per entity type; config lookups and wildcard matching are too hot for per-tick checks. */
+    private static final Map<net.minecraft.world.entity.EntityType<?>, Boolean> BLACKLIST_CACHE
+            = new java.util.concurrent.ConcurrentHashMap<>();
+
+    /**
+     * Not every AbstractFish is a fish we should puppet: Aquaculture's jellyfish extends it,
+     * and other mods' oddballs may too. Blacklisted types keep their vanilla AI and are
+     * invisible to the whole system — never lured, spooked, schooled, clamped, or hooked,
+     * and they don't count as "fish nearby" for loot suppression either.
+     */
+    public static boolean isBlacklisted(net.minecraft.world.entity.EntityType<?> type)
+    {
+        return BLACKLIST_CACHE.computeIfAbsent(type, t -> {
+            var id = net.minecraftforge.registries.ForgeRegistries.ENTITY_TYPES.getKey(t);
+            if (id == null) return false;
+            for (String raw : NiceCatchConfig.SERVER.fishAiBlacklist.get()) {
+                String entry = raw.trim();
+                if (entry.equals(id.toString())) return true;
+                if (entry.endsWith(":*") && id.getNamespace().equals(entry.substring(0, entry.length() - 2))) {
+                    return true;
+                }
+            }
+            return false;
+        });
+    }
+
+    /** The cache must not outlive the config values it was computed from. */
+    @Mod.EventBusSubscriber(modid = NiceCatch.MODID, bus = Mod.EventBusSubscriber.Bus.MOD)
+    public static final class ConfigListener
+    {
+        @SubscribeEvent
+        public static void onConfigChanged(net.minecraftforge.fml.event.config.ModConfigEvent event)
+        {
+            if (NiceCatch.MODID.equals(event.getConfig().getModId())) {
+                BLACKLIST_CACHE.clear();
+            }
+        }
+    }
+
     // ---- Goal injection ----
 
     @SubscribeEvent
@@ -83,6 +124,7 @@ public final class FishBehavior
     {
         if (event.getLevel().isClientSide) return;
         if (!(event.getEntity() instanceof AbstractFish fish)) return;
+        if (isBlacklisted(fish.getType())) return; // jellyfish and friends keep their own AI
 
         FishState state = state(fish);
         if (state.goalsInjected) return;
@@ -108,7 +150,7 @@ public final class FishBehavior
     {
         if (event.getEntity().level().isClientSide) return;
         if (!(event.getTarget() instanceof AbstractFish target)) return;
-        if (isHooked(target)) return;
+        if (isHooked(target) || isBlacklisted(target.getType())) return;
 
         NiceCatchConfig.Server cfg = NiceCatchConfig.SERVER;
         scatter(target, event.getEntity().position(), cfg.scatterDurationTicks.get());
@@ -125,7 +167,7 @@ public final class FishBehavior
     public static void onFishTick(LivingEvent.LivingTickEvent event)
     {
         if (!(event.getEntity() instanceof AbstractFish fish) || fish.level().isClientSide) return;
-        if (!fish.isInWater() || isHooked(fish)) return;
+        if (!fish.isInWater() || isHooked(fish) || isBlacklisted(fish.getType())) return;
 
         BlockPos pos = fish.blockPosition();
         FluidState fluid = fish.level().getFluidState(pos);
@@ -145,6 +187,7 @@ public final class FishBehavior
     {
         if (event.getEntity().level().isClientSide) return;
         if (!(event.getEntity() instanceof AbstractFish fish) || isHooked(fish)) return;
+        if (isBlacklisted(fish.getType())) return;
 
         NiceCatchConfig.Server cfg = NiceCatchConfig.SERVER;
         Vec3 from = event.getSource().getSourcePosition() != null
@@ -253,7 +296,8 @@ public final class FishBehavior
                                      @Nullable AbstractFish except, int biteCooldownTicks)
     {
         AABB box = AABB.ofSize(center, radius * 2.0D, radius * 2.0D, radius * 2.0D);
-        for (AbstractFish fish : level.getEntitiesOfClass(AbstractFish.class, box, f -> f != except && !isHooked(f))) {
+        for (AbstractFish fish : level.getEntitiesOfClass(AbstractFish.class, box,
+                f -> f != except && !isHooked(f) && !isBlacklisted(f.getType()))) {
             if (level.random.nextFloat() < chance) {
                 scatter(fish, center, NiceCatchConfig.SERVER.scatterDurationTicks.get(), biteCooldownTicks);
             }
@@ -273,7 +317,9 @@ public final class FishBehavior
     {
         double radius = attractRadius(hook);
         AABB box = hook.getBoundingBox().inflate(radius);
-        return !hook.level().getEntitiesOfClass(AbstractFish.class, box, f -> f.isAlive() && f.isInWater()).isEmpty();
+        // Blacklisted types must not suppress loot fishing — a jellyfish will never bite.
+        return !hook.level().getEntitiesOfClass(AbstractFish.class, box,
+                f -> f.isAlive() && f.isInWater() && !isBlacklisted(f.getType())).isEmpty();
     }
 
     /** How fast this bobber grows fish interest (Aquaculture bait speeds it up). */
@@ -290,7 +336,7 @@ public final class FishBehavior
     @SubscribeEvent
     public static void onFishSwimSound(net.minecraftforge.event.PlayLevelSoundEvent.AtEntity event)
     {
-        if (!(event.getEntity() instanceof AbstractFish)) return;
+        if (!(event.getEntity() instanceof AbstractFish fish) || isBlacklisted(fish.getType())) return;
         var sound = event.getSound();
         if (sound != null && sound.value().getLocation().equals(
                 net.minecraft.sounds.SoundEvents.FISH_SWIM.getLocation())) {

@@ -42,6 +42,7 @@ public class NiceCatchConfig
 
         // Fish AI
         public final ForgeConfigSpec.BooleanValue entityFishingEnabled;
+        public final ForgeConfigSpec.ConfigValue<java.util.List<? extends String>> fishAiBlacklist;
         public final ForgeConfigSpec.DoubleValue interestRadius;
         public final ForgeConfigSpec.IntValue maxFishPerBobber;
         public final ForgeConfigSpec.DoubleValue interestChance;
@@ -149,6 +150,10 @@ public class NiceCatchConfig
             b.push("fishAI");
             entityFishingEnabled = b.comment("Real fish entities are lured to bobbers and are what you actually catch. Disable for pure loot-table fishing.")
                     .define("entityFishingEnabled", true);
+            fishAiBlacklist = b.comment("Fish-type entities the overhaul must leave entirely alone: they keep their vanilla AI and are never lured, spooked, schooled, or hooked. Entries are entity ids like 'aquaculture:jellyfish', or 'somemod:*' for every fish from that mod.")
+                    .defineListAllowEmpty("fishAiBlacklist",
+                            java.util.List.of("aquaculture:jellyfish"),
+                            o -> o instanceof String s && s.contains(":"));
             interestRadius = b.comment("Radius in which fish notice a bobber and swim over.")
                     .defineInRange("interestRadius", 12.0D, 2.0D, 32.0D);
             maxFishPerBobber = b.comment("How many fish can crowd around one bobber at a time.")
