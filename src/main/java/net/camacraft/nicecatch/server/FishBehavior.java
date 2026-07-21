@@ -6,6 +6,7 @@ import net.camacraft.nicecatch.RodUtil;
 import net.camacraft.nicecatch.server.goal.FollowBobberGoal;
 import net.camacraft.nicecatch.server.goal.HookedFishGoal;
 import net.camacraft.nicecatch.server.goal.ScatterGoal;
+import net.camacraft.nicecatch.server.goal.SchoolBoidsGoal;
 import net.minecraft.core.BlockPos;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
@@ -13,6 +14,7 @@ import net.minecraft.tags.FluidTags;
 import net.minecraft.world.InteractionHand;
 import net.minecraft.world.entity.LivingEntity;
 import net.minecraft.world.entity.ai.goal.AvoidEntityGoal;
+import net.minecraft.world.entity.ai.goal.FollowFlockLeaderGoal;
 import net.minecraft.world.entity.ai.goal.PanicGoal;
 import net.minecraft.world.entity.animal.AbstractFish;
 import net.minecraft.world.entity.player.Player;
@@ -89,11 +91,15 @@ public final class FishBehavior
         // Vanilla fish flee any player within 8 blocks, which would keep them from ever
         // approaching a bobber cast near its owner, and their panic is a slow pathfinding
         // crawl. Our scatter system replaces both with a meaner, faster, situational fear
-        // (close players, swimmers, attacks, damage), so drop the vanilla goals.
-        fish.goalSelector.removeAllGoals(g -> g instanceof AvoidEntityGoal || g instanceof PanicGoal);
+        // (close players, swimmers, attacks, damage), so drop the vanilla goals. The boids
+        // school likewise supersedes vanilla's pathfinding flock-follow when enabled.
+        boolean boids = NiceCatchConfig.SERVER.boidSchoolingEnabled.get();
+        fish.goalSelector.removeAllGoals(g -> g instanceof AvoidEntityGoal || g instanceof PanicGoal
+                || (boids && g instanceof FollowFlockLeaderGoal));
         fish.goalSelector.addGoal(0, new HookedFishGoal(fish));
         fish.goalSelector.addGoal(1, new ScatterGoal(fish));
         fish.goalSelector.addGoal(2, new FollowBobberGoal(fish));
+        fish.goalSelector.addGoal(3, new SchoolBoidsGoal(fish));
     }
 
     /** Swinging at any fish spooks the school; melee fishing should feel nearly hopeless. */
@@ -314,8 +320,10 @@ public final class FishBehavior
         for (LivingEntity e : fish.level().getEntitiesOfClass(LivingEntity.class, box,
                 other -> other != fish && !(other instanceof AbstractFish) && !other.isSpectator())) {
             double dx = e.getX() - e.xOld;
+            double dy = e.getY() - e.yOld;
             double dz = e.getZ() - e.zOld;
-            boolean moving = dx * dx + dz * dz > 4.0E-4D;
+            // Vertical motion counts too — a player diving straight down is very much moving.
+            boolean moving = dx * dx + dy * dy + dz * dz > 4.0E-4D;
             if (e.isInWater() && moving && fish.distanceToSqr(e) <= swimRadius * swimRadius) {
                 return new Threat(e.position(), true);
             }

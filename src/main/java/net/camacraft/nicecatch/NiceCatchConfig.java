@@ -63,6 +63,9 @@ public class NiceCatchConfig
         public final ForgeConfigSpec.DoubleValue meleeScatterChance;
         public final ForgeConfigSpec.DoubleValue scatterSpeed;
         public final ForgeConfigSpec.IntValue scatterDurationTicks;
+        public final ForgeConfigSpec.BooleanValue boidSchoolingEnabled;
+        public final ForgeConfigSpec.DoubleValue boidNeighborRadius;
+        public final ForgeConfigSpec.DoubleValue boidSpeed;
 
         // Entity catches
         public final ForgeConfigSpec.DoubleValue sizeStrengthExponent;
@@ -188,6 +191,12 @@ public class NiceCatchConfig
                     .defineInRange("scatterSpeed", 1.9D, 1.0D, 4.0D);
             scatterDurationTicks = b.comment("How long a scatter lasts.")
                     .defineInRange("scatterDurationTicks", 90, 20, 600);
+            boidSchoolingEnabled = b.comment("Same-species fish school together boids-style and regroup after a scare (replaces vanilla flock-following).")
+                    .define("boidSchoolingEnabled", true);
+            boidNeighborRadius = b.comment("Radius in which same-species fish count as schoolmates for boids steering.")
+                    .defineInRange("boidNeighborRadius", 5.0D, 1.0D, 16.0D);
+            boidSpeed = b.comment("Swim speed multiplier for boids schooling (regrouping after a scare is naturally faster).")
+                    .defineInRange("boidSpeed", 1.0D, 0.25D, 3.0D);
             b.pop();
 
             b.push("entityCatch");

@@ -4,7 +4,9 @@
   "package": "net.camacraft.nicecatch.mixin",
   "compatibilityLevel": "JAVA_17",
   "refmap": "nicecatch.refmap.json",
-  "mixins": [],
+  "mixins": [
+    "FishingHookMixin"
+  ],
   "client": [
     "MouseHandlerMixin"
   ],

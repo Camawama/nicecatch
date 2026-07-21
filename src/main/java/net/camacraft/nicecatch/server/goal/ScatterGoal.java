@@ -38,8 +38,8 @@ public class ScatterGoal extends Goal
         if (FishBehavior.isHooked(fish)) return false;
         if (FishBehavior.isScattering(fish)) return true;
 
-        // Cheap staggered threat check, ~4x a second per fish.
-        if ((fish.tickCount + fish.getId()) % 5 != 0) return false;
+        // No extra stagger here: the goal selector only polls idle goals every other tick
+        // per fish anyway, and any thinner than that reads as "fish didn't notice me".
         FishBehavior.Threat threat = FishBehavior.findThreat(fish);
         if (threat == null) return false;
         if (!threat.certain()
@@ -83,7 +83,22 @@ public class ScatterGoal extends Goal
     @Override
     public void tick()
     {
-        Vec3 from = FishBehavior.state(fish).scatterFrom;
+        FishBehavior.FishState state = FishBehavior.state(fish);
+
+        // A pursuer keeps the fear fresh: while any threat is still in range, flee from where
+        // it is NOW and keep the scatter alive, instead of committing to a stale snapshot a
+        // chasing swimmer swam past two seconds ago.
+        if ((fish.tickCount + fish.getId()) % 5 == 0) {
+            FishBehavior.Threat threat = FishBehavior.findThreat(fish);
+            if (threat != null) {
+                state.scatterFrom = threat.pos();
+                state.scatterUntil = Math.max(state.scatterUntil, fish.level().getGameTime()
+                        + NiceCatchConfig.SERVER.scatterDurationTicks.get());
+                commitTicks = Math.min(commitTicks, 5); // re-plan soon against the new position
+            }
+        }
+
+        Vec3 from = state.scatterFrom;
         if (from == null) from = fish.position();
 
         // Barely moving for a while = pressed against something; re-plan immediately.

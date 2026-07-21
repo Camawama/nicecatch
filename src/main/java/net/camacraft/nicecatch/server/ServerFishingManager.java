@@ -9,8 +9,11 @@ import net.camacraft.nicecatch.network.FightEndMessage;
 import net.camacraft.nicecatch.network.FightTickMessage;
 import net.camacraft.nicecatch.network.NiceCatchNet;
 import net.camacraft.nicecatch.server.goal.FishSteering;
+import net.minecraft.core.BlockPos;
 import net.minecraft.core.particles.ParticleTypes;
 import net.minecraft.server.level.ServerLevel;
+import net.minecraft.tags.FluidTags;
+import net.minecraft.world.level.material.FluidState;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.sounds.SoundEvents;
 import net.minecraft.sounds.SoundSource;
@@ -276,6 +279,9 @@ public class ServerFishingManager
         fight.doubleCatchChance = AquacultureCompat.doubleCatchChance(rod);
 
         FishBehavior.setHooked(fish, true);
+        // Pin the bobber to the fish via vanilla's hooked-entity glue (see FishingHookMixin):
+        // both sides re-attach it every tick, which is the only zero-desync way to track it.
+        hook.setHookedEntity(fish);
         // Only a few neighbors spook, and only briefly — a bite shouldn't empty the spot.
         FishBehavior.scatterAround(player.serverLevel(), hook.position(),
                 cfg.scatterRadius.get(), cfg.scatterOnHookChance.get().floatValue(), fish,
@@ -617,6 +623,7 @@ public class ServerFishingManager
             if (other == null) {
                 // Rod put away mid-fight; the hook will discard itself, just end cleanly.
                 unhookFish(level, fight);
+                hook.setHookedEntity(null);
                 endFight(player, session, FightEndMessage.ESCAPED);
                 return;
             }
@@ -626,6 +633,7 @@ public class ServerFishingManager
         AbstractFish fish = resolveFish(level, fight.fishId);
         if (fish == null) {
             // The fish died or unloaded mid-fight; nothing left on the line.
+            hook.setHookedEntity(null);
             endFight(player, session, FightEndMessage.ESCAPED);
             return;
         }
@@ -697,6 +705,7 @@ public class ServerFishingManager
         // Fish escapes when all progress is lost.
         if (fight.progress <= 0.0F && fight.graceTicks <= 0) {
             freeFish(fish, hook.position());
+            hook.setHookedEntity(null);
             level.playSound(null, hook.getX(), hook.getY(), hook.getZ(),
                     SoundEvents.FISHING_BOBBER_SPLASH, SoundSource.NEUTRAL, 0.3F, 0.6F);
             endFight(player, session, FightEndMessage.ESCAPED);
@@ -754,7 +763,7 @@ public class ServerFishingManager
         hook.discard();
     }
 
-    /** The fish is the thing that runs; the bobber tracks it across the surface. */
+    /** The fish is the thing that runs; the bobber rides it via the hooked-entity glue. */
     private static void moveHookedFish(ServerPlayer player, FishFight fight, FishingHook hook,
                                        AbstractFish fish, ServerLevel level, RandomSource random,
                                        boolean run, float crank)
@@ -769,9 +778,6 @@ public class ServerFishingManager
                 fish.setDeltaMovement(fish.getDeltaMovement().scale(0.7D).add(away).add(wobble));
             } else if (dist >= 26.0D) {
                 fish.setDeltaMovement(fish.getDeltaMovement().scale(0.5D));
-            }
-            if (fish.getY() > hook.getY() - 0.3D) {
-                fish.setDeltaMovement(fish.getDeltaMovement().add(0.0D, -0.02D, 0.0D));
             }
             if (fight.ticks % 4 == 0) {
                 level.sendParticles(ParticleTypes.SPLASH, fish.getX(), fish.getY() + 0.3D, fish.getZ(),
@@ -788,25 +794,28 @@ public class ServerFishingManager
                 level.sendParticles(ParticleTypes.FISHING, fish.getX(), fish.getY() + 0.1D, fish.getZ(),
                         2, 0.1D, 0.05D, 0.1D, 0.0D);
             }
-        } else if (fish.distanceToSqr(hook) > 4.0D) {
-            Vec3 toHook = hook.position().subtract(fish.position()).normalize().scale(0.03D);
-            fish.setDeltaMovement(fish.getDeltaMovement().add(toHook));
         }
+        keepUnderSurface(fish);
         FishSteering.faceMovement(fish);
+    }
 
-        // The bobber moves in lockstep with the fish: it inherits the fish's velocity outright
-        // (feed-forward) plus a gap-closing correction, instead of forever chasing from behind.
-        Vec3 fv = fish.getDeltaMovement();
-        Vec3 toFish = new Vec3(fish.getX() - hook.getX(), 0.0D, fish.getZ() - hook.getZ());
-        double gap = toFish.length();
-        double kx = 0.0D;
-        double kz = 0.0D;
-        if (gap > 0.05D) {
-            double k = Math.min(0.45D, gap * 0.5D);
-            kx = toFish.x / gap * k;
-            kz = toFish.z / gap * k;
+    /**
+     * The global surface clamp in FishBehavior exempts hooked fish (the catch launch must
+     * clear the water), so the fight applies its own: ease the fish back down whenever its
+     * back nears the actual fluid plane. The launch happens after the fight ends, untouched.
+     */
+    private static void keepUnderSurface(AbstractFish fish)
+    {
+        BlockPos pos = fish.blockPosition();
+        FluidState fluid = fish.level().getFluidState(pos);
+        if (!fluid.is(FluidTags.WATER)) return;
+        if (fish.level().getFluidState(pos.above()).is(FluidTags.WATER)) return; // deep water, fine
+
+        double surfaceY = pos.getY() + fluid.getHeight(fish.level(), pos);
+        if (fish.getY() + fish.getBbHeight() > surfaceY - 0.05D) {
+            Vec3 v = fish.getDeltaMovement();
+            fish.setDeltaMovement(v.x, Math.min(v.y, 0.0D) - 0.02D, v.z);
         }
-        hook.setDeltaMovement(fv.x + kx, hook.getDeltaMovement().y, fv.z + kz);
     }
 
     /** A real fish comes off the line: unhook it and let it bolt. */
