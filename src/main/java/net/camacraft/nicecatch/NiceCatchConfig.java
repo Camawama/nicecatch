@@ -67,6 +67,14 @@ public class NiceCatchConfig
         public final ForgeConfigSpec.BooleanValue boidSchoolingEnabled;
         public final ForgeConfigSpec.DoubleValue boidNeighborRadius;
         public final ForgeConfigSpec.DoubleValue boidSpeed;
+        public final ForgeConfigSpec.DoubleValue fishSwimSoundVolume;
+
+        // Spawning
+        public final ForgeConfigSpec.BooleanValue schoolSpawnBoostEnabled;
+        public final ForgeConfigSpec.ConfigValue<java.util.List<? extends String>> schoolSpawnFish;
+        public final ForgeConfigSpec.IntValue schoolSpawnMinSize;
+        public final ForgeConfigSpec.IntValue schoolSpawnMaxSize;
+        public final ForgeConfigSpec.DoubleValue schoolSpawnWeightMultiplier;
 
         // Entity catches
         public final ForgeConfigSpec.DoubleValue sizeStrengthExponent;
@@ -202,6 +210,23 @@ public class NiceCatchConfig
                     .defineInRange("boidNeighborRadius", 5.0D, 1.0D, 16.0D);
             boidSpeed = b.comment("Swim speed multiplier for boids schooling (regrouping after a scare is naturally faster).")
                     .defineInRange("boidSpeed", 1.0D, 0.25D, 3.0D);
+            fishSwimSoundVolume = b.comment("Volume multiplier for fish swimming sounds — vanilla plays them at full blast and our fish swim fast. 0 silences them entirely.")
+                    .defineInRange("fishSwimSoundVolume", 0.1D, 0.0D, 1.0D);
+            b.pop();
+
+            b.push("spawning");
+            schoolSpawnBoostEnabled = b.comment("Spawn the fish listed below in much bigger natural groups, so boids schools actually have members.")
+                    .define("schoolSpawnBoostEnabled", true);
+            schoolSpawnFish = b.comment("Fish that spawn in boosted school-sized groups. Entity ids; pufferfish are left out by default because they are loners.")
+                    .defineListAllowEmpty("schoolSpawnFish",
+                            java.util.List.of("minecraft:tropical_fish", "minecraft:cod", "minecraft:salmon"),
+                            o -> o instanceof String s && s.contains(":"));
+            schoolSpawnMinSize = b.comment("Smallest boosted spawn group.")
+                    .defineInRange("schoolSpawnMinSize", 12, 1, 64);
+            schoolSpawnMaxSize = b.comment("Largest boosted spawn group. Note the vanilla water-ambient mob cap still limits totals: a big school spawns whole, then spawning pauses until fish despawn.")
+                    .defineInRange("schoolSpawnMaxSize", 32, 1, 64);
+            schoolSpawnWeightMultiplier = b.comment("Multiplier on the listed fishes' spawn weight (how often the spawner picks them over other water mobs).")
+                    .defineInRange("schoolSpawnWeightMultiplier", 1.0D, 0.1D, 10.0D);
             b.pop();
 
             b.push("entityCatch");

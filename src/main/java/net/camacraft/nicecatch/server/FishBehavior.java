@@ -22,6 +22,7 @@ import net.minecraft.world.entity.projectile.FishingHook;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.enchantment.EnchantmentHelper;
 import net.minecraft.world.item.enchantment.Enchantments;
+import net.minecraft.world.level.biome.MobSpawnSettings;
 import net.minecraft.world.phys.AABB;
 import net.minecraft.world.phys.Vec3;
 import net.minecraft.world.level.material.FluidState;
@@ -104,7 +105,7 @@ public final class FishBehavior
         });
     }
 
-    /** The cache must not outlive the config values it was computed from. */
+    /** The caches must not outlive the config values they were computed from. */
     @Mod.EventBusSubscriber(modid = NiceCatch.MODID, bus = Mod.EventBusSubscriber.Bus.MOD)
     public static final class ConfigListener
     {
@@ -113,8 +114,56 @@ public final class FishBehavior
         {
             if (NiceCatch.MODID.equals(event.getConfig().getModId())) {
                 BLACKLIST_CACHE.clear();
+                SCHOOL_SPAWN_CACHE.clear();
             }
         }
+    }
+
+    // ---- School-sized spawn groups ----
+
+    /**
+     * Original biome spawner entry → boosted replacement (same entry means "leave alone").
+     * Keyed by the entry itself, not the entity type: the same fish can carry different
+     * weights in different biomes, and baked biome entries are stable instances.
+     */
+    private static final Map<MobSpawnSettings.SpawnerData, MobSpawnSettings.SpawnerData> SCHOOL_SPAWN_CACHE
+            = new java.util.concurrent.ConcurrentHashMap<>();
+
+    /**
+     * Vanilla spawns fish in dribbles (tropical fish 8, cod 3-6), which never yields a school
+     * worth boids-ing. Swap the listed fishes' spawner entries for school-sized ones at the
+     * moment the natural spawner asks what can spawn here.
+     */
+    @SubscribeEvent
+    public static void onPotentialSpawns(net.minecraftforge.event.level.LevelEvent.PotentialSpawns event)
+    {
+        if (!NiceCatchConfig.SERVER.schoolSpawnBoostEnabled.get()) return;
+        for (MobSpawnSettings.SpawnerData data : List.copyOf(event.getSpawnerDataList())) {
+            MobSpawnSettings.SpawnerData boosted = boostedSpawn(data);
+            if (boosted != data) {
+                event.removeSpawnerData(data);
+                event.addSpawnerData(boosted);
+            }
+        }
+    }
+
+    private static MobSpawnSettings.SpawnerData boostedSpawn(MobSpawnSettings.SpawnerData data)
+    {
+        return SCHOOL_SPAWN_CACHE.computeIfAbsent(data, d -> {
+            var id = net.minecraftforge.registries.ForgeRegistries.ENTITY_TYPES.getKey(d.type);
+            if (id == null) return d;
+            String idString = id.toString();
+            NiceCatchConfig.Server cfg = NiceCatchConfig.SERVER;
+            for (String entry : cfg.schoolSpawnFish.get()) {
+                if (!entry.trim().equals(idString)) continue;
+                int min = cfg.schoolSpawnMinSize.get();
+                int max = Math.max(min, cfg.schoolSpawnMaxSize.get());
+                int weight = Math.max(1, (int) Math.round(
+                        d.getWeight().asInt() * cfg.schoolSpawnWeightMultiplier.get()));
+                return new MobSpawnSettings.SpawnerData(d.type, weight, min, max);
+            }
+            return d;
+        });
     }
 
     // ---- Goal injection ----
@@ -340,7 +389,8 @@ public final class FishBehavior
         var sound = event.getSound();
         if (sound != null && sound.value().getLocation().equals(
                 net.minecraft.sounds.SoundEvents.FISH_SWIM.getLocation())) {
-            event.setNewVolume(event.getNewVolume() * 0.25F);
+            event.setNewVolume(event.getNewVolume()
+                    * NiceCatchConfig.SERVER.fishSwimSoundVolume.get().floatValue());
         }
     }
 
