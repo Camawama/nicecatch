@@ -28,7 +28,7 @@ public abstract class MouseHandlerMixin
         // Right after reel mode ends the hand is often still circling; ease sensitivity back in
         // instead of letting the leftover spin whip the camera. turnPlayer consumes and zeroes
         // the accumulators every call, so scaling here applies exactly once per batch.
-        float damp = ClientFishing.mouseDampFactor();
+        float damp = ClientFishing.cameraDampFrame();
         if (damp < 1.0F) {
             self.accumulatedDX *= damp;
             self.accumulatedDY *= damp;

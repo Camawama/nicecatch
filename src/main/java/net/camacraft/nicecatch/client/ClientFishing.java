@@ -143,6 +143,22 @@ public class ClientFishing
         return t * t;
     }
 
+    /**
+     * Damp factor for the camera path, with frame-accurate capture-end detection. A fight can
+     * end mid-tick (the catch packet lands between client ticks) while the hand is still
+     * spinning — the ramp must arm on the very frame capture stops, or the next turnPlayer
+     * batch whips the camera at full sensitivity before clientTick ever notices.
+     */
+    public static float cameraDampFrame()
+    {
+        if (wasCapturing && !isCapturingMouse()) {
+            mouseRampTotal = NiceCatchConfig.CLIENT.mouseRampTicks.get();
+            mouseRampTicks = mouseRampTotal;
+            wasCapturing = false;
+        }
+        return mouseDampFactor();
+    }
+
     public static void clientTick(Minecraft mc)
     {
         LocalPlayer player = mc.player;
