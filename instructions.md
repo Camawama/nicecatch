@@ -37,7 +37,8 @@ escaped fish avoid biting much longer.
 
 ## 4. The fight (reel mode)
 
-You're now locked on: mouse movement drives the rod, not the camera.
+You're now locked on: mouse movement drives the rod, not the camera — while you hold the
+line, the camera pans by itself to keep the fish in frame.
 
 **The bar is your line.** Full means the fish has been hauled to your feet; empty means
 it has taken every block of line off the reel — and **rips free**. Setting the hook always
@@ -54,10 +55,12 @@ triggers a panicked first run, so expect the bar to drop before you can gain an 
 
 **The fish alternates between two states:**
 
-- **Calm** — crank away. The fish comes in steadily, tension drains.
-- **Running** (bar shakes, splashing, camera rumbles) — the fish is sprinting away and
-  taking line. Cranking through a run only winches a fraction and **builds tension fast**.
-  Ease off the crank and **lift** to hold your ground until the run ends.
+- **Calm** — crank away. The fish comes in steadily (thrashing side to side), tension drains.
+- **Running** (bar shakes, splashing, camera rumbles) — the fish is sprinting off and taking
+  line. It doesn't run straight: it veers left and right, jukes across, and sometimes
+  **charges straight back at you**, dumping slack you have to crank up fast. Cranking
+  through a run only winches a fraction and **builds tension fast** — ease off the crank
+  and **lift** to hold your ground until the run ends.
 
 **Fatigue is the real war.** Every crank and every run drains the fish's stamina: fresh
 fish rip back most of what you gain, but their runs get shorter, rarer, and weaker as they
@@ -67,8 +70,9 @@ fight is yours to lose. Giving slack lets the fish **rest and recover** — don'
 **The bar's color shows tension** (green → gold → red). Tension maxes out → **the line
 snaps**: bobber, fish, and some rod durability gone. Stop cranking and tension recovers.
 
-**Letting go of right-click** gives slack: tension drains fast, but the fish recovers
-stamina and every run takes line unopposed — let that go on and it spools you.
+**Letting go of right-click** gives slack: tension drains fast, but nothing is holding the
+fish anymore — it **strips line at will**, wanders where it pleases, and recovers stamina.
+Let that go on and it spools you. Slack is an emergency valve, not a rest stop.
 
 **Landing**: crank the fish all the way in (~5 blocks) while it's calm and it launches
 out of the water, becoming its item in your inventory — bigger fish (by actual hitbox

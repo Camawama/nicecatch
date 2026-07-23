@@ -11,7 +11,9 @@ import net.minecraft.client.Minecraft;
 import net.minecraft.client.player.LocalPlayer;
 import net.minecraft.client.resources.sounds.SimpleSoundInstance;
 import net.minecraft.sounds.SoundEvents;
+import net.minecraft.util.Mth;
 import net.minecraft.world.InteractionHand;
+import net.minecraft.world.phys.Vec3;
 
 /** Client-side state machine for the whole fishing flow. */
 public class ClientFishing
@@ -211,6 +213,55 @@ public class ClientFishing
                 shownProgress += (progress - shownProgress) * 0.35F;
             }
         }
+    }
+
+    // Where the follow camera is actually aimed: a point that eases after the bobber,
+    // so the view trails the fish instead of pinning its every wobble.
+    private static double followX, followY, followZ;
+    private static boolean followInit;
+
+    /**
+     * Per-frame camera follow, called from the render tick. Rotates via player.turn() — the
+     * same path as mouse input, which updates the previous-frame rotation too — so the pan
+     * is perfectly smooth instead of stepping at tick rate.
+     */
+    public static void followFishFrame(Minecraft mc, float partialTick, float frameTicks)
+    {
+        LocalPlayer player = mc.player;
+        if (player == null || phase != Phase.FIGHT || player.fishing == null
+                || !NiceCatchConfig.CLIENT.cameraFollowFish.get() || !isCapturingMouse()) {
+            followInit = false;
+            return;
+        }
+
+        Vec3 hookPos = player.fishing.getPosition(partialTick);
+        if (!followInit) {
+            followX = hookPos.x;
+            followY = hookPos.y;
+            followZ = hookPos.z;
+            followInit = true;
+        }
+        // The aim point chases the fish at ~0.2/tick — this is the trailing lag.
+        float trail = 1.0F - (float) Math.pow(0.8D, frameTicks);
+        followX += (hookPos.x - followX) * trail;
+        followY += (hookPos.y - followY) * trail;
+        followZ += (hookPos.z - followZ) * trail;
+
+        double dx = followX - player.getX();
+        double dy = followY - player.getEyeY();
+        double dz = followZ - player.getZ();
+        double horiz = Math.sqrt(dx * dx + dz * dz);
+        if (horiz < 0.5D) return; // fish is basically underfoot; nothing sensible to aim at
+
+        float wantYaw = (float) Math.toDegrees(Mth.atan2(dz, dx)) - 90.0F;
+        float wantPitch = Mth.clamp((float) -Math.toDegrees(Mth.atan2(dy, horiz)), -30.0F, 80.0F);
+
+        // Frame-rate-independent easing toward the aim point, rate-capped so it pans, never snaps.
+        float strength = NiceCatchConfig.CLIENT.cameraFollowStrength.get().floatValue();
+        float k = 1.0F - (float) Math.pow(1.0D - strength, frameTicks);
+        float dYaw = Mth.clamp(Mth.wrapDegrees(wantYaw - player.getYRot()) * k, -10.0F * frameTicks, 10.0F * frameTicks);
+        float dPitch = Mth.clamp((wantPitch - player.getXRot()) * k, -6.0F * frameTicks, 6.0F * frameTicks);
+        player.turn(dYaw / 0.15D, dPitch / 0.15D);
     }
 
     // ---- Packet handlers (client main thread) ----

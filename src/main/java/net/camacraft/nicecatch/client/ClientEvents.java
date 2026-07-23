@@ -117,6 +117,16 @@ public class ClientEvents
         FishingBarOverlay.render(event.getGuiGraphics(), event.getWindow(), event.getPartialTick());
     }
 
+    /** Per-frame (not per-tick) camera follow while reeling, so the pan never steps or jitters. */
+    @SubscribeEvent
+    public static void onRenderTick(TickEvent.RenderTickEvent event)
+    {
+        if (event.phase != TickEvent.Phase.START) return;
+        Minecraft mc = Minecraft.getInstance();
+        if (mc.level == null) return;
+        ClientFishing.followFishFrame(mc, event.renderTickTime, mc.getDeltaFrameTime());
+    }
+
     /** Slight zoom while focused on reeling; vanilla smooths the transition for us. */
     @SubscribeEvent
     public static void onComputeFov(ComputeFovModifierEvent event)

@@ -670,6 +670,8 @@ public class ServerFishingManager
             if (run) {
                 fight.runTicks = (int) ((20 + random.nextInt(20)) * (0.7F + 0.6F * fight.strength)
                         * (1.0F - 0.55F * fight.fatigue));
+                fight.charge = random.nextFloat() < cfg.chargeChance.get().floatValue();
+                fight.veerTicks = 0; // pick a fresh heading the moment the run starts
                 level.playSound(null, hook.getX(), hook.getY(), hook.getZ(),
                         SoundEvents.FISHING_BOBBER_SPLASH, SoundSource.NEUTRAL, 0.4F, 0.7F);
             }
@@ -795,6 +797,23 @@ public class ServerFishingManager
         NiceCatchConfig.Server cfg = NiceCatchConfig.SERVER;
         Vec3 toPlayer = new Vec3(player.getX() - fish.getX(), 0.0D, player.getZ() - fish.getZ());
         double dist = toPlayer.length();
+        if (dist < 0.01D) {
+            keepUnderSurface(fish);
+            FishSteering.faceMovement(fish);
+            return;
+        }
+        Vec3 toward = toPlayer.normalize();
+
+        // Erratic swimming: ease the heading toward a lateral offset that gets re-picked
+        // every few ticks, with an occasional hard juke across to the other side.
+        if (--fight.veerTicks <= 0) {
+            fight.veerTicks = 6 + random.nextInt(10);
+            fight.veerTarget = (random.nextFloat() - 0.5F) * 2.4F;
+            if (random.nextFloat() < 0.2F) {
+                fight.veerTarget = -fight.veerTarget * 1.4F;
+            }
+        }
+        fight.veer += (fight.veerTarget - fight.veer) * 0.3F;
 
         // Top speed (blocks/tick) the crank is dragging the fish player-ward this tick.
         // Strong fish drag their heels; fatigue erodes that resistance; lifting the rod
@@ -809,15 +828,20 @@ public class ServerFishingManager
         }
 
         if (run) {
-            if (dist > 0.01D && dist < fight.lineLength) {
+            // A charge that gets too close breaks off into a normal run instead of beaching itself on you.
+            if (fight.charge && dist < cfg.landDistance.get() + 2.0D) {
+                fight.charge = false;
+            }
+            if (dist < fight.lineLength) {
                 // The run's pull, sapped by fatigue and resisted by rod lift; cranking
                 // still winches against it at reduced effect (and heavy tension cost).
                 double liftResist = Mth.clamp(lift * cfg.liftRunResistance.get(), 0.0D, 0.85D);
                 double force = (0.05D + 0.06D * fight.strength) * (1.0D - 0.7D * fight.fatigue) * (1.0D - liftResist);
-                Vec3 away = toPlayer.normalize().scale(-force + target * 0.3D);
-                Vec3 wobble = new Vec3((random.nextDouble() - 0.5D) * 0.06D, 0.0D, (random.nextDouble() - 0.5D) * 0.06D);
-                fish.setDeltaMovement(fish.getDeltaMovement().scale(0.7D).add(away).add(wobble));
-            } else if (dist >= fight.lineLength) {
+                Vec3 heading = rotateY(fight.charge ? toward : toward.scale(-1.0D), fight.veer);
+                Vec3 wobble = new Vec3((random.nextDouble() - 0.5D) * 0.08D, 0.0D, (random.nextDouble() - 0.5D) * 0.08D);
+                fish.setDeltaMovement(fish.getDeltaMovement().scale(0.7D)
+                        .add(heading.scale(force)).add(toward.scale(target * 0.3D)).add(wobble));
+            } else {
                 fish.setDeltaMovement(fish.getDeltaMovement().scale(0.5D));
             }
             if (fight.ticks % 4 == 0) {
@@ -830,8 +854,10 @@ public class ServerFishingManager
             }
         } else if (target > 0.0D) {
             // Speed-limited tug of war: the hard clamp means the fish can never fling in.
-            Vec3 wobble = new Vec3((random.nextDouble() - 0.5D) * 0.03D, 0.0D, (random.nextDouble() - 0.5D) * 0.03D);
-            Vec3 v = fish.getDeltaMovement().scale(0.8D).add(toPlayer.normalize().scale(target * 0.2D)).add(wobble);
+            // It still thrashes side to side on the way, so the pull direction sways too.
+            Vec3 wobble = new Vec3((random.nextDouble() - 0.5D) * 0.04D, 0.0D, (random.nextDouble() - 0.5D) * 0.04D);
+            Vec3 pull = rotateY(toward, fight.veer * 0.5F);
+            Vec3 v = fish.getDeltaMovement().scale(0.8D).add(pull.scale(target * 0.2D)).add(wobble);
             double horiz = Math.sqrt(v.x * v.x + v.z * v.z);
             if (horiz > target) {
                 v = new Vec3(v.x * target / horiz, v.y, v.z * target / horiz);
@@ -841,9 +867,25 @@ public class ServerFishingManager
                 level.sendParticles(ParticleTypes.FISHING, fish.getX(), fish.getY() + 0.1D, fish.getZ(),
                         2, 0.1D, 0.05D, 0.1D, 0.0D);
             }
+        } else if (!fight.holding && dist < fight.lineLength) {
+            // Slack line: nothing resists it, so the fish strips line at will and wanders
+            // wherever its heading takes it.
+            double force = (0.05D + 0.06D * fight.strength) * (1.0D - 0.7D * fight.fatigue)
+                    * cfg.slackTakeFactor.get();
+            Vec3 heading = rotateY(toward.scale(-1.0D), fight.veer);
+            Vec3 wobble = new Vec3((random.nextDouble() - 0.5D) * 0.05D, 0.0D, (random.nextDouble() - 0.5D) * 0.05D);
+            fish.setDeltaMovement(fish.getDeltaMovement().scale(0.75D).add(heading.scale(force)).add(wobble));
         }
         keepUnderSurface(fish);
         FishSteering.faceMovement(fish);
+    }
+
+    /** Rotates a vector's horizontal components around Y by the given angle (radians). */
+    private static Vec3 rotateY(Vec3 v, float angle)
+    {
+        double cos = Math.cos(angle);
+        double sin = Math.sin(angle);
+        return new Vec3(v.x * cos - v.z * sin, v.y, v.x * sin + v.z * cos);
     }
 
     /**

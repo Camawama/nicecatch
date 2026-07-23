@@ -30,6 +30,8 @@ public class NiceCatchConfig
         public final ForgeConfigSpec.DoubleValue fatiguePerRevolution;
         public final ForgeConfigSpec.DoubleValue fatiguePerRunTick;
         public final ForgeConfigSpec.DoubleValue fatigueRecoverPerTick;
+        public final ForgeConfigSpec.DoubleValue slackTakeFactor;
+        public final ForgeConfigSpec.DoubleValue chargeChance;
         public final ForgeConfigSpec.DoubleValue tensionPerRevolutionRun;
         public final ForgeConfigSpec.DoubleValue tensionPerRevolutionCalm;
         public final ForgeConfigSpec.DoubleValue tensionRecoveryPerTick;
@@ -131,6 +133,10 @@ public class NiceCatchConfig
                     .defineInRange("fatiguePerRunTick", 0.003D, 0.0D, 0.05D);
             fatigueRecoverPerTick = b.comment("Fish stamina regained per tick while you give it slack — don't let it rest.")
                     .defineInRange("fatigueRecoverPerTick", 0.0015D, 0.0D, 0.05D);
+            slackTakeFactor = b.comment("How hard the fish strips line off a slack reel whenever you release right-click, as a fraction of its run strength.")
+                    .defineInRange("slackTakeFactor", 0.7D, 0.0D, 1.5D);
+            chargeChance = b.comment("Chance that a run is a charge: the fish sprints back toward you, dumping slack you must crank up.")
+                    .defineInRange("chargeChance", 0.2D, 0.0D, 1.0D);
             maxRevolutionsPerTick = b.comment("Server-side cap on crank speed, in mouse revolutions per tick.")
                     .defineInRange("maxRevolutionsPerTick", 0.25D, 0.05D, 1.0D);
             reelInSpeed = b.comment("Top speed, in blocks per second, at which full-speed cranking drags a calm fish toward the player. The strongest fish resist down to about half this.")
@@ -295,6 +301,8 @@ public class NiceCatchConfig
         public final ForgeConfigSpec.DoubleValue reelFovMultiplier;
         public final ForgeConfigSpec.BooleanValue reelClickSounds;
         public final ForgeConfigSpec.BooleanValue cameraShake;
+        public final ForgeConfigSpec.BooleanValue cameraFollowFish;
+        public final ForgeConfigSpec.DoubleValue cameraFollowStrength;
         public final ForgeConfigSpec.BooleanValue showHints;
         public final ForgeConfigSpec.IntValue mouseRampTicks;
 
@@ -312,6 +320,10 @@ public class NiceCatchConfig
                     .define("reelClickSounds", true);
             cameraShake = b.comment("Subtle camera shake while a hooked fish is running.")
                     .define("cameraShake", true);
+            cameraFollowFish = b.comment("While reeling (mouse captured), smoothly pan the camera to keep the fish in view.")
+                    .define("cameraFollowFish", true);
+            cameraFollowStrength = b.comment("How quickly the follow camera catches up to the fish, as a fraction of the remaining angle per tick.")
+                    .defineInRange("cameraFollowStrength", 0.18D, 0.02D, 1.0D);
             showHints = b.comment("Show contextual hint text above the fishing bar (release to cast, set the hook, ease off...).")
                     .define("showHints", true);
             mouseRampTicks = b.comment("Ticks over which camera sensitivity ramps back up after leaving reel mode, so a spinning hand doesn't whip the camera.")

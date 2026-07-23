@@ -35,6 +35,14 @@ public class FishFight
     public int graceTicks;
     public int ticks;
 
+    // Erratic-swimming state: the fish's lateral heading offset (radians off the straight
+    // away-from-player line), eased toward a target that gets re-picked every few ticks.
+    public float veer;
+    public float veerTarget;
+    public int veerTicks;
+    /** This run is a charge: the fish sprints back toward the player, dumping slack on you. */
+    public boolean charge;
+
     // Input accumulated from ReelMessages since the last fight tick.
     public float pendingCrank;
     public float pendingLift;
