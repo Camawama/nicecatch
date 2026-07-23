@@ -22,7 +22,7 @@ import net.minecraft.util.RandomSource;
 import net.minecraft.world.InteractionHand;
 import net.minecraft.world.InteractionResult;
 import net.minecraft.world.entity.ExperienceOrb;
-import net.minecraft.world.entity.animal.AbstractFish;
+import net.minecraft.world.entity.PathfinderMob;
 import net.minecraft.world.entity.item.ItemEntity;
 import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.entity.projectile.FishingHook;
@@ -251,7 +251,7 @@ public class ServerFishingManager
 
         // Only a real fish starts a fight; loot-table nibbles retrieve vanilla-style instead.
         if (session.pendingFish != null) {
-            AbstractFish fish = resolveFish(player.serverLevel(), session.pendingFish);
+            PathfinderMob fish = resolveFish(player.serverLevel(), session.pendingFish);
             session.pendingFish = null;
             if (fish != null && fish.distanceToSqr(hook) < 25.0D) {
                 startEntityFight(player, session, hook, hand, fish);
@@ -265,7 +265,7 @@ public class ServerFishingManager
     }
 
     private static void startEntityFight(ServerPlayer player, Session session, FishingHook hook,
-                                         InteractionHand hand, AbstractFish fish)
+                                         InteractionHand hand, PathfinderMob fish)
     {
         NiceCatchConfig.Server cfg = NiceCatchConfig.SERVER;
         FishFight fight = new FishFight();
@@ -290,7 +290,7 @@ public class ServerFishingManager
     }
 
     /** Hitbox area vs the reference area, on a sub-linear curve so small fish already differ a lot. */
-    private static float sizeStrength(AbstractFish fish)
+    private static float sizeStrength(PathfinderMob fish)
     {
         NiceCatchConfig.Server cfg = NiceCatchConfig.SERVER;
         double area = fish.getBbWidth() * fish.getBbHeight();
@@ -432,7 +432,7 @@ public class ServerFishingManager
 
         // An active bite window: keep it honest and keep the bobber jiggling.
         if (session.pendingFish != null) {
-            AbstractFish fish = resolveFish(level, session.pendingFish);
+            PathfinderMob fish = resolveFish(level, session.pendingFish);
             if (fish == null || FishBehavior.isScattering(fish) || fish.distanceToSqr(hook) > 25.0D) {
                 clearBiteFlow(level, session);
                 return;
@@ -455,7 +455,7 @@ public class ServerFishingManager
 
         // A committed fish closing in behind the vanilla wake; the bite lands when it arrives.
         if (session.approachFish != null) {
-            AbstractFish fish = resolveFish(level, session.approachFish);
+            PathfinderMob fish = resolveFish(level, session.approachFish);
             if (fish == null || FishBehavior.isScattering(fish) || fish.distanceToSqr(hook) > 64.0D) {
                 clearBiteFlow(level, session);
                 return;
@@ -472,7 +472,7 @@ public class ServerFishingManager
 
         // A teasing nibble: the bobber dips a few times but there is nothing to hook (yet).
         if (session.nibbleFish != null) {
-            AbstractFish fish = resolveFish(level, session.nibbleFish);
+            PathfinderMob fish = resolveFish(level, session.nibbleFish);
             if (fish == null || FishBehavior.isScattering(fish) || fish.distanceToSqr(hook) > 9.0D) {
                 clearBiteFlow(level, session);
                 return;
@@ -507,14 +507,14 @@ public class ServerFishingManager
         if (hook.nibble > 0) return; // an already-started loot bite plays out normally
 
         // Bites can come from any interested fish in wake range, so the approach is visible.
-        List<AbstractFish> candidates = FishBehavior.biteCandidates(hook, Math.max(cfg.biteRange.get(), 5.0D));
+        List<PathfinderMob> candidates = FishBehavior.biteCandidates(hook, Math.max(cfg.biteRange.get(), 5.0D));
         if (candidates.isEmpty()) return;
 
         InteractionHand hand = RodUtil.findRodHand(player);
         ItemStack rod = hand != null ? player.getItemInHand(hand) : ItemStack.EMPTY;
         int lure = EnchantmentHelper.getItemEnchantmentLevel(Enchantments.FISHING_SPEED, rod);
         float topInterest = 0.0F;
-        for (AbstractFish fish : candidates) {
+        for (PathfinderMob fish : candidates) {
             topInterest = Math.max(topInterest, FishBehavior.state(fish).interest);
         }
         float chancePerTick = cfg.biteChancePerSecond.get().floatValue() / 20.0F
@@ -522,7 +522,7 @@ public class ServerFishingManager
                 * AquacultureCompat.biteChanceMultiplier(rod)
                 * (0.3F + 0.7F * topInterest);
         if (level.random.nextFloat() < chancePerTick) {
-            AbstractFish biter = pickBiter(level, candidates, rod);
+            PathfinderMob biter = pickBiter(level, candidates, rod);
             // The fish commits: it beelines for the hook behind a vanilla wake, then bites on arrival.
             session.approachFish = biter.getUUID();
             session.approachTicks = (int) Mth.clamp(Math.sqrt(biter.distanceToSqr(hook)) * 8.0D, 15.0D, 70.0D);
@@ -532,12 +532,12 @@ public class ServerFishingManager
 
         // No bite this tick — maybe a tease from a fish already at the bobber.
         long now = level.getGameTime();
-        List<AbstractFish> close = candidates.stream()
+        List<PathfinderMob> close = candidates.stream()
                 .filter(f -> f.distanceToSqr(hook) < cfg.biteRange.get() * cfg.biteRange.get()
                         && now >= FishBehavior.state(f).nibbleCooldownUntil)
                 .toList();
         if (!close.isEmpty() && level.random.nextFloat() < cfg.nibbleChancePerSecond.get().floatValue() / 20.0F) {
-            AbstractFish nibbler = close.get(level.random.nextInt(close.size()));
+            PathfinderMob nibbler = close.get(level.random.nextInt(close.size()));
             session.nibbleFish = nibbler.getUUID();
             session.nibbleTicks = 12 + level.random.nextInt(10);
             FishBehavior.state(nibbler).biteBobber = hook;
@@ -545,7 +545,7 @@ public class ServerFishingManager
     }
 
     /** Luck of the Sea favors the biggest fish; otherwise the most interested ones bite first. */
-    private static AbstractFish pickBiter(ServerLevel level, List<AbstractFish> candidates, ItemStack rod)
+    private static PathfinderMob pickBiter(ServerLevel level, List<PathfinderMob> candidates, ItemStack rod)
     {
         int luck = EnchantmentHelper.getItemEnchantmentLevel(Enchantments.FISHING_LUCK, rod)
                 + AquacultureCompat.bonusLuck(rod);
@@ -555,11 +555,11 @@ public class ServerFishingManager
                     .orElse(candidates.get(0));
         }
         float total = 0.0F;
-        for (AbstractFish fish : candidates) {
+        for (PathfinderMob fish : candidates) {
             total += FishBehavior.state(fish).interest + 0.2F;
         }
         float roll = level.random.nextFloat() * total;
-        for (AbstractFish fish : candidates) {
+        for (PathfinderMob fish : candidates) {
             roll -= FishBehavior.state(fish).interest + 0.2F;
             if (roll <= 0.0F) return fish;
         }
@@ -567,7 +567,7 @@ public class ServerFishingManager
     }
 
     /** The moment of the bite itself: bobber dips, splash, and the hook-set window opens. */
-    private static void beginBite(Session session, ServerLevel level, FishingHook hook, AbstractFish fish)
+    private static void beginBite(Session session, ServerLevel level, FishingHook hook, PathfinderMob fish)
     {
         session.pendingFish = fish.getUUID();
         session.pendingBiteTicks = NiceCatchConfig.SERVER.biteWindowTicks.get();
@@ -580,7 +580,7 @@ public class ServerFishingManager
     }
 
     /** The vanilla V-shaped surface wake, trailing the approaching fish toward the bobber. */
-    private static void sendWakeParticles(ServerLevel level, FishingHook hook, AbstractFish fish)
+    private static void sendWakeParticles(ServerLevel level, FishingHook hook, PathfinderMob fish)
     {
         Vec3 to = hook.position().subtract(fish.position());
         if (to.horizontalDistanceSqr() < 1.0E-4D) return;
@@ -598,7 +598,7 @@ public class ServerFishingManager
         UUID involved = session.pendingFish != null ? session.pendingFish
                 : session.approachFish != null ? session.approachFish : session.nibbleFish;
         if (involved != null) {
-            AbstractFish fish = resolveFish(level, involved);
+            PathfinderMob fish = resolveFish(level, involved);
             if (fish != null) {
                 FishBehavior.state(fish).biteBobber = null;
             }
@@ -612,10 +612,10 @@ public class ServerFishingManager
     }
 
     @Nullable
-    private static AbstractFish resolveFish(ServerLevel level, @Nullable UUID id)
+    private static PathfinderMob resolveFish(ServerLevel level, @Nullable UUID id)
     {
         if (id == null) return null;
-        return level.getEntity(id) instanceof AbstractFish fish && fish.isAlive() ? fish : null;
+        return level.getEntity(id) instanceof PathfinderMob fish && fish.isAlive() ? fish : null;
     }
 
     private static void tickFight(ServerPlayer player, Session session, FishingHook hook)
@@ -637,7 +637,7 @@ public class ServerFishingManager
             fight.hand = other;
         }
 
-        AbstractFish fish = resolveFish(level, fight.fishId);
+        PathfinderMob fish = resolveFish(level, fight.fishId);
         if (fish == null) {
             // The fish died or unloaded mid-fight; nothing left on the line.
             hook.setHookedEntity(null);
@@ -762,7 +762,7 @@ public class ServerFishingManager
 
     /** Launch the beaten fish out of the water toward the player, vanilla-loot style. */
     private static void landEntityFish(ServerPlayer player, Session session, FishingHook hook,
-                                       FishFight fight, AbstractFish fish, ServerLevel level)
+                                       FishFight fight, PathfinderMob fish, ServerLevel level)
     {
         double dx = player.getX() - fish.getX();
         double dy = player.getY() - fish.getY();
@@ -791,7 +791,7 @@ public class ServerFishingManager
 
     /** The fish is the thing that runs; the bobber rides it via the hooked-entity glue. */
     private static void moveHookedFish(ServerPlayer player, FishFight fight, FishingHook hook,
-                                       AbstractFish fish, ServerLevel level, RandomSource random,
+                                       PathfinderMob fish, ServerLevel level, RandomSource random,
                                        boolean run, float crank, float lift)
     {
         NiceCatchConfig.Server cfg = NiceCatchConfig.SERVER;
@@ -812,8 +812,10 @@ public class ServerFishingManager
             if (random.nextFloat() < 0.2F) {
                 fight.veerTarget = -fight.veerTarget * 1.4F;
             }
+            fight.diveTarget = random.nextFloat() * 0.9F - 0.65F; // mostly down, occasionally up
         }
         fight.veer += (fight.veerTarget - fight.veer) * 0.3F;
+        fight.dive += (fight.diveTarget - fight.dive) * 0.3F;
 
         // Top speed (blocks/tick) the crank is dragging the fish player-ward this tick.
         // Strong fish drag their heels; fatigue erodes that resistance; lifting the rod
@@ -838,6 +840,8 @@ public class ServerFishingManager
                 double liftResist = Mth.clamp(lift * cfg.liftRunResistance.get(), 0.0D, 0.85D);
                 double force = (0.05D + 0.06D * fight.strength) * (1.0D - 0.7D * fight.fatigue) * (1.0D - liftResist);
                 Vec3 heading = rotateY(fight.charge ? toward : toward.scale(-1.0D), fight.veer);
+                // Tilt the run by the dive whim: sounding for the bottom is a fish's best move.
+                heading = new Vec3(heading.x, fight.dive, heading.z).normalize();
                 Vec3 wobble = new Vec3((random.nextDouble() - 0.5D) * 0.08D, 0.0D, (random.nextDouble() - 0.5D) * 0.08D);
                 fish.setDeltaMovement(fish.getDeltaMovement().scale(0.7D)
                         .add(heading.scale(force)).add(toward.scale(target * 0.3D)).add(wobble));
@@ -856,7 +860,10 @@ public class ServerFishingManager
             // Speed-limited tug of war: the hard clamp means the fish can never fling in.
             // It still thrashes side to side on the way, so the pull direction sways too.
             Vec3 wobble = new Vec3((random.nextDouble() - 0.5D) * 0.04D, 0.0D, (random.nextDouble() - 0.5D) * 0.04D);
-            Vec3 pull = rotateY(toward, fight.veer * 0.5F);
+            // The winch also hauls upward when the fish has sounded below the rod — landing
+            // is gated on 3D distance, so a deep diver must come up before it can come in.
+            double up = Mth.clamp((player.getY() - fish.getY()) * 0.1D, 0.0D, 0.8D);
+            Vec3 pull = rotateY(toward, fight.veer * 0.5F).add(0.0D, up, 0.0D).normalize();
             Vec3 v = fish.getDeltaMovement().scale(0.8D).add(pull.scale(target * 0.2D)).add(wobble);
             double horiz = Math.sqrt(v.x * v.x + v.z * v.z);
             if (horiz > target) {
@@ -873,6 +880,7 @@ public class ServerFishingManager
             double force = (0.05D + 0.06D * fight.strength) * (1.0D - 0.7D * fight.fatigue)
                     * cfg.slackTakeFactor.get();
             Vec3 heading = rotateY(toward.scale(-1.0D), fight.veer);
+            heading = new Vec3(heading.x, fight.dive, heading.z).normalize();
             Vec3 wobble = new Vec3((random.nextDouble() - 0.5D) * 0.05D, 0.0D, (random.nextDouble() - 0.5D) * 0.05D);
             fish.setDeltaMovement(fish.getDeltaMovement().scale(0.75D).add(heading.scale(force)).add(wobble));
         }
@@ -893,7 +901,7 @@ public class ServerFishingManager
      * clear the water), so the fight applies its own: ease the fish back down whenever its
      * back nears the actual fluid plane. The launch happens after the fight ends, untouched.
      */
-    private static void keepUnderSurface(AbstractFish fish)
+    private static void keepUnderSurface(PathfinderMob fish)
     {
         BlockPos pos = fish.blockPosition();
         FluidState fluid = fish.level().getFluidState(pos);
@@ -908,7 +916,7 @@ public class ServerFishingManager
     }
 
     /** A real fish comes off the line: unhook it and let it bolt. */
-    private static void freeFish(AbstractFish fish, Vec3 from)
+    private static void freeFish(PathfinderMob fish, Vec3 from)
     {
         FishBehavior.setHooked(fish, false);
         FishBehavior.scatter(fish, from, NiceCatchConfig.SERVER.scatterDurationTicks.get());
@@ -918,7 +926,7 @@ public class ServerFishingManager
     private static void unhookFish(ServerLevel level, @Nullable FishFight fight)
     {
         if (fight == null || fight.fishId == null) return;
-        AbstractFish fish = resolveFish(level, fight.fishId);
+        PathfinderMob fish = resolveFish(level, fight.fishId);
         if (fish != null && FishBehavior.isHooked(fish)) {
             freeFish(fish, fish.position());
         }

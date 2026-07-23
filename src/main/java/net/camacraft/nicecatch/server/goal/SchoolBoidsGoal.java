@@ -3,7 +3,7 @@ package net.camacraft.nicecatch.server.goal;
 import net.camacraft.nicecatch.NiceCatchConfig;
 import net.camacraft.nicecatch.server.FishBehavior;
 import net.minecraft.world.entity.ai.goal.Goal;
-import net.minecraft.world.entity.animal.AbstractFish;
+import net.minecraft.world.entity.PathfinderMob;
 import net.minecraft.world.phys.AABB;
 import net.minecraft.world.phys.Vec3;
 
@@ -26,14 +26,14 @@ public class SchoolBoidsGoal extends Goal
     /** Ticks after a scatter ends during which the school urgently regroups. */
     private static final int REGROUP_WINDOW = 160;
 
-    private final AbstractFish fish;
-    private List<AbstractFish> neighbors = List.of();
+    private final PathfinderMob fish;
+    private List<PathfinderMob> neighbors = List.of();
     private int refreshTicks;
     private int runTicksLeft;
     private int restUntilTick;
     private double wanderAngle;
 
-    public SchoolBoidsGoal(AbstractFish fish)
+    public SchoolBoidsGoal(PathfinderMob fish)
     {
         this.fish = fish;
         setFlags(EnumSet.of(Flag.MOVE, Flag.LOOK));
@@ -44,6 +44,7 @@ public class SchoolBoidsGoal extends Goal
     {
         if (!NiceCatchConfig.SERVER.entityFishingEnabled.get()
                 || !NiceCatchConfig.SERVER.boidSchoolingEnabled.get()) return false;
+        if (FishBehavior.isBoidBlacklisted(fish.getType())) return false;
         FishBehavior.FishState state = FishBehavior.state(fish);
         if (state.hooked || FishBehavior.isScattering(fish)) return false;
         if (state.bobber != null || state.biteBobber != null) return false;
@@ -103,7 +104,7 @@ public class SchoolBoidsGoal extends Goal
         Vec3 centroid = Vec3.ZERO;
         Vec3 avgVel = Vec3.ZERO;
         Vec3 separation = Vec3.ZERO;
-        for (AbstractFish other : neighbors) {
+        for (PathfinderMob other : neighbors) {
             centroid = centroid.add(other.position());
             avgVel = avgVel.add(other.getDeltaMovement());
             Vec3 away = fish.position().subtract(other.position());
@@ -146,11 +147,11 @@ public class SchoolBoidsGoal extends Goal
         return sinceScatter >= 0 && sinceScatter < REGROUP_WINDOW;
     }
 
-    private List<AbstractFish> findNeighbors(boolean regroup)
+    private List<PathfinderMob> findNeighbors(boolean regroup)
     {
         double radius = NiceCatchConfig.SERVER.boidNeighborRadius.get() + (regroup ? 3.0D : 0.0D);
         AABB box = fish.getBoundingBox().inflate(radius);
-        List<AbstractFish> found = fish.level().getEntitiesOfClass(AbstractFish.class, box,
+        List<PathfinderMob> found = fish.level().getEntitiesOfClass(PathfinderMob.class, box,
                 f -> f != fish && f.getType() == fish.getType() && f.isAlive()
                         && !FishBehavior.isHooked(f) && !FishBehavior.isScattering(f));
         // A handful of schoolmates is plenty for the math; cap it so megaschools stay cheap.

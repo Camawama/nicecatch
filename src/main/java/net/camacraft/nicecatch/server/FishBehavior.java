@@ -12,13 +12,16 @@ import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.tags.FluidTags;
 import net.minecraft.world.InteractionHand;
+import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.LivingEntity;
 import net.minecraft.world.entity.ai.goal.AvoidEntityGoal;
 import net.minecraft.world.entity.ai.goal.FollowFlockLeaderGoal;
 import net.minecraft.world.entity.ai.goal.PanicGoal;
+import net.minecraft.world.entity.PathfinderMob;
 import net.minecraft.world.entity.animal.AbstractFish;
 import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.entity.projectile.FishingHook;
+import net.minecraft.world.entity.vehicle.Boat;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.enchantment.EnchantmentHelper;
 import net.minecraft.world.item.enchantment.Enchantments;
@@ -50,7 +53,7 @@ import java.util.WeakHashMap;
 @Mod.EventBusSubscriber(modid = NiceCatch.MODID)
 public final class FishBehavior
 {
-    private static final Map<AbstractFish, FishState> STATES = new WeakHashMap<>();
+    private static final Map<PathfinderMob, FishState> STATES = new WeakHashMap<>();
 
     public static class FishState
     {
@@ -72,7 +75,7 @@ public final class FishBehavior
         public long nibbleCooldownUntil;
     }
 
-    public static FishState state(AbstractFish fish)
+    public static FishState state(PathfinderMob fish)
     {
         return STATES.computeIfAbsent(fish, f -> new FishState());
     }
@@ -82,27 +85,73 @@ public final class FishBehavior
     /** Memoized per entity type; config lookups and wildcard matching are too hot for per-tick checks. */
     private static final Map<net.minecraft.world.entity.EntityType<?>, Boolean> BLACKLIST_CACHE
             = new java.util.concurrent.ConcurrentHashMap<>();
+    private static final Map<net.minecraft.world.entity.EntityType<?>, Boolean> BOID_BLACKLIST_CACHE
+            = new java.util.concurrent.ConcurrentHashMap<>();
+    private static final Map<net.minecraft.world.entity.EntityType<?>, Boolean> WHITELIST_CACHE
+            = new java.util.concurrent.ConcurrentHashMap<>();
 
     /**
-     * Not every AbstractFish is a fish we should puppet: Aquaculture's jellyfish extends it,
-     * and other mods' oddballs may too. Blacklisted types keep their vanilla AI and are
-     * invisible to the whole system — never lured, spooked, schooled, clamped, or hooked,
-     * and they don't count as "fish nearby" for loot suppression either.
+     * Counts as a fish for this mod's purposes: vanilla's AbstractFish family, or a whitelisted
+     * water mob from a mod that rolled its own fish hierarchy (Unusual Fish extends WaterAnimal
+     * directly, so none of its fish are AbstractFish).
+     */
+    public static boolean isFishKind(Entity e)
+    {
+        return e instanceof AbstractFish
+                || (e instanceof PathfinderMob && isWhitelisted(e.getType()));
+    }
+
+    /**
+     * A fish the overhaul actively manages: fish-kind and not blacklisted. Everything the
+     * system does — luring, spooking, schooling, clamping, hooking, loot suppression — is
+     * gated on this; anything else keeps its vanilla AI untouched.
+     */
+    public static boolean isFishLike(Entity e)
+    {
+        return isFishKind(e) && !isBlacklisted(e.getType());
+    }
+
+    /**
+     * Blacklisted types are invisible to the whole system even if fish-kind: Aquaculture's
+     * jellyfish extends AbstractFish but should never be lured, spooked, schooled, or hooked,
+     * and mustn't count as "fish nearby" for loot suppression either.
      */
     public static boolean isBlacklisted(net.minecraft.world.entity.EntityType<?> type)
     {
-        return BLACKLIST_CACHE.computeIfAbsent(type, t -> {
-            var id = net.minecraftforge.registries.ForgeRegistries.ENTITY_TYPES.getKey(t);
-            if (id == null) return false;
-            for (String raw : NiceCatchConfig.SERVER.fishAiBlacklist.get()) {
-                String entry = raw.trim();
-                if (entry.equals(id.toString())) return true;
-                if (entry.endsWith(":*") && id.getNamespace().equals(entry.substring(0, entry.length() - 2))) {
-                    return true;
-                }
+        return BLACKLIST_CACHE.computeIfAbsent(type,
+                t -> matchesList(t, NiceCatchConfig.SERVER.fishAiBlacklist.get()));
+    }
+
+    public static boolean isWhitelisted(net.minecraft.world.entity.EntityType<?> type)
+    {
+        return WHITELIST_CACHE.computeIfAbsent(type,
+                t -> matchesList(t, NiceCatchConfig.SERVER.fishAiWhitelist.get()));
+    }
+
+    /**
+     * Loners like salmon, pufferfish and jellyfish don't school in real life, so they sit
+     * this one feature out: no boids goal, and vanilla's flock-following (if they had it)
+     * stays in place. Everything else — luring, scattering, hooking — still applies.
+     */
+    public static boolean isBoidBlacklisted(net.minecraft.world.entity.EntityType<?> type)
+    {
+        return BOID_BLACKLIST_CACHE.computeIfAbsent(type,
+                t -> matchesList(t, NiceCatchConfig.SERVER.boidBlacklist.get()));
+    }
+
+    /** Entries are exact entity ids ('mod:fish') or namespace wildcards ('mod:*'). */
+    private static boolean matchesList(net.minecraft.world.entity.EntityType<?> type, List<? extends String> entries)
+    {
+        var id = net.minecraftforge.registries.ForgeRegistries.ENTITY_TYPES.getKey(type);
+        if (id == null) return false;
+        for (String raw : entries) {
+            String entry = raw.trim();
+            if (entry.equals(id.toString())) return true;
+            if (entry.endsWith(":*") && id.getNamespace().equals(entry.substring(0, entry.length() - 2))) {
+                return true;
             }
-            return false;
-        });
+        }
+        return false;
     }
 
     /** The caches must not outlive the config values they were computed from. */
@@ -114,6 +163,8 @@ public final class FishBehavior
         {
             if (NiceCatch.MODID.equals(event.getConfig().getModId())) {
                 BLACKLIST_CACHE.clear();
+                BOID_BLACKLIST_CACHE.clear();
+                WHITELIST_CACHE.clear();
                 SCHOOL_SPAWN_CACHE.clear();
             }
         }
@@ -172,8 +223,8 @@ public final class FishBehavior
     public static void onEntityJoin(EntityJoinLevelEvent event)
     {
         if (event.getLevel().isClientSide) return;
-        if (!(event.getEntity() instanceof AbstractFish fish)) return;
-        if (isBlacklisted(fish.getType())) return; // jellyfish and friends keep their own AI
+        if (!(event.getEntity() instanceof PathfinderMob fish)) return;
+        if (!isFishLike(fish)) return; // non-fish mobs, and blacklisted fish, keep their own AI
 
         FishState state = state(fish);
         if (state.goalsInjected) return;
@@ -184,7 +235,7 @@ public final class FishBehavior
         // crawl. Our scatter system replaces both with a meaner, faster, situational fear
         // (close players, swimmers, attacks, damage), so drop the vanilla goals. The boids
         // school likewise supersedes vanilla's pathfinding flock-follow when enabled.
-        boolean boids = NiceCatchConfig.SERVER.boidSchoolingEnabled.get();
+        boolean boids = NiceCatchConfig.SERVER.boidSchoolingEnabled.get() && !isBoidBlacklisted(fish.getType());
         fish.goalSelector.removeAllGoals(g -> g instanceof AvoidEntityGoal || g instanceof PanicGoal
                 || (boids && g instanceof FollowFlockLeaderGoal));
         fish.goalSelector.addGoal(0, new HookedFishGoal(fish));
@@ -198,8 +249,8 @@ public final class FishBehavior
     public static void onAttack(AttackEntityEvent event)
     {
         if (event.getEntity().level().isClientSide) return;
-        if (!(event.getTarget() instanceof AbstractFish target)) return;
-        if (isHooked(target) || isBlacklisted(target.getType())) return;
+        if (!(event.getTarget() instanceof PathfinderMob target)) return;
+        if (isHooked(target) || !isFishLike(target)) return;
 
         NiceCatchConfig.Server cfg = NiceCatchConfig.SERVER;
         scatter(target, event.getEntity().position(), cfg.scatterDurationTicks.get());
@@ -215,8 +266,8 @@ public final class FishBehavior
     @SubscribeEvent
     public static void onFishTick(LivingEvent.LivingTickEvent event)
     {
-        if (!(event.getEntity() instanceof AbstractFish fish) || fish.level().isClientSide) return;
-        if (!fish.isInWater() || isHooked(fish) || isBlacklisted(fish.getType())) return;
+        if (!(event.getEntity() instanceof PathfinderMob fish) || fish.level().isClientSide) return;
+        if (!fish.isInWater() || isHooked(fish) || !isFishLike(fish)) return;
 
         BlockPos pos = fish.blockPosition();
         FluidState fluid = fish.level().getFluidState(pos);
@@ -235,8 +286,8 @@ public final class FishBehavior
     public static void onHurt(LivingHurtEvent event)
     {
         if (event.getEntity().level().isClientSide) return;
-        if (!(event.getEntity() instanceof AbstractFish fish) || isHooked(fish)) return;
-        if (isBlacklisted(fish.getType())) return;
+        if (!(event.getEntity() instanceof PathfinderMob fish) || isHooked(fish)) return;
+        if (!isFishLike(fish)) return;
 
         NiceCatchConfig.Server cfg = NiceCatchConfig.SERVER;
         Vec3 from = event.getSource().getSourcePosition() != null
@@ -276,22 +327,30 @@ public final class FishBehavior
         return radius;
     }
 
+    /** Squared XZ distance; bobber sight ignores depth entirely. */
+    public static double horizontalDistSqr(Entity a, Entity b)
+    {
+        double dx = a.getX() - b.getX();
+        double dz = a.getZ() - b.getZ();
+        return dx * dx + dz * dz;
+    }
+
     public static int claimedCount(FishingHook hook)
     {
         int count = 0;
-        for (Map.Entry<AbstractFish, FishState> entry : STATES.entrySet()) {
+        for (Map.Entry<PathfinderMob, FishState> entry : STATES.entrySet()) {
             if (entry.getValue().bobber == hook && entry.getKey().isAlive()) count++;
         }
         return count;
     }
 
     /** Fish claimed by this bobber that are within the given range and allowed to bite. */
-    public static List<AbstractFish> biteCandidates(FishingHook hook, double range)
+    public static List<PathfinderMob> biteCandidates(FishingHook hook, double range)
     {
         long now = hook.level().getGameTime();
-        List<AbstractFish> out = new ArrayList<>();
-        for (Map.Entry<AbstractFish, FishState> entry : STATES.entrySet()) {
-            AbstractFish fish = entry.getKey();
+        List<PathfinderMob> out = new ArrayList<>();
+        for (Map.Entry<PathfinderMob, FishState> entry : STATES.entrySet()) {
+            PathfinderMob fish = entry.getKey();
             FishState state = entry.getValue();
             if (state.bobber != hook || state.hooked || state.biteBobber != null) continue;
             if (!fish.isAlive() || isScattering(fish) || now < state.biteCooldownUntil) continue;
@@ -301,13 +360,13 @@ public final class FishBehavior
         return out;
     }
 
-    public static boolean isScattering(AbstractFish fish)
+    public static boolean isScattering(PathfinderMob fish)
     {
         FishState state = STATES.get(fish);
         return state != null && fish.level().getGameTime() < state.scatterUntil;
     }
 
-    public static boolean isHooked(AbstractFish fish)
+    public static boolean isHooked(PathfinderMob fish)
     {
         FishState state = STATES.get(fish);
         return state != null && state.hooked;
@@ -319,12 +378,12 @@ public final class FishBehavior
     public static final int LIGHT_SCARE_COOLDOWN = 100;
 
     /** Full-cooldown scatter: for real trouble (damage, failed bites, thrown hooks). */
-    public static void scatter(AbstractFish fish, Vec3 from, int durationTicks)
+    public static void scatter(PathfinderMob fish, Vec3 from, int durationTicks)
     {
         scatter(fish, from, durationTicks, NiceCatchConfig.SERVER.fishBiteCooldownTicks.get());
     }
 
-    public static void scatter(AbstractFish fish, Vec3 from, int durationTicks, int biteCooldownTicks)
+    public static void scatter(PathfinderMob fish, Vec3 from, int durationTicks, int biteCooldownTicks)
     {
         FishState state = state(fish);
         long now = fish.level().getGameTime();
@@ -336,24 +395,24 @@ public final class FishBehavior
         state.interest = Math.max(0.0F, state.interest - 0.35F);
     }
 
-    public static void scatterAround(ServerLevel level, Vec3 center, double radius, float chance, @Nullable AbstractFish except)
+    public static void scatterAround(ServerLevel level, Vec3 center, double radius, float chance, @Nullable PathfinderMob except)
     {
         scatterAround(level, center, radius, chance, except, NiceCatchConfig.SERVER.fishBiteCooldownTicks.get());
     }
 
     public static void scatterAround(ServerLevel level, Vec3 center, double radius, float chance,
-                                     @Nullable AbstractFish except, int biteCooldownTicks)
+                                     @Nullable PathfinderMob except, int biteCooldownTicks)
     {
         AABB box = AABB.ofSize(center, radius * 2.0D, radius * 2.0D, radius * 2.0D);
-        for (AbstractFish fish : level.getEntitiesOfClass(AbstractFish.class, box,
-                f -> f != except && !isHooked(f) && !isBlacklisted(f.getType()))) {
+        for (PathfinderMob fish : level.getEntitiesOfClass(PathfinderMob.class, box,
+                f -> f != except && !isHooked(f) && isFishLike(f))) {
             if (level.random.nextFloat() < chance) {
                 scatter(fish, center, NiceCatchConfig.SERVER.scatterDurationTicks.get(), biteCooldownTicks);
             }
         }
     }
 
-    public static void setHooked(AbstractFish fish, boolean hooked)
+    public static void setHooked(PathfinderMob fish, boolean hooked)
     {
         FishState state = state(fish);
         state.hooked = hooked;
@@ -365,10 +424,12 @@ public final class FishBehavior
     public static boolean anyFishNear(FishingHook hook)
     {
         double radius = attractRadius(hook);
-        AABB box = hook.getBoundingBox().inflate(radius);
+        // Same cylindrical sight as findNearbyBobber: a fish way down below can still come up.
+        AABB box = hook.getBoundingBox().inflate(radius, hook.level().getHeight(), radius);
         // Blacklisted types must not suppress loot fishing — a jellyfish will never bite.
-        return !hook.level().getEntitiesOfClass(AbstractFish.class, box,
-                f -> f.isAlive() && f.isInWater() && !isBlacklisted(f.getType())).isEmpty();
+        return !hook.level().getEntitiesOfClass(PathfinderMob.class, box,
+                f -> f.isAlive() && f.isInWater() && isFishLike(f)
+                        && horizontalDistSqr(f, hook) <= radius * radius).isEmpty();
     }
 
     /** How fast this bobber grows fish interest (Aquaculture bait speeds it up). */
@@ -385,7 +446,7 @@ public final class FishBehavior
     @SubscribeEvent
     public static void onFishSwimSound(net.minecraftforge.event.PlayLevelSoundEvent.AtEntity event)
     {
-        if (!(event.getEntity() instanceof AbstractFish fish) || isBlacklisted(fish.getType())) return;
+        if (!(event.getEntity() instanceof PathfinderMob fish) || !isFishLike(fish)) return;
         var sound = event.getSound();
         if (sound != null && sound.value().getLocation().equals(
                 net.minecraft.sounds.SoundEvents.FISH_SWIM.getLocation())) {
@@ -399,27 +460,36 @@ public final class FishBehavior
 
     /**
      * Something worth fleeing from: any non-fish entity splashing about in the water nearby
-     * (a certain scare — every fish bolts from a swimmer), or a player closing to melee reach
-     * (in the water or not) who is moving or mid-swing (chance-based scare). A fisher standing
-     * still on the shore never trips this.
+     * (a certain scare — every fish bolts from a swimmer), a boat gliding past (also certain:
+     * a hull overhead is the biggest thing a fish will ever see), or a player closing to melee
+     * reach (in the water or not) who is moving or mid-swing (chance-based scare). A fisher
+     * standing still on the shore — or sitting still in a boat — never trips this.
      *
      * Movement is measured by last-tick position delta, not getDeltaMovement(): server-side
-     * velocity is stale for players, whose motion arrives via packets.
+     * velocity is stale for players and boats, whose motion arrives via packets.
      */
     @Nullable
-    public static Threat findThreat(AbstractFish fish)
+    public static Threat findThreat(PathfinderMob fish)
     {
         double swimRadius = NiceCatchConfig.SERVER.swimScareRadius.get();
         double meleeRadius = NiceCatchConfig.SERVER.meleeThreatRadius.get();
-        double radius = Math.max(swimRadius, meleeRadius);
+        double boatRadius = NiceCatchConfig.SERVER.boatScareRadius.get();
+        double radius = Math.max(boatRadius, Math.max(swimRadius, meleeRadius));
         AABB box = fish.getBoundingBox().inflate(radius);
-        for (LivingEntity e : fish.level().getEntitiesOfClass(LivingEntity.class, box,
-                other -> other != fish && !(other instanceof AbstractFish) && !other.isSpectator())) {
+        for (Entity e : fish.level().getEntitiesOfClass(Entity.class, box,
+                other -> other != fish && !isFishKind(other) && !other.isSpectator()
+                        && (other instanceof LivingEntity || other instanceof Boat))) {
             double dx = e.getX() - e.xOld;
             double dy = e.getY() - e.yOld;
             double dz = e.getZ() - e.zOld;
             // Vertical motion counts too — a player diving straight down is very much moving.
             boolean moving = dx * dx + dy * dy + dz * dz > 4.0E-4D;
+            if (e instanceof Boat) {
+                if (moving && onWater(e) && fish.distanceToSqr(e) <= boatRadius * boatRadius) {
+                    return new Threat(e.position(), true);
+                }
+                continue;
+            }
             if (e.isInWater() && moving && fish.distanceToSqr(e) <= swimRadius * swimRadius) {
                 return new Threat(e.position(), true);
             }
@@ -431,13 +501,22 @@ public final class FishBehavior
         return null;
     }
 
+    /** A floating boat may ride just above the fluid, so isInWater alone can miss it. */
+    private static boolean onWater(Entity e)
+    {
+        if (e.isInWater()) return true;
+        BlockPos pos = e.blockPosition();
+        return e.level().getFluidState(pos).is(FluidTags.WATER)
+                || e.level().getFluidState(pos.below()).is(FluidTags.WATER);
+    }
+
     /** Nearby fish already interested in a valid bobber; used for follow-the-follower spreading. */
     @Nullable
-    public static FishingHook findFollowableBobber(AbstractFish fish)
+    public static FishingHook findFollowableBobber(PathfinderMob fish)
     {
         double radius = NiceCatchConfig.SERVER.followFollowerRadius.get();
         AABB box = fish.getBoundingBox().inflate(radius);
-        for (AbstractFish other : fish.level().getEntitiesOfClass(AbstractFish.class, box, f -> f != fish)) {
+        for (PathfinderMob other : fish.level().getEntitiesOfClass(PathfinderMob.class, box, f -> f != fish)) {
             FishState state = STATES.get(other);
             if (state == null || state.bobber == null || state.hooked) continue;
             if (isAttracting(state.bobber)
@@ -450,15 +529,17 @@ public final class FishBehavior
 
     /** Nearest bobber this fish could take an interest in on its own. */
     @Nullable
-    public static FishingHook findNearbyBobber(AbstractFish fish)
+    public static FishingHook findNearbyBobber(PathfinderMob fish)
     {
         double maxRadius = NiceCatchConfig.SERVER.interestRadius.get() + 8.0D; // upper bound incl. Lure bonus
-        AABB box = fish.getBoundingBox().inflate(maxRadius);
+        // Sight is a cylinder, not a sphere: a fish on the ocean floor still notices a
+        // bobber floating far above it, so only the horizontal search is bounded.
+        AABB box = fish.getBoundingBox().inflate(maxRadius, fish.level().getHeight(), maxRadius);
         FishingHook best = null;
         double bestDist = Double.MAX_VALUE;
         for (FishingHook hook : fish.level().getEntitiesOfClass(FishingHook.class, box)) {
             if (!isAttracting(hook)) continue;
-            double dist = fish.distanceToSqr(hook);
+            double dist = horizontalDistSqr(fish, hook);
             double radius = attractRadius(hook);
             if (dist > radius * radius) continue;
             if (claimedCount(hook) >= NiceCatchConfig.SERVER.maxFishPerBobber.get()) continue;

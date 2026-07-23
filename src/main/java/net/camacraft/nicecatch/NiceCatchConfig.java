@@ -47,6 +47,7 @@ public class NiceCatchConfig
         // Fish AI
         public final ForgeConfigSpec.BooleanValue entityFishingEnabled;
         public final ForgeConfigSpec.ConfigValue<java.util.List<? extends String>> fishAiBlacklist;
+        public final ForgeConfigSpec.ConfigValue<java.util.List<? extends String>> fishAiWhitelist;
         public final ForgeConfigSpec.DoubleValue interestRadius;
         public final ForgeConfigSpec.IntValue maxFishPerBobber;
         public final ForgeConfigSpec.DoubleValue interestChance;
@@ -62,6 +63,7 @@ public class NiceCatchConfig
         public final ForgeConfigSpec.DoubleValue scatterOnHookChance;
         public final ForgeConfigSpec.DoubleValue scatterRadius;
         public final ForgeConfigSpec.DoubleValue swimScareRadius;
+        public final ForgeConfigSpec.DoubleValue boatScareRadius;
         public final ForgeConfigSpec.DoubleValue meleeThreatRadius;
         public final ForgeConfigSpec.DoubleValue swimScareChance;
         public final ForgeConfigSpec.DoubleValue schoolPanicChance;
@@ -69,6 +71,7 @@ public class NiceCatchConfig
         public final ForgeConfigSpec.DoubleValue scatterSpeed;
         public final ForgeConfigSpec.IntValue scatterDurationTicks;
         public final ForgeConfigSpec.BooleanValue boidSchoolingEnabled;
+        public final ForgeConfigSpec.ConfigValue<java.util.List<? extends String>> boidBlacklist;
         public final ForgeConfigSpec.DoubleValue boidNeighborRadius;
         public final ForgeConfigSpec.DoubleValue boidSpeed;
         public final ForgeConfigSpec.DoubleValue fishSwimSoundVolume;
@@ -174,7 +177,29 @@ public class NiceCatchConfig
                     .defineListAllowEmpty("fishAiBlacklist",
                             java.util.List.of("aquaculture:jellyfish"),
                             o -> o instanceof String s && s.contains(":"));
-            interestRadius = b.comment("Radius in which fish notice a bobber and swim over.")
+            fishAiWhitelist = b.comment("Water creatures that are NOT vanilla-style fish (they don't extend AbstractFish) but should be treated as fish anyway: lured, spooked, schooled, hooked, and caught. Needed for mods like Unusual Fish whose fish are custom water animals. Same entry format as fishAiBlacklist; the blacklist wins on conflicts. Defaults cover Unusual Fish's actual fish (not its snails, crabs, squids, or jellies).")
+                    .defineListAllowEmpty("fishAiWhitelist",
+                            java.util.List.of(
+                                    "unusualfishmod:aero_mono", "unusualfishmod:amber_goby",
+                                    "unusualfishmod:bark_angelfish", "unusualfishmod:beaked_herring",
+                                    "unusualfishmod:blindsailfin", "unusualfishmod:blizzardfin",
+                                    "unusualfishmod:celestial", "unusualfishmod:circus",
+                                    "unusualfishmod:clownthorn_shark", "unusualfishmod:copperflame",
+                                    "unusualfishmod:demon_herring", "unusualfishmod:drooping_gourami",
+                                    "unusualfishmod:duality_damselfish", "unusualfishmod:eyelash",
+                                    "unusualfishmod:forkfish", "unusualfishmod:gnasher",
+                                    "unusualfishmod:hatchet_fish", "unusualfishmod:jungleshark",
+                                    "unusualfishmod:mossthorn", "unusualfishmod:picklefish",
+                                    "unusualfishmod:pinkfin", "unusualfishmod:rhino_tetra",
+                                    "unusualfishmod:ripper", "unusualfishmod:roughback_guitarfish",
+                                    "unusualfishmod:sailor_barb", "unusualfishmod:sea_pancake",
+                                    "unusualfishmod:shockcat", "unusualfishmod:sneep_snorp",
+                                    "unusualfishmod:snowflaketail", "unusualfishmod:spindlefish",
+                                    "unusualfishmod:spoon_shark", "unusualfishmod:stout_bichir",
+                                    "unusualfishmod:tiger_puffer", "unusualfishmod:triple_twirl_pleco",
+                                    "unusualfishmod:volt_angler", "unusualfishmod:zebra_cornetfish"),
+                            o -> o instanceof String s && s.contains(":"));
+            interestRadius = b.comment("Horizontal radius in which fish notice a bobber and swim over. Depth is ignored: a fish on the ocean floor can see a bobber floating any distance above it.")
                     .defineInRange("interestRadius", 12.0D, 2.0D, 32.0D);
             maxFishPerBobber = b.comment("How many fish can crowd around one bobber at a time.")
                     .defineInRange("maxFishPerBobber", 5, 1, 20);
@@ -204,6 +229,8 @@ public class NiceCatchConfig
                     .defineInRange("scatterRadius", 6.0D, 1.0D, 16.0D);
             swimScareRadius = b.comment("Fish scatter from non-fish entities swimming within this distance (always, no chance roll).")
                     .defineInRange("swimScareRadius", 6.0D, 0.5D, 16.0D);
+            boatScareRadius = b.comment("Fish scatter from a moving boat within this distance (always, like swimmers). 0 disables boat scares; a boat sitting still never scares anything.")
+                    .defineInRange("boatScareRadius", 8.0D, 0.0D, 16.0D);
             meleeThreatRadius = b.comment("Fish also scatter from any player (in water or not) who is moving or swinging within this distance.")
                     .defineInRange("meleeThreatRadius", 4.5D, 0.5D, 16.0D);
             swimScareChance = b.comment("Chance (per check, ~4x a second) that a fish scatters from a player looming in melee reach. Swimmers nearby always scatter fish regardless of this.")
@@ -218,6 +245,18 @@ public class NiceCatchConfig
                     .defineInRange("scatterDurationTicks", 90, 20, 600);
             boidSchoolingEnabled = b.comment("Same-species fish school together boids-style and regroup after a scare (replaces vanilla flock-following).")
                     .define("boidSchoolingEnabled", true);
+            boidBlacklist = b.comment("Fish that never school boids-style even with boidSchoolingEnabled on — loners like salmon or jellyfish. They keep vanilla's flock-following if they had it, and everything else (luring, scattering, hooking) still applies. Same entry format as fishAiBlacklist.")
+                    .defineListAllowEmpty("boidBlacklist",
+                            java.util.List.of(
+                                    "minecraft:salmon", "minecraft:pufferfish", "aquaculture:jellyfish",
+                                    "unusualfishmod:celestial", "unusualfishmod:clownthorn_shark",
+                                    "unusualfishmod:gnasher", "unusualfishmod:jungleshark",
+                                    "unusualfishmod:mossthorn", "unusualfishmod:pinkfin",
+                                    "unusualfishmod:ripper", "unusualfishmod:roughback_guitarfish",
+                                    "unusualfishmod:sea_pancake", "unusualfishmod:shockcat",
+                                    "unusualfishmod:spoon_shark", "unusualfishmod:stout_bichir",
+                                    "unusualfishmod:tiger_puffer", "unusualfishmod:volt_angler"),
+                            o -> o instanceof String s && s.contains(":"));
             boidNeighborRadius = b.comment("Radius in which same-species fish count as schoolmates for boids steering.")
                     .defineInRange("boidNeighborRadius", 5.0D, 1.0D, 16.0D);
             boidSpeed = b.comment("Swim speed multiplier for boids schooling (regrouping after a scare is naturally faster).")

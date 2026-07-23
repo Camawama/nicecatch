@@ -4,7 +4,7 @@ import net.camacraft.nicecatch.NiceCatchConfig;
 import net.camacraft.nicecatch.server.FishBehavior;
 import net.minecraft.util.RandomSource;
 import net.minecraft.world.entity.ai.goal.Goal;
-import net.minecraft.world.entity.animal.AbstractFish;
+import net.minecraft.world.entity.PathfinderMob;
 import net.minecraft.world.entity.projectile.FishingHook;
 import net.minecraft.world.phys.Vec3;
 
@@ -18,7 +18,7 @@ import java.util.EnumSet;
  */
 public class FollowBobberGoal extends Goal
 {
-    private final AbstractFish fish;
+    private final PathfinderMob fish;
     private double orbitAngle;
     private double orbitDir = 1.0D;
     private double orbitRadius = 1.0D;
@@ -26,7 +26,7 @@ public class FollowBobberGoal extends Goal
     private int behaviorTicks;
     private int pauseTicks;
 
-    public FollowBobberGoal(AbstractFish fish)
+    public FollowBobberGoal(PathfinderMob fish)
     {
         this.fish = fish;
         setFlags(EnumSet.of(Flag.MOVE, Flag.LOOK));
@@ -90,8 +90,9 @@ public class FollowBobberGoal extends Goal
             state.bobber = null;
             return false;
         }
+        // Horizontal leash only — a fish climbing up from the depths is still on its way.
         double leash = FishBehavior.attractRadius(hook) * 1.5D;
-        if (fish.distanceToSqr(hook) > leash * leash) {
+        if (FishBehavior.horizontalDistSqr(fish, hook) > leash * leash) {
             state.bobber = null;
             return false;
         }

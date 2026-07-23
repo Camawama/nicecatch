@@ -3,7 +3,7 @@ package net.camacraft.nicecatch.server.goal;
 import net.minecraft.core.BlockPos;
 import net.minecraft.tags.FluidTags;
 import net.minecraft.util.Mth;
-import net.minecraft.world.entity.animal.AbstractFish;
+import net.minecraft.world.entity.PathfinderMob;
 import net.minecraft.world.entity.animal.Pufferfish;
 import net.minecraft.world.phys.Vec3;
 
@@ -20,14 +20,14 @@ public final class FishSteering
 {
     private FishSteering() {}
 
-    public static void swimToward(AbstractFish fish, Vec3 target, double accel, double maxSpeed)
+    public static void swimToward(PathfinderMob fish, Vec3 target, double accel, double maxSpeed)
     {
         Vec3 dir = target.subtract(fish.position());
         if (dir.lengthSqr() < 1.0E-4D) return;
         steer(fish, dir.normalize(), accel, maxSpeed);
     }
 
-    public static void swimAway(AbstractFish fish, Vec3 from, double accel, double maxSpeed)
+    public static void swimAway(PathfinderMob fish, Vec3 from, double accel, double maxSpeed)
     {
         Vec3 dir = fish.position().subtract(from);
         dir = new Vec3(dir.x, dir.y * 0.3D, dir.z); // flee mostly horizontally
@@ -39,7 +39,7 @@ public final class FishSteering
     }
 
     /** Sideways impulse for evasive zig-zags while fleeing. */
-    public static void jink(AbstractFish fish, double strength)
+    public static void jink(PathfinderMob fish, double strength)
     {
         Vec3 v = fish.getDeltaMovement();
         Vec3 side = new Vec3(-v.z, 0.0D, v.x);
@@ -48,7 +48,7 @@ public final class FishSteering
         fish.setDeltaMovement(v.add(side.normalize().scale(strength * sign)));
     }
 
-    private static void steer(AbstractFish fish, Vec3 dir, double accel, double maxSpeed)
+    private static void steer(PathfinderMob fish, Vec3 dir, double accel, double maxSpeed)
     {
         if (!fish.isInWater()) return;
 
@@ -87,7 +87,7 @@ public final class FishSteering
     }
 
     /** If the heading runs into non-water within ~1.5 blocks, rotate away until it doesn't. */
-    private static Vec3 avoidWalls(AbstractFish fish, Vec3 dir)
+    private static Vec3 avoidWalls(PathfinderMob fish, Vec3 dir)
     {
         if (isOpen(fish, dir, 1.5D)) return dir;
         for (int step = 1; step <= 3; step++) {
@@ -101,13 +101,13 @@ public final class FishSteering
     }
 
     /** Probes at the fish's own depth (probing above it would misread the surface as a wall). */
-    private static boolean isOpen(AbstractFish fish, Vec3 dir, double distance)
+    private static boolean isOpen(PathfinderMob fish, Vec3 dir, double distance)
     {
         Vec3 probe = fish.position().add(dir.x * distance, Math.min(dir.y, 0.0D) * distance, dir.z * distance);
         return waterAt(fish, probe.x, probe.y, probe.z);
     }
 
-    private static boolean waterAt(AbstractFish fish, double x, double y, double z)
+    private static boolean waterAt(PathfinderMob fish, double x, double y, double z)
     {
         return fish.level().getFluidState(BlockPos.containing(x, y, z)).is(FluidTags.WATER);
     }
@@ -117,7 +117,7 @@ public final class FishSteering
      * with open water both near and far, and weights in the away-from-threat direction — but a
      * cornered fish will happily pick a route right past the threat over hugging the wall.
      */
-    public static Vec3 chooseEscapeDir(AbstractFish fish, Vec3 threat)
+    public static Vec3 chooseEscapeDir(PathfinderMob fish, Vec3 threat)
     {
         Vec3 away = fish.position().subtract(threat);
         away = new Vec3(away.x, 0.0D, away.z);
@@ -147,7 +147,7 @@ public final class FishSteering
         return new Vec3(v.x * cos - v.z * sin, v.y, v.x * sin + v.z * cos);
     }
 
-    public static void faceMovement(AbstractFish fish)
+    public static void faceMovement(PathfinderMob fish)
     {
         Vec3 v = fish.getDeltaMovement();
         if (v.horizontalDistanceSqr() < 1.0E-5D) return;

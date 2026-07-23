@@ -40,6 +40,9 @@ public class FishFight
     public float veer;
     public float veerTarget;
     public int veerTicks;
+    /** Vertical analogue of veer, biased downward: a fighting fish likes to sound for the deep. */
+    public float dive;
+    public float diveTarget;
     /** This run is a charge: the fish sprints back toward the player, dumping slack on you. */
     public boolean charge;
 

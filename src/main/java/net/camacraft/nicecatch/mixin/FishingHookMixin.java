@@ -1,6 +1,5 @@
 package net.camacraft.nicecatch.mixin;
 
-import net.minecraft.world.entity.animal.AbstractFish;
 import net.minecraft.world.entity.projectile.FishingHook;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.injection.At;
@@ -18,6 +17,10 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
  * transitions let the fight system enter it from BOBBING when a real fish takes the line, and
  * fall back to BOBBING when the fish gets off, on both sides symmetrically (hookedIn syncs
  * via entity data). Fields are AT'd public rather than shadowed.
+ *
+ * The trigger is simply "hookedIn is set": the only thing that points a bobbing hook at an
+ * entity is the fight's own setHookedEntity(fish), so no entity-type check is needed here —
+ * which also keeps this client-side path free of any server-config lookups.
  */
 @Mixin(FishingHook.class)
 public abstract class FishingHookMixin
@@ -26,12 +29,11 @@ public abstract class FishingHookMixin
     private void nicecatch$glueToHookedFish(CallbackInfo ci)
     {
         FishingHook self = (FishingHook) (Object) this;
-        if (self.hookedIn instanceof AbstractFish) {
+        if (self.hookedIn != null) {
             if (self.currentState == FishingHook.FishHookState.BOBBING) {
                 self.currentState = FishingHook.FishHookState.HOOKED_IN_ENTITY;
             }
-        } else if (self.hookedIn == null
-                && self.currentState == FishingHook.FishHookState.HOOKED_IN_ENTITY) {
+        } else if (self.currentState == FishingHook.FishHookState.HOOKED_IN_ENTITY) {
             // The fish came off the line; resume bobbing so the hook floats back up.
             self.currentState = FishingHook.FishHookState.BOBBING;
         }

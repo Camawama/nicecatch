@@ -14,7 +14,7 @@ import net.minecraft.sounds.SoundSource;
 import net.minecraft.stats.Stats;
 import net.minecraft.world.entity.EntityType;
 import net.minecraft.world.entity.ExperienceOrb;
-import net.minecraft.world.entity.animal.AbstractFish;
+import net.minecraft.world.entity.PathfinderMob;
 import net.minecraft.world.entity.item.ItemEntity;
 import net.minecraft.world.item.Item;
 import net.minecraft.world.item.ItemStack;
@@ -73,7 +73,7 @@ public final class FishConversion
     }
 
     /** Called by the fight when the fish is launched out of the water toward the player. */
-    public static void beginPull(ServerPlayer player, AbstractFish fish, float doubleCatchChance)
+    public static void beginPull(ServerPlayer player, PathfinderMob fish, float doubleCatchChance)
     {
         PendingPull pull = new PendingPull();
         pull.fishId = fish.getUUID();
@@ -103,7 +103,7 @@ public final class FishConversion
             if (player == null) {
                 // Owner vanished mid-pull; wake the fish back up wherever it is.
                 for (ServerLevel level : server.getAllLevels()) {
-                    AbstractFish stranded = resolveFish(level, pull.fishId);
+                    PathfinderMob stranded = resolveFish(level, pull.fishId);
                     if (stranded != null) {
                         FishBehavior.setHooked(stranded, false);
                         FishBehavior.scatter(stranded, stranded.position(), 60);
@@ -113,7 +113,7 @@ public final class FishConversion
                 it.remove();
                 continue;
             }
-            AbstractFish fish = resolveFish(player.serverLevel(), pull.fishId);
+            PathfinderMob fish = resolveFish(player.serverLevel(), pull.fishId);
             if (fish == null) {
                 it.remove();
                 continue;
@@ -127,13 +127,13 @@ public final class FishConversion
     }
 
     @Nullable
-    private static AbstractFish resolveFish(ServerLevel level, UUID id)
+    private static PathfinderMob resolveFish(ServerLevel level, UUID id)
     {
-        return level.getEntity(id) instanceof AbstractFish fish && fish.isAlive() ? fish : null;
+        return level.getEntity(id) instanceof PathfinderMob fish && fish.isAlive() ? fish : null;
     }
 
     /** Swap the flying fish for its item: splash, pickup sound, straight into the inventory. */
-    private static void convert(ServerPlayer player, AbstractFish fish, float doubleCatchChance)
+    private static void convert(ServerPlayer player, PathfinderMob fish, float doubleCatchChance)
     {
         ServerLevel level = player.serverLevel();
         ItemStack stack = itemFor(level, fish);
@@ -167,7 +167,7 @@ public final class FishConversion
      * their item (minecraft:cod, aquaculture:atlantic_cod...). Otherwise roll the entity's own
      * loot table, and as a last resort hand over a cod rather than nothing.
      */
-    private static ItemStack itemFor(ServerLevel level, AbstractFish fish)
+    private static ItemStack itemFor(ServerLevel level, PathfinderMob fish)
     {
         ResourceLocation key = ForgeRegistries.ENTITY_TYPES.getKey(fish.getType());
         if (key != null) {
@@ -254,7 +254,7 @@ public final class FishConversion
     private static void release(ServerLevel level, ItemEntity item, RecentCatch recent)
     {
         var entity = recent.type.create(level);
-        if (!(entity instanceof AbstractFish fish)) return;
+        if (!(entity instanceof PathfinderMob fish)) return;
         fish.load(recent.nbt.copy());
         fish.moveTo(item.getX(), item.getY(), item.getZ(), level.random.nextFloat() * 360.0F, 0.0F);
         level.addFreshEntity(fish);

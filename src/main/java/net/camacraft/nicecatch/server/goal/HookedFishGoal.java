@@ -2,7 +2,7 @@ package net.camacraft.nicecatch.server.goal;
 
 import net.camacraft.nicecatch.server.FishBehavior;
 import net.minecraft.world.entity.ai.goal.Goal;
-import net.minecraft.world.entity.animal.AbstractFish;
+import net.minecraft.world.entity.PathfinderMob;
 
 import java.util.EnumSet;
 
@@ -12,9 +12,9 @@ import java.util.EnumSet;
  */
 public class HookedFishGoal extends Goal
 {
-    private final AbstractFish fish;
+    private final PathfinderMob fish;
 
-    public HookedFishGoal(AbstractFish fish)
+    public HookedFishGoal(PathfinderMob fish)
     {
         this.fish = fish;
         setFlags(EnumSet.of(Flag.MOVE, Flag.LOOK, Flag.JUMP));

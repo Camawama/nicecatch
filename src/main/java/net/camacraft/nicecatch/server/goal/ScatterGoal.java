@@ -3,7 +3,7 @@ package net.camacraft.nicecatch.server.goal;
 import net.camacraft.nicecatch.NiceCatchConfig;
 import net.camacraft.nicecatch.server.FishBehavior;
 import net.minecraft.world.entity.ai.goal.Goal;
-import net.minecraft.world.entity.animal.AbstractFish;
+import net.minecraft.world.entity.PathfinderMob;
 import net.minecraft.world.phys.Vec3;
 
 import java.util.EnumSet;
@@ -20,13 +20,13 @@ import java.util.EnumSet;
  */
 public class ScatterGoal extends Goal
 {
-    private final AbstractFish fish;
+    private final PathfinderMob fish;
     private Vec3 fleeDir = Vec3.ZERO;
     private int commitTicks;
     private int jinkTicks;
     private int slowTicks;
 
-    public ScatterGoal(AbstractFish fish)
+    public ScatterGoal(PathfinderMob fish)
     {
         this.fish = fish;
         setFlags(EnumSet.of(Flag.MOVE, Flag.LOOK));
