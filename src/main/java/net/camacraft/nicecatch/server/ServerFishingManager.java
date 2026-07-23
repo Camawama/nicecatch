@@ -303,16 +303,23 @@ public class ServerFishingManager
     private static void beginFight(ServerPlayer player, Session session, FishingHook hook, FishFight fight)
     {
         RandomSource random = player.getRandom();
-        fight.progress = 0.15F;
-        fight.calmTicks = 15 + random.nextInt(25);
-        fight.graceTicks = NiceCatchConfig.SERVER.escapeGraceTicks.get();
+        NiceCatchConfig.Server cfg = NiceCatchConfig.SERVER;
+        double dist = player.distanceTo(hook);
+        // Give at least a few blocks of line-room beyond wherever the hook was set,
+        // but never enough that vanilla's 32-block check breaks the line before we can.
+        fight.lineLength = (float) Math.min(31.0D, Math.max(cfg.lineLength.get(), dist + 4.0D));
+        fight.progress = closeness(fight, dist);
+        // Setting the hook always triggers a panicked first run — even a close fish
+        // tears line off before you can start gaining any.
+        fight.runTicks = 25 + random.nextInt(15);
+        fight.graceTicks = cfg.escapeGraceTicks.get();
         session.fight = fight;
         session.prevBite = true;
 
         ServerLevel level = player.serverLevel();
         level.playSound(null, hook.getX(), hook.getY(), hook.getZ(),
                 SoundEvents.GENERIC_SPLASH, SoundSource.NEUTRAL, 0.4F, 1.2F);
-        NiceCatchNet.sendTo(player, new FightTickMessage(fight.progress, fight.tension, false));
+        NiceCatchNet.sendTo(player, new FightTickMessage(fight.progress, fight.tension, fight.fatigue, true));
     }
 
     public static void onReelInput(ServerPlayer player, float crank, float lift, boolean holding)
@@ -644,19 +651,25 @@ public class ServerFishingManager
         fight.ticks++;
         if (fight.graceTicks > 0) fight.graceTicks--;
 
-        // Run/calm phases.
+        // Run/calm phases: a tiring fish runs shorter, less often, and less hard.
         boolean run;
         if (fight.runTicks > 0) {
             fight.runTicks--;
             run = fight.runTicks > 0;
             if (!run) {
-                fight.calmTicks = 30 + random.nextInt(40);
+                fight.calmTicks = (int) ((30 + random.nextInt(40)) * (1.0F + fight.fatigue));
             }
         } else {
             fight.calmTicks--;
             run = fight.calmTicks <= 0;
+            if (run && fight.fatigue >= 0.97F) {
+                // Played out: there is no fight left in it, just keep cranking it in.
+                run = false;
+                fight.calmTicks = 30 + random.nextInt(30);
+            }
             if (run) {
-                fight.runTicks = (int) ((20 + random.nextInt(20)) * (0.7F + 0.6F * fight.strength));
+                fight.runTicks = (int) ((20 + random.nextInt(20)) * (0.7F + 0.6F * fight.strength)
+                        * (1.0F - 0.55F * fight.fatigue));
                 level.playSound(null, hook.getX(), hook.getY(), hook.getZ(),
                         SoundEvents.FISHING_BOBBER_SPLASH, SoundSource.NEUTRAL, 0.4F, 0.7F);
             }
@@ -667,23 +680,27 @@ public class ServerFishingManager
         fight.pendingCrank = 0.0F;
         fight.pendingLift = 0.0F;
 
-        float revRate = cfg.progressPerRevolution.get().floatValue() * fight.reelScale;
+        // Fatigue is the fish's stamina: fighting the crank drains it, runs are exhausting,
+        // slack lets it recover. Big fish have deeper reserves.
+        float wear = 1.0F / (0.5F + 1.5F * fight.strength);
         if (fight.holding) {
             if (run) {
-                fight.progress += crank * revRate * cfg.runReelEffectiveness.get().floatValue();
+                fight.fatigue += (cfg.fatiguePerRunTick.get().floatValue()
+                        + crank * cfg.fatiguePerRevolution.get().floatValue() * 0.5F) * wear;
                 fight.tension += (crank * cfg.tensionPerRevolutionRun.get().floatValue()
                         + 0.004F * (0.5F + fight.strength)) / fight.tensionScale;
-                float resist = Mth.clamp(lift * cfg.liftRunResistance.get().floatValue(), 0.0F, 0.85F);
-                fight.progress -= cfg.runPullPerTick.get().floatValue() * (0.5F + 0.8F * fight.strength) * (1.0F - resist);
             } else {
-                fight.progress += crank * revRate + lift * cfg.liftProgressBonus.get().floatValue();
+                fight.fatigue += crank * cfg.fatiguePerRevolution.get().floatValue() * wear;
+                fight.tension += crank * cfg.tensionPerRevolutionCalm.get().floatValue()
+                        * (0.5F + fight.strength) / fight.tensionScale;
                 fight.tension -= cfg.tensionRecoveryPerTick.get().floatValue();
             }
         } else {
-            float decay = cfg.slackLossPerTick.get().floatValue() * (0.5F + fight.strength);
-            fight.progress -= run ? decay * 2.5F : decay;
+            fight.fatigue += run ? cfg.fatiguePerRunTick.get().floatValue() * wear * 0.5F
+                    : -cfg.fatigueRecoverPerTick.get().floatValue();
             fight.tension -= cfg.tensionRecoveryPerTick.get().floatValue() * 2.0F;
         }
+        fight.fatigue = Mth.clamp(fight.fatigue, 0.0F, 1.0F);
         fight.tension = Mth.clamp(fight.tension, 0.0F, 1.0F);
 
         // Line snap.
@@ -702,8 +719,14 @@ public class ServerFishingManager
             return;
         }
 
-        // Fish escapes when all progress is lost.
-        if (fight.progress <= 0.0F && fight.graceTicks <= 0) {
+        moveHookedFish(player, fight, hook, fish, level, random, run, crank, lift);
+
+        // The bar IS the line: distance decides everything from here.
+        double dist = fish.distanceTo(player);
+        fight.progress = closeness(fight, dist);
+
+        // Spooled — the fish took every last block of line and tears free.
+        if (dist >= fight.lineLength - 0.25D && fight.graceTicks <= 0) {
             freeFish(fish, hook.position());
             hook.setHookedEntity(null);
             level.playSound(null, hook.getX(), hook.getY(), hook.getZ(),
@@ -711,27 +734,28 @@ public class ServerFishingManager
             endFight(player, session, FightEndMessage.ESCAPED);
             return;
         }
-        fight.progress = Math.max(fight.progress, fight.graceTicks > 0 ? 0.02F : 0.0F);
 
-        // Worn down — but you still have to bring it in close before it counts as landed.
-        if (fight.progress >= 1.0F) {
-            double landDist = cfg.landDistance.get();
-            if (fish.distanceToSqr(player) <= landDist * landDist) {
-                landEntityFish(player, session, hook, fight, fish, level);
-                if (cfg.bonusXp.get() && fight.strength > 0.6F) {
-                    int bonus = Math.round((fight.strength - 0.6F) * 8.0F);
-                    if (bonus > 0) {
-                        level.addFreshEntity(new ExperienceOrb(level, player.getX(), player.getY() + 0.5D, player.getZ(), bonus));
-                    }
+        // Landed — hauled all the way in while it isn't running.
+        if (!run && dist <= cfg.landDistance.get() && fight.graceTicks <= 0) {
+            landEntityFish(player, session, hook, fight, fish, level);
+            if (cfg.bonusXp.get() && fight.strength > 0.6F) {
+                int bonus = Math.round((fight.strength - 0.6F) * 8.0F);
+                if (bonus > 0) {
+                    level.addFreshEntity(new ExperienceOrb(level, player.getX(), player.getY() + 0.5D, player.getZ(), bonus));
                 }
-                endFight(player, session, FightEndMessage.CAUGHT);
-                return;
             }
-            fight.progress = 1.0F; // hold full: the fish is beaten, keep cranking it closer
+            endFight(player, session, FightEndMessage.CAUGHT);
+            return;
         }
 
-        moveHookedFish(player, fight, hook, fish, level, random, run, crank);
-        NiceCatchNet.sendTo(player, new FightTickMessage(fight.progress, fight.tension, run));
+        NiceCatchNet.sendTo(player, new FightTickMessage(fight.progress, fight.tension, fight.fatigue, run));
+    }
+
+    /** 0..1 line-retrieved fraction for the HUD bar: 1 at landing range, 0 with all line out. */
+    private static float closeness(FishFight fight, double dist)
+    {
+        double landDist = NiceCatchConfig.SERVER.landDistance.get();
+        return (float) Mth.clamp((fight.lineLength - dist) / Math.max(1.0D, fight.lineLength - landDist), 0.0D, 1.0D);
     }
 
     /** Launch the beaten fish out of the water toward the player, vanilla-loot style. */
@@ -766,17 +790,34 @@ public class ServerFishingManager
     /** The fish is the thing that runs; the bobber rides it via the hooked-entity glue. */
     private static void moveHookedFish(ServerPlayer player, FishFight fight, FishingHook hook,
                                        AbstractFish fish, ServerLevel level, RandomSource random,
-                                       boolean run, float crank)
+                                       boolean run, float crank, float lift)
     {
+        NiceCatchConfig.Server cfg = NiceCatchConfig.SERVER;
         Vec3 toPlayer = new Vec3(player.getX() - fish.getX(), 0.0D, player.getZ() - fish.getZ());
         double dist = toPlayer.length();
 
+        // Top speed (blocks/tick) the crank is dragging the fish player-ward this tick.
+        // Strong fish drag their heels; fatigue erodes that resistance; lifting the rod
+        // while calm pumps extra speed.
+        double target = 0.0D;
+        if (fight.holding && crank > 0.001F && dist > 1.2D) {
+            double crankFrac = Math.min(1.0D, crank / cfg.maxRevolutionsPerTick.get());
+            double resist = 0.5D * fight.strength * (1.0D - 0.6D * fight.fatigue);
+            double pump = run ? 1.0D : 1.0D + Math.min(1.0D, lift * cfg.liftPumpBonus.get());
+            target = cfg.reelInSpeed.get() / 20.0D * crankFrac * (1.0D - resist) * pump * fight.reelScale;
+            if (run) target *= cfg.runReelEffectiveness.get();
+        }
+
         if (run) {
-            if (dist > 0.01D && dist < 26.0D) { // vanilla breaks the line beyond 32 blocks; stay inside that
-                Vec3 away = toPlayer.normalize().scale(-(0.05D + 0.06D * fight.strength));
+            if (dist > 0.01D && dist < fight.lineLength) {
+                // The run's pull, sapped by fatigue and resisted by rod lift; cranking
+                // still winches against it at reduced effect (and heavy tension cost).
+                double liftResist = Mth.clamp(lift * cfg.liftRunResistance.get(), 0.0D, 0.85D);
+                double force = (0.05D + 0.06D * fight.strength) * (1.0D - 0.7D * fight.fatigue) * (1.0D - liftResist);
+                Vec3 away = toPlayer.normalize().scale(-force + target * 0.3D);
                 Vec3 wobble = new Vec3((random.nextDouble() - 0.5D) * 0.06D, 0.0D, (random.nextDouble() - 0.5D) * 0.06D);
                 fish.setDeltaMovement(fish.getDeltaMovement().scale(0.7D).add(away).add(wobble));
-            } else if (dist >= 26.0D) {
+            } else if (dist >= fight.lineLength) {
                 fish.setDeltaMovement(fish.getDeltaMovement().scale(0.5D));
             }
             if (fight.ticks % 4 == 0) {
@@ -787,9 +828,15 @@ public class ServerFishingManager
                 level.playSound(null, fish.getX(), fish.getY(), fish.getZ(),
                         SoundEvents.GENERIC_SPLASH, SoundSource.NEUTRAL, 0.25F, 1.2F + random.nextFloat() * 0.3F);
             }
-        } else if (fight.holding && crank > 0.001F && dist > 1.2D) {
-            double pull = Math.min(0.16D, crank * 1.8D);
-            fish.setDeltaMovement(fish.getDeltaMovement().scale(0.8D).add(toPlayer.normalize().scale(pull)));
+        } else if (target > 0.0D) {
+            // Speed-limited tug of war: the hard clamp means the fish can never fling in.
+            Vec3 wobble = new Vec3((random.nextDouble() - 0.5D) * 0.03D, 0.0D, (random.nextDouble() - 0.5D) * 0.03D);
+            Vec3 v = fish.getDeltaMovement().scale(0.8D).add(toPlayer.normalize().scale(target * 0.2D)).add(wobble);
+            double horiz = Math.sqrt(v.x * v.x + v.z * v.z);
+            if (horiz > target) {
+                v = new Vec3(v.x * target / horiz, v.y, v.z * target / horiz);
+            }
+            fish.setDeltaMovement(v);
             if (fight.ticks % 6 == 0) {
                 level.sendParticles(ParticleTypes.FISHING, fish.getX(), fish.getY() + 0.1D, fish.getZ(),
                         2, 0.1D, 0.05D, 0.1D, 0.0D);

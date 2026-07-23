@@ -2,9 +2,9 @@
   "nicecatch.hint.charge": "Release to cast — power follows the bar",
   "nicecatch.hint.bite": "Bite! Right-click to set the hook!",
   "nicecatch.hint.loot_bite": "Something's on the line! Right-click to reel it in",
-  "nicecatch.hint.reel": "Hold right-click and circle your mouse to reel",
+  "nicecatch.hint.reel": "Hold right-click and circle your mouse to reel it in",
   "nicecatch.hint.run": "It's running! Ease off and pull the rod up",
   "nicecatch.hint.tension": "Line about to snap — stop cranking!",
-  "nicecatch.hint.close": "It's worn out — crank it in close!",
+  "nicecatch.hint.tired": "It's worn out — reel it home!",
   "nicecatch.hint.caught": "Nice catch!"
 }

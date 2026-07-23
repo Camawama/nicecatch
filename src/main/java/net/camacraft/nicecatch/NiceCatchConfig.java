@@ -23,12 +23,13 @@ public class NiceCatchConfig
         public final ForgeConfigSpec.DoubleValue castPowerMin;
         public final ForgeConfigSpec.DoubleValue castPowerMax;
         public final ForgeConfigSpec.DoubleValue biteWindowMultiplier;
-        public final ForgeConfigSpec.DoubleValue progressPerRevolution;
         public final ForgeConfigSpec.DoubleValue runReelEffectiveness;
-        public final ForgeConfigSpec.DoubleValue slackLossPerTick;
-        public final ForgeConfigSpec.DoubleValue runPullPerTick;
         public final ForgeConfigSpec.DoubleValue liftRunResistance;
-        public final ForgeConfigSpec.DoubleValue liftProgressBonus;
+        public final ForgeConfigSpec.DoubleValue liftPumpBonus;
+        public final ForgeConfigSpec.DoubleValue lineLength;
+        public final ForgeConfigSpec.DoubleValue fatiguePerRevolution;
+        public final ForgeConfigSpec.DoubleValue fatiguePerRunTick;
+        public final ForgeConfigSpec.DoubleValue fatigueRecoverPerTick;
         public final ForgeConfigSpec.DoubleValue tensionPerRevolutionRun;
         public final ForgeConfigSpec.DoubleValue tensionPerRevolutionCalm;
         public final ForgeConfigSpec.DoubleValue tensionRecoveryPerTick;
@@ -38,6 +39,7 @@ public class NiceCatchConfig
         public final ForgeConfigSpec.DoubleValue fishStrengthMax;
         public final ForgeConfigSpec.BooleanValue bonusXp;
         public final ForgeConfigSpec.DoubleValue maxRevolutionsPerTick;
+        public final ForgeConfigSpec.DoubleValue reelInSpeed;
         public final ForgeConfigSpec.IntValue escapeGraceTicks;
 
         // Fish AI
@@ -115,20 +117,24 @@ public class NiceCatchConfig
             b.pop();
 
             b.push("fight");
-            progressPerRevolution = b.comment("Catch progress gained per full crank of the mouse while the fish is calm.")
-                    .defineInRange("progressPerRevolution", 0.09D, 0.01D, 1.0D);
-            runReelEffectiveness = b.comment("Fraction of normal reeling progress gained while the fish is running.")
+            lineLength = b.comment("Blocks of line on the reel. The bar shows line retrieved; the fish escapes if it takes it all. Must stay under 32 (vanilla breaks the line there).")
+                    .defineInRange("lineLength", 30.0D, 10.0D, 31.0D);
+            runReelEffectiveness = b.comment("Fraction of your reel-in pull that still applies while the fish is running (cranking through a run builds heavy tension).")
                     .defineInRange("runReelEffectiveness", 0.35D, 0.0D, 1.0D);
-            slackLossPerTick = b.comment("Catch progress lost per tick while not holding the reel (scaled up during runs).")
-                    .defineInRange("slackLossPerTick", 0.0045D, 0.0D, 0.1D);
-            runPullPerTick = b.comment("Catch progress the fish takes back per tick during a run (before rod-lift resistance).")
-                    .defineInRange("runPullPerTick", 0.0075D, 0.0D, 0.1D);
-            liftRunResistance = b.comment("How strongly pulling the mouse up resists a running fish (per lift unit).")
+            liftRunResistance = b.comment("How strongly pulling the mouse up (lifting the rod) resists a running fish taking line (per lift unit).")
                     .defineInRange("liftRunResistance", 1.6D, 0.0D, 10.0D);
-            liftProgressBonus = b.comment("Extra catch progress per lift unit while the fish is calm.")
-                    .defineInRange("liftProgressBonus", 0.02D, 0.0D, 0.5D);
+            liftPumpBonus = b.comment("Extra reel-in speed per lift unit while the fish is calm — pumping the rod as you crank.")
+                    .defineInRange("liftPumpBonus", 0.5D, 0.0D, 2.0D);
+            fatiguePerRevolution = b.comment("Fish stamina drained per full crank revolution while it is calm. Fatigue is what weakens and shortens its runs.")
+                    .defineInRange("fatiguePerRevolution", 0.04D, 0.005D, 0.5D);
+            fatiguePerRunTick = b.comment("Fish stamina drained per tick while it is running (runs are exhausting).")
+                    .defineInRange("fatiguePerRunTick", 0.003D, 0.0D, 0.05D);
+            fatigueRecoverPerTick = b.comment("Fish stamina regained per tick while you give it slack — don't let it rest.")
+                    .defineInRange("fatigueRecoverPerTick", 0.0015D, 0.0D, 0.05D);
             maxRevolutionsPerTick = b.comment("Server-side cap on crank speed, in mouse revolutions per tick.")
                     .defineInRange("maxRevolutionsPerTick", 0.25D, 0.05D, 1.0D);
+            reelInSpeed = b.comment("Top speed, in blocks per second, at which full-speed cranking drags a calm fish toward the player. The strongest fish resist down to about half this.")
+                    .defineInRange("reelInSpeed", 4.0D, 0.5D, 10.0D);
             escapeGraceTicks = b.comment("Ticks after hooking a fish before it is allowed to escape by taking all the line.")
                     .defineInRange("escapeGraceTicks", 50, 0, 200);
             b.pop();

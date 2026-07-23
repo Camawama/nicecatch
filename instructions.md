@@ -39,35 +39,40 @@ escaped fish avoid biting much longer.
 
 You're now locked on: mouse movement drives the rod, not the camera.
 
+**The bar is your line.** Full means the fish has been hauled to your feet; empty means
+it has taken every block of line off the reel — and **rips free**. Setting the hook always
+triggers a panicked first run, so expect the bar to drop before you can gain an inch.
+
 **Your two inputs, both while holding right-click:**
 
 | Motion | Meaning | Effect |
 |---|---|---|
-| **Circle the mouse** (either direction) | Cranking the reel | Main source of catch progress; also pulls the fish toward you |
-| **Pull the mouse straight up** | Lifting the rod | During a **run**: braces against the fish and cancels most of its pull. While **calm**: a small "pumping the rod" progress bonus |
+| **Circle the mouse** (either direction) | Cranking the reel | Physically drags the fish toward you, retrieving line — and wears the fish down |
+| **Pull the mouse straight up** | Lifting the rod | During a **run**: braces against the fish so it takes far less line. While **calm**: "pumping the rod" adds extra reel-in speed |
 
-Yes, upward pulls reel a little on purpose — that's the rod-pump. The crank is still where
-most of your progress comes from. (Straight back-and-forth shaking is rejected; only real
-circular motion cranks.)
+(Straight back-and-forth shaking is rejected; only real circular motion cranks.)
 
 **The fish alternates between two states:**
 
-- **Calm** — crank away. Progress climbs, tension drains.
-- **Running** (bar shakes, splashing, camera rumbles) — the fish is sprinting away.
-  Cranking now barely helps and **builds tension fast**. Ease off the crank and **lift**
-  to hold your ground until the run ends.
+- **Calm** — crank away. The fish comes in steadily, tension drains.
+- **Running** (bar shakes, splashing, camera rumbles) — the fish is sprinting away and
+  taking line. Cranking through a run only winches a fraction and **builds tension fast**.
+  Ease off the crank and **lift** to hold your ground until the run ends.
 
-**The bar shows progress; its color shows tension** (green → gold → red). Tension maxes
-out → **the line snaps**: bobber, fish, and some rod durability gone. Stop cranking and
-tension recovers.
+**Fatigue is the real war.** Every crank and every run drains the fish's stamina: fresh
+fish rip back most of what you gain, but their runs get shorter, rarer, and weaker as they
+tire. Big fish have far deeper reserves. When you see "It's worn out — reel it home!", the
+fight is yours to lose. Giving slack lets the fish **rest and recover** — don't.
 
-**Letting go of right-click** gives slack: tension drains fast, but progress bleeds away —
-and a running fish takes back much more. If progress hits zero, the fish throws the hook.
+**The bar's color shows tension** (green → gold → red). Tension maxes out → **the line
+snaps**: bobber, fish, and some rod durability gone. Stop cranking and tension recovers.
 
-**Landing**: even at full progress the fish isn't yours until you've cranked it **close to
-you** (~5 blocks). "It's worn out — crank it in close!" means exactly that. Then the fish
-launches out of the water and becomes its item in your inventory — bigger fish (by actual
-hitbox size) fight harder the whole way.
+**Letting go of right-click** gives slack: tension drains fast, but the fish recovers
+stamina and every run takes line unopposed — let that go on and it spools you.
+
+**Landing**: crank the fish all the way in (~5 blocks) while it's calm and it launches
+out of the water, becoming its item in your inventory — bigger fish (by actual hitbox
+size) pull harder and last longer the whole way.
 
 ## 5. Catch and release
 

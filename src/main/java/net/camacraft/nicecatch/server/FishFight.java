@@ -13,13 +13,20 @@ public class FishFight
     @Nullable public UUID fishId;
     /** 0..1, how hard this fish fights. Entity fights derive this from hitbox size. */
     public float strength;
-    /** 0..1, catch progress. Fish is landed at 1, escapes at 0 (after the grace period). */
+    /**
+     * 0..1, line retrieved — derived from the fish's distance each tick, this is what the
+     * HUD bar shows. Full means the fish is at landing range; empty means it took all the line.
+     */
     public float progress;
+    /** 0..1, how played-out the fish is. Cranking drains it, slack restores it; tired fish run weak. */
+    public float fatigue;
+    /** Blocks of line on the reel this fight; the fish escapes if it gets this far away. */
+    public float lineLength = 30.0F;
     /** 0..1, line tension. The line snaps at 1 if snapping is enabled. */
     public float tension;
     /** Tension gain is divided by this; >1 with Aquaculture line, hooks, and rod tiers. */
     public float tensionScale = 1.0F;
-    /** Crank progress is multiplied by this; >1 with higher-tier Aquaculture rods. */
+    /** Reel-in pull speed is multiplied by this; >1 with higher-tier Aquaculture rods. */
     public float reelScale = 1.0F;
     /** Chance to double the caught item (Aquaculture double hook). */
     public float doubleCatchChance;

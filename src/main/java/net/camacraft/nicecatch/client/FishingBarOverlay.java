@@ -54,8 +54,8 @@ public class FishingBarOverlay
                     drawHint(graphics, window, y, "nicecatch.hint.tension", 0xFFFF4040, true);
                 } else if (ClientFishing.isFishRunning()) {
                     drawHint(graphics, window, y, "nicecatch.hint.run", 0xFFE8C33A, false);
-                } else if (ClientFishing.shownProgress() > 0.95F) {
-                    drawHint(graphics, window, y, "nicecatch.hint.close", 0xFF7EE0C8, false);
+                } else if (ClientFishing.fatigue() > 0.85F) {
+                    drawHint(graphics, window, y, "nicecatch.hint.tired", 0xFF7EE0C8, false);
                 } else {
                     drawHint(graphics, window, y, "nicecatch.hint.reel", 0xFFB6E8A0, false);
                 }

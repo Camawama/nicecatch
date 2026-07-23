@@ -35,13 +35,18 @@ mouse now works the reel instead of the camera.
 Spin the mouse in circles to crank the reel. Direction doesn't matter, but shaking it back
 and forth won't fool it. Pulling the mouse straight up braces the rod against a running fish.
 
+The bar over your hotbar is your line: cranking physically drags the fish closer and fills
+it, runs drain it as the fish takes line back out. Let it take everything and it rips free;
+haul it all the way in and it's caught.
+
 The fish alternates between resting and running, you'll see it splash and drag the bobber
 along with it. Cranking hard during a run builds line tension (the bar goes green to gold to
 red). Max tension snaps the line and you lose the fish, the bobber, and some rod durability.
+The real war is stamina: every crank tires the fish, so its runs get shorter and weaker
+until you can reel it home — but give it slack and it recovers.
 
-Bigger fish fight harder, and the difficulty ramps up fast even for small size differences.
-Landing the fish also isn't just about filling the bar, you need to actually reel it in close
-before it counts as caught.
+Bigger fish pull harder and have much deeper stamina reserves, and the difficulty ramps up
+fast even for small size differences.
 
 ### The catch
 

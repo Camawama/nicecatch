@@ -31,6 +31,7 @@ public class ClientFishing
     private static float progress;
     private static float shownProgress;
     private static float tension;
+    private static float fatigue;
     private static boolean fishRunning;
 
     private static final ReelTracker TRACKER = new ReelTracker();
@@ -76,6 +77,12 @@ public class ClientFishing
     public static float tension()
     {
         return tension;
+    }
+
+    /** 0..1, how played-out the fish is (drives the "it's worn out" coaching hint). */
+    public static float fatigue()
+    {
+        return fatigue;
     }
 
     public static boolean isFishRunning()
@@ -224,11 +231,12 @@ public class ClientFishing
         }
     }
 
-    public static void handleFightTick(float newProgress, float newTension, boolean running)
+    public static void handleFightTick(float newProgress, float newTension, float newFatigue, boolean running)
     {
         if (phase != Phase.FIGHT) return;
         progress = newProgress;
         tension = newTension;
+        fatigue = newFatigue;
         fishRunning = running;
     }
 
@@ -251,6 +259,7 @@ public class ClientFishing
         fishRunning = false;
         progress = shownProgress = 0.0F;
         tension = 0.0F;
+        fatigue = 0.0F;
         revFeedback = 0.0F;
         TRACKER.reset();
     }
@@ -259,8 +268,10 @@ public class ClientFishing
     {
         phase = Phase.FIGHT;
         fightTicks = 0;
-        progress = shownProgress = 0.15F;
+        // The bar shows line retrieved; the server's first fight tick fills in the real value.
+        progress = shownProgress = 0.0F;
         tension = 0.0F;
+        fatigue = 0.0F;
         fishRunning = false;
         revFeedback = 0.0F;
         TRACKER.reset();
