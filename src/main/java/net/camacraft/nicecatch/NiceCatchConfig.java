@@ -44,6 +44,15 @@ public class NiceCatchConfig
         public final ForgeConfigSpec.DoubleValue reelInSpeed;
         public final ForgeConfigSpec.IntValue escapeGraceTicks;
 
+        // Line & reel-in (no fish on the line)
+        public final ForgeConfigSpec.BooleanValue spoolDragEnabled;
+        public final ForgeConfigSpec.DoubleValue spoolLength;
+        public final ForgeConfigSpec.BooleanValue gradualReelEnabled;
+        public final ForgeConfigSpec.DoubleValue emptyReelSpeed;
+        public final ForgeConfigSpec.DoubleValue itemReelSpeed;
+        public final ForgeConfigSpec.DoubleValue reelCompleteDistance;
+        public final ForgeConfigSpec.IntValue reelIdleTimeoutTicks;
+
         // Fish AI
         public final ForgeConfigSpec.BooleanValue entityFishingEnabled;
         public final ForgeConfigSpec.ConfigValue<java.util.List<? extends String>> fishAiBlacklist;
@@ -146,6 +155,23 @@ public class NiceCatchConfig
                     .defineInRange("reelInSpeed", 4.0D, 0.5D, 10.0D);
             escapeGraceTicks = b.comment("Ticks after hooking a fish before it is allowed to escape by taking all the line.")
                     .defineInRange("escapeGraceTicks", 50, 0, 200);
+            b.pop();
+
+            b.push("line");
+            spoolDragEnabled = b.comment("As you walk away from a cast bobber the reel pays out line; once you reach the end of the spool it drags the bobber along behind you instead of the line snapping back and retracting. Disable for vanilla behavior (the line retracts when you get too far).")
+                    .define("spoolDragEnabled", true);
+            spoolLength = b.comment("Blocks of line on the spool for a cast (no fish) bobber. Walk past this and the bobber gets dragged along at this distance. Must stay under 32 (vanilla retracts the line there).")
+                    .defineInRange("spoolLength", 30.0D, 8.0D, 31.0D);
+            gradualReelEnabled = b.comment("Instead of a right-click instantly retracting the line, hold right-click and reel (circle the mouse) to bring the bobber in — fast on an empty line, a little slower with a loot item on the hook (no chance of the line snapping; only real fish fight). Disable for vanilla instant retrieval.")
+                    .define("gradualReelEnabled", true);
+            emptyReelSpeed = b.comment("Top speed, in blocks per second, at which you can reel in an empty line (nothing on the hook).")
+                    .defineInRange("emptyReelSpeed", 7.0D, 1.0D, 20.0D);
+            itemReelSpeed = b.comment("Top speed, in blocks per second, at which you can reel in a snagged loot item. Slightly slower than an empty line, but there is no fight and the line cannot snap.")
+                    .defineInRange("itemReelSpeed", 4.5D, 1.0D, 20.0D);
+            reelCompleteDistance = b.comment("Distance from you at which a reeled-in bobber is fully retrieved (collecting any snagged item).")
+                    .defineInRange("reelCompleteDistance", 2.5D, 1.0D, 8.0D);
+            reelIdleTimeoutTicks = b.comment("If you stop reeling (release right-click) for this many ticks, the reel-in is abandoned and the bobber is left sitting in the water again.")
+                    .defineInRange("reelIdleTimeoutTicks", 40, 5, 400);
             b.pop();
 
             b.push("tension");

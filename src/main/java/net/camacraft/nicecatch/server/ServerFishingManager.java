@@ -86,6 +86,20 @@ public class ServerFishingManager
         /** Cached "any fish near the bobber" check, refreshed every 20 ticks. */
         boolean fishNearby;
         int fishNearbyCheckIn;
+        /** Non-null while the player is reeling in a line with no fish on it (empty or a loot item). */
+        @Nullable Retrieve retrieve;
+    }
+
+    /** Server-side state of reeling in a fishless line: an empty hook or a snagged loot item. */
+    private static class Retrieve
+    {
+        InteractionHand hand;
+        /** True if a loot item is on the line (slower reel, but no fight and no snapping). */
+        boolean item;
+        /** Reel-in speed multiplier from the Aquaculture rod tier. */
+        float reelScale = 1.0F;
+        /** Ticks since the last reel input; times the reel-in out if the player lets go. */
+        int idleTicks;
     }
 
     private static Session session(Player player)
@@ -98,6 +112,13 @@ public class ServerFishingManager
     {
         Session session = SESSIONS.get(player.getUUID());
         return session != null && session.fight != null;
+    }
+
+    /** A bobber whose owner is fighting a fish OR reeling the line in stops attracting fish. */
+    public static boolean isBusy(ServerPlayer player)
+    {
+        Session session = SESSIONS.get(player.getUUID());
+        return session != null && (session.fight != null || session.retrieve != null);
     }
 
     @SubscribeEvent
@@ -117,10 +138,11 @@ public class ServerFishingManager
     }
 
     /**
-     * Right-clicking a rod never casts directly anymore; casting flows through our packets.
-     * Everything else — retrieving an idle bobber, reeling in a loot-table nibble (items
-     * never fight back), pulling a snagged entity — stays plain vanilla. Only an active
-     * entity bite or fight locks the click, since those belong to the reel system.
+     * A rod's right-click never runs vanilla directly: casting flows through CastMessage and,
+     * when gradual reel-in is enabled, retrieving flows through ReelMessage. So we cancel the
+     * vanilla use for any rod interaction (except our own re-dispatched use, behind the
+     * dispatchingUse flag). With gradual reel-in off we only block direct casts and locked
+     * bites/fights, leaving an out bobber to retrieve vanilla-style on click.
      */
     @SubscribeEvent(priority = EventPriority.HIGHEST)
     public static void onRightClickItem(PlayerInteractEvent.RightClickItem event)
@@ -132,7 +154,9 @@ public class ServerFishingManager
         Session session = session(player);
         if (session.dispatchingUse) return;
 
-        if (player.fishing == null || session.fight != null || session.pendingFish != null) {
+        boolean gradualReel = NiceCatchConfig.SERVER.gradualReelEnabled.get();
+        if (gradualReel || player.fishing == null || session.fight != null
+                || session.pendingFish != null || session.retrieve != null) {
             event.setCanceled(true);
             event.setCancellationResult(InteractionResult.CONSUME);
         }
@@ -328,17 +352,121 @@ public class ServerFishingManager
     public static void onReelInput(ServerPlayer player, float crank, float lift, boolean holding)
     {
         Session session = SESSIONS.get(player.getUUID());
-        if (session == null || session.fight == null) {
-            // Client believes it is fighting but we have no fight; reset it.
-            if (holding) {
+        if (session != null && session.fight != null) {
+            FishFight fight = session.fight;
+            fight.pendingCrank += Mth.clamp(crank, 0.0F, 0.5F);
+            fight.pendingLift += Mth.clamp(lift, 0.0F, 2.0F);
+            fight.holding = holding;
+            return;
+        }
+
+        // No fight on the line: this is a reel-in of an empty hook or a snagged loot item.
+        if (!NiceCatchConfig.SERVER.gradualReelEnabled.get()) return;
+        handleRetrieveInput(player, session(player), crank, holding);
+    }
+
+    /** Drives (and starts/finishes) a fishless reel-in from the player's per-tick reel input. */
+    private static void handleRetrieveInput(ServerPlayer player, Session session, float crank, boolean holding)
+    {
+        FishingHook hook = player.fishing;
+        if (hook == null) {
+            if (session.retrieve != null || holding) {
+                session.retrieve = null;
                 NiceCatchNet.sendTo(player, new FightEndMessage(FightEndMessage.ESCAPED));
             }
             return;
         }
-        FishFight fight = session.fight;
-        fight.pendingCrank += Mth.clamp(crank, 0.0F, 0.5F);
-        fight.pendingLift += Mth.clamp(lift, 0.0F, 2.0F);
-        fight.holding = holding;
+        if (!holding) return; // released; onPlayerTick times out the reel-in if this persists
+
+        ServerLevel level = player.serverLevel();
+        if (session.retrieve == null) {
+            InteractionHand hand = RodUtil.findRodHand(player);
+            if (hand == null) {
+                NiceCatchNet.sendTo(player, new FightEndMessage(FightEndMessage.ESCAPED));
+                return;
+            }
+            Retrieve r = new Retrieve();
+            r.hand = hand;
+            r.item = isItemOnLine(hook);
+            r.reelScale = Math.max(1.0F, AquacultureCompat.reelEffectiveness(player.getItemInHand(hand)));
+            session.retrieve = r;
+            clearBiteFlow(level, session); // we're reeling in now, not courting bites
+        }
+        Retrieve r = session.retrieve;
+        r.idleTicks = 0;
+
+        // Keep a loot item pinned to the line while reeling so it can't slip off mid-retrieve.
+        if (r.item && hook.currentState == FishingHook.FishHookState.BOBBING && hook.nibble < 20) {
+            hook.nibble = 60;
+            hook.timeUntilHooked = 0;
+            if (hook.timeUntilLured < 100) hook.timeUntilLured = 100;
+        }
+
+        if (pullBobberIn(player, hook, r, crank)) {
+            completeRetrieve(player, session, r);
+        }
+    }
+
+    /** A loot item is on the line if a loot nibble is active or a non-fish entity got snagged. */
+    private static boolean isItemOnLine(FishingHook hook)
+    {
+        if (hook.nibble > 0) return true;
+        var hooked = hook.getHookedIn();
+        return hooked instanceof net.minecraft.world.entity.Entity
+                && !(hooked instanceof PathfinderMob mob && FishBehavior.isFishLike(mob));
+    }
+
+    /** Steps the bobber toward the player this tick; returns true once it is close enough to land. */
+    private static boolean pullBobberIn(ServerPlayer player, FishingHook hook, Retrieve r, float crank)
+    {
+        NiceCatchConfig.Server cfg = NiceCatchConfig.SERVER;
+        double speedBps = r.item ? cfg.itemReelSpeed.get() : cfg.emptyReelSpeed.get();
+        double crankFrac = Mth.clamp(crank / cfg.maxRevolutionsPerTick.get(), 0.0D, 1.0D);
+        // Holding alone reels at a baseline; circling the mouse ramps it up to full speed.
+        double step = speedBps / 20.0D * (0.45D + 0.55D * crankFrac) * r.reelScale;
+
+        Vec3 aim = new Vec3(player.getX(), player.getY() + 0.3D, player.getZ());
+        Vec3 pos = hook.position();
+        Vec3 to = aim.subtract(pos);
+        double dist = to.length();
+        if (dist <= cfg.reelCompleteDistance.get() || dist <= step) return true;
+
+        Vec3 next = pos.add(to.scale(step / dist));
+        hook.setPos(next.x, next.y, next.z);
+        return false;
+    }
+
+    /** Finishes a reel-in: dispatch the rod's own retrieval (collecting any loot), then reset the client. */
+    private static void completeRetrieve(ServerPlayer player, Session session, Retrieve r)
+    {
+        boolean item = r.item;
+        session.retrieve = null;
+        session.suppressBiteTicks = 5;
+        dispatchRetrieve(player, session, r.hand);
+        NiceCatchNet.sendTo(player, new FightEndMessage(item ? FightEndMessage.CAUGHT : FightEndMessage.ESCAPED));
+    }
+
+    /**
+     * Re-runs the rod's own use() while a bobber is out, which is vanilla's retrieve: it pulls
+     * in any snagged entity or loot, discards the hook, damages the rod and plays the reel-in
+     * sound. Guarded by dispatchingUse so our RightClickItem cancel lets it through.
+     */
+    private static void dispatchRetrieve(ServerPlayer player, Session session, InteractionHand hand)
+    {
+        if (!RodUtil.isRod(player.getItemInHand(hand))) {
+            InteractionHand other = RodUtil.findRodHand(player);
+            if (other == null) {
+                if (player.fishing != null) player.fishing.discard();
+                return;
+            }
+            hand = other;
+        }
+        session.dispatchingUse = true;
+        try {
+            player.gameMode.useItem(player, player.serverLevel(), player.getItemInHand(hand), hand);
+        } finally {
+            session.dispatchingUse = false;
+        }
     }
 
     @SubscribeEvent
@@ -357,6 +485,7 @@ public class ServerFishingManager
                     session.fight = null;
                     NiceCatchNet.sendTo(player, new FightEndMessage(FightEndMessage.ESCAPED));
                 }
+                session.retrieve = null;
                 clearBiteFlow(player.serverLevel(), session);
                 if (session.prevBite) {
                     session.prevBite = false;
@@ -377,6 +506,16 @@ public class ServerFishingManager
 
         if (session.fight != null) {
             tickFight(player, session, hook);
+            return;
+        }
+
+        // Reeling in a fishless line: no bite courting while the bobber is being hauled in,
+        // and if the player lets go for too long the reel-in is abandoned (idle bobber again).
+        if (session.retrieve != null) {
+            if (++session.retrieve.idleTicks > NiceCatchConfig.SERVER.reelIdleTimeoutTicks.get()) {
+                session.retrieve = null;
+                NiceCatchNet.sendTo(player, new FightEndMessage(FightEndMessage.ESCAPED));
+            }
             return;
         }
 

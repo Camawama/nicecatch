@@ -14,12 +14,13 @@ import net.minecraft.client.resources.sounds.SimpleSoundInstance;
 import net.minecraft.sounds.SoundEvents;
 import net.minecraft.util.Mth;
 import net.minecraft.world.InteractionHand;
+import net.minecraft.world.entity.projectile.FishingHook;
 import net.minecraft.world.phys.Vec3;
 
 /** Client-side state machine for the whole fishing flow. */
 public class ClientFishing
 {
-    public enum Phase { IDLE, CHARGING, BITE, FIGHT }
+    public enum Phase { IDLE, CHARGING, BITE, FIGHT, REEL }
 
     private static Phase phase = Phase.IDLE;
     private static InteractionHand chargeHand = InteractionHand.MAIN_HAND;
@@ -29,6 +30,11 @@ public class ClientFishing
     private static boolean biteIsEntity;
     private static int fightTicks;
     private static boolean reelHeld;
+
+    // Reel-in of a fishless line (no fight): pulling an empty hook or a snagged loot item home.
+    private static int reelTicks;
+    private static boolean reelItem;
+    private static double reelStartDist;
 
     // Latest fight state from the server, plus a smoothed copy for the HUD.
     private static float progress;
@@ -100,6 +106,18 @@ public class ClientFishing
         return fightPhase;
     }
 
+    /** True while reeling in a snagged loot item (vs an empty line), for the reel HUD. */
+    public static boolean isReelItem()
+    {
+        return reelItem;
+    }
+
+    /** Whether hold-to-reel retrieval is enabled (server config, synced to the client). */
+    public static boolean gradualReelEnabled()
+    {
+        return NiceCatchConfig.SERVER.gradualReelEnabled.get();
+    }
+
     /** Ticks remaining of the "full bar" flourish after landing a fish. */
     public static int celebrateTicks()
     {
@@ -131,7 +149,8 @@ public class ClientFishing
     public static boolean isCapturingMouse()
     {
         Minecraft mc = Minecraft.getInstance();
-        return phase == Phase.FIGHT && mc.screen == null && mc.player != null && mc.options.keyUse.isDown();
+        return (phase == Phase.FIGHT || phase == Phase.REEL)
+                && mc.screen == null && mc.player != null && mc.options.keyUse.isDown();
     }
 
     /** Called from the MouseHandler mixin with the raw deltas it swallowed. */
@@ -189,7 +208,15 @@ public class ClientFishing
         wasCapturing = capturing;
 
         switch (phase) {
-            case IDLE -> {}
+            case IDLE -> {
+                // A bobber is sitting in the water with nothing on it: hold right-click to
+                // reel it back in gradually instead of the old instant retract.
+                if (gradualReelEnabled() && player.fishing != null && mc.screen == null
+                        && mc.options.keyUse.isDown() && !player.isHandsBusy()
+                        && RodUtil.findRodHand(player) != null) {
+                    startReel(player, false);
+                }
+            }
             case CHARGING -> {
                 if (player.fishing != null || mc.screen != null || !RodUtil.isRod(player.getItemInHand(chargeHand))) {
                     phase = Phase.IDLE;
@@ -209,12 +236,47 @@ public class ClientFishing
                     phase = Phase.IDLE;
                     break;
                 }
-                // Only real fish get a hook-set; a loot nibble's right-click is a vanilla
-                // retrieve and passes through the click handlers untouched.
-                if (biteIsEntity && mc.screen == null && mc.options.keyUse.isDown()) {
-                    NiceCatchNet.sendToServer(new HookSetMessage());
-                    startFight();
+                if (mc.screen == null && mc.options.keyUse.isDown()) {
+                    if (biteIsEntity) {
+                        // A real fish: set the hook and start the fight.
+                        NiceCatchNet.sendToServer(new HookSetMessage());
+                        startFight();
+                    } else if (gradualReelEnabled()) {
+                        // A loot item on the line: reel it in (no fight, no snapping).
+                        startReel(player, true);
+                    }
                 }
+            }
+            case REEL -> {
+                reelTicks++;
+                if (player.fishing == null) {
+                    phase = Phase.IDLE;
+                    break;
+                }
+                boolean held = mc.screen == null && mc.options.keyUse.isDown();
+                if (!held) {
+                    // Let go: pause the reel-in; the camera pans back to the player.
+                    NiceCatchNet.sendToServer(new ReelMessage(0.0F, 0.0F, false));
+                    phase = Phase.IDLE;
+                    break;
+                }
+                ReelTracker.Result input = TRACKER.consume(true);
+                NiceCatchNet.sendToServer(new ReelMessage(input.crank(), input.lift(), true));
+
+                if (NiceCatchConfig.CLIENT.reelClickSounds.get()) {
+                    revFeedback += input.crank();
+                    while (revFeedback >= 0.25F) {
+                        revFeedback -= 0.25F;
+                        mc.getSoundManager().play(SimpleSoundInstance.forUI(
+                                SoundEvents.LEVER_CLICK, 1.7F + player.getRandom().nextFloat() * 0.3F, 0.15F));
+                    }
+                }
+
+                pullReelBobber(player, input.crank());
+                double dist = player.distanceTo(player.fishing);
+                double complete = NiceCatchConfig.SERVER.reelCompleteDistance.get();
+                progress = (float) Mth.clamp((reelStartDist - dist) / Math.max(1.0D, reelStartDist - complete), 0.0D, 1.0D);
+                shownProgress += (progress - shownProgress) * 0.4F;
             }
             case FIGHT -> {
                 fightTicks++;
@@ -252,7 +314,7 @@ public class ClientFishing
     public static void followFishFrame(Minecraft mc, float partialTick, float frameTicks)
     {
         LocalPlayer player = mc.player;
-        if (player == null || phase != Phase.FIGHT || player.fishing == null
+        if (player == null || (phase != Phase.FIGHT && phase != Phase.REEL) || player.fishing == null
                 || !NiceCatchConfig.CLIENT.cameraFollowFish.get() || !isCapturingMouse()) {
             followInit = false;
             return;
@@ -334,6 +396,7 @@ public class ClientFishing
         // see the capture->free transition to start the sensitivity ramp.
         fishRunning = false;
         fightPhase = FightPhase.PULL;
+        reelItem = false;
         progress = shownProgress = 0.0F;
         tension = 0.0F;
         fatigue = 0.0F;
@@ -353,5 +416,40 @@ public class ClientFishing
         fightPhase = FightPhase.PULL;
         revFeedback = 0.0F;
         TRACKER.reset();
+    }
+
+    /** Enter reel-in mode for a fishless line (empty hook, or a snagged loot item). */
+    private static void startReel(LocalPlayer player, boolean item)
+    {
+        phase = Phase.REEL;
+        reelItem = item;
+        reelTicks = 0;
+        reelStartDist = player.fishing != null ? Math.max(2.0D, player.distanceTo(player.fishing)) : 2.0D;
+        progress = shownProgress = 0.0F;
+        revFeedback = 0.0F;
+        TRACKER.reset();
+    }
+
+    /**
+     * Slides the client's own bobber toward the player for a smooth reel-in — the server pulls
+     * its copy in lockstep and is what actually decides when the line is landed. The client hook
+     * self-simulates and ignores server position, so moving it locally is what the player sees.
+     */
+    private static void pullReelBobber(LocalPlayer player, float crank)
+    {
+        FishingHook hook = player.fishing;
+        if (hook == null) return;
+        NiceCatchConfig.Server cfg = NiceCatchConfig.SERVER;
+        double speedBps = reelItem ? cfg.itemReelSpeed.get() : cfg.emptyReelSpeed.get();
+        double crankFrac = Mth.clamp(crank / cfg.maxRevolutionsPerTick.get(), 0.0D, 1.0D);
+        double step = speedBps / 20.0D * (0.45D + 0.55D * crankFrac);
+
+        Vec3 aim = new Vec3(player.getX(), player.getY() + 0.3D, player.getZ());
+        Vec3 pos = hook.position();
+        Vec3 to = aim.subtract(pos);
+        double dist = to.length();
+        if (dist <= cfg.reelCompleteDistance.get() + 0.1D) return; // let the server land and remove it
+        Vec3 next = pos.add(to.scale(step / dist));
+        hook.setPos(next.x, next.y, next.z);
     }
 }

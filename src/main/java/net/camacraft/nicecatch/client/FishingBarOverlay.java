@@ -37,6 +37,14 @@ public class FishingBarOverlay
                 String key = ClientFishing.isEntityBite() ? "nicecatch.hint.bite" : "nicecatch.hint.loot_bite";
                 drawHint(graphics, window, y, key, 0xFFFF6A5A, true);
             }
+            case REEL -> {
+                drawBackground(graphics, x, y);
+                boolean item = ClientFishing.isReelItem();
+                int color = item ? 0xFFC79A4E : 0xFF5FBFE0; // amber while reeling an item, cyan for empty line
+                drawFill(graphics, x, y, ClientFishing.shownProgress(), color);
+                drawHint(graphics, window, y,
+                        item ? "nicecatch.hint.reel_item" : "nicecatch.hint.reel_empty", color, false);
+            }
             case FIGHT -> {
                 float t = (float) (ClientFishing.fightTicks() + partialTick);
                 if (ClientFishing.isFishRunning()) {

@@ -3,6 +3,8 @@
   "nicecatch.hint.bite": "Bite! Right-click to set the hook!",
   "nicecatch.hint.loot_bite": "Something's on the line! Right-click to reel it in",
   "nicecatch.hint.reel": "Hold right-click and circle your mouse to reel it in",
+  "nicecatch.hint.reel_empty": "Reeling in — circle your mouse to reel faster",
+  "nicecatch.hint.reel_item": "Reeling in the catch — no rush, it won't get away",
   "nicecatch.hint.run": "It's running! Ease off and pull the rod up",
   "nicecatch.hint.phase.hold": "It's holding — reel it in!",
   "nicecatch.hint.phase.sweep": "It's thrashing — keep on it and reel",

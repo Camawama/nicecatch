@@ -1,7 +1,11 @@
 package net.camacraft.nicecatch.mixin;
 
+import net.camacraft.nicecatch.NiceCatchConfig;
+import net.camacraft.nicecatch.RodUtil;
 import net.minecraft.world.entity.animal.WaterAnimal;
+import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.entity.projectile.FishingHook;
+import net.minecraft.world.phys.Vec3;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Inject;
@@ -26,6 +30,54 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 @Mixin(FishingHook.class)
 public abstract class FishingHookMixin
 {
+    /**
+     * Feature: the reel pays out line as you walk away from a cast bobber, and once you reach
+     * the end of the spool it drags the bobber along behind you instead of the line snapping
+     * back. Vanilla discards a hook past 32 blocks (the line just retracts); by pulling the
+     * bobber in whenever it drifts past the (sub-32) spool length, we keep it within range so
+     * that discard never fires, and it trails you like a real reel that has run out of line.
+     *
+     * Runs at tick HEAD on both sides using each side's own player position, so the client
+     * drags its own bobber smoothly rather than waiting on infrequent server position syncs.
+     * Only a settled, fishless, unsnagged bobber drags (BOBBING with no hooked entity) — a
+     * fish fight glues the bobber to the fish instead, and a flying cast is left alone.
+     */
+    @Inject(method = "tick", at = @At("HEAD"))
+    private void nicecatch$spoolDrag(CallbackInfo ci)
+    {
+        FishingHook self = (FishingHook) (Object) this;
+        if (!NiceCatchConfig.SERVER.spoolDragEnabled.get()) return;
+        if (self.currentState != FishingHook.FishHookState.BOBBING || self.hookedIn != null) return;
+
+        Player owner = self.getPlayerOwner();
+        if (owner == null || RodUtil.findRodHand(owner) == null) return;
+
+        double spool = NiceCatchConfig.SERVER.spoolLength.get();
+        double dx = owner.getX() - self.getX();
+        double dy = (owner.getY() + 0.3D) - self.getY();
+        double dz = owner.getZ() - self.getZ();
+        double dist = Math.sqrt(dx * dx + dy * dy + dz * dz);
+        if (dist < 1.0E-4D || dist <= spool) return;
+        double inv = 1.0D / dist;
+
+        // Velocity pull toward the player for a smooth trailing feel, ramping up quickly so it
+        // keeps pace with a moving boat well before the danger zone.
+        double pull = Math.min(0.9D, 0.15D + (dist - spool) * 0.6D);
+        Vec3 v = self.getDeltaMovement();
+        self.setDeltaMovement(
+                v.x * 0.6D + dx * inv * pull,
+                v.y * 0.6D + dy * inv * pull * 0.5D,
+                v.z * 0.6D + dz * inv * pull);
+
+        // Hard backstop: however fast the player moves, never let the bobber sit far enough out
+        // for vanilla to retract the line (>32 blocks). Snap it to the spool distance if needed.
+        double maxOut = spool + 1.0D;
+        if (dist > maxOut) {
+            double f = maxOut * inv;
+            self.setPos(owner.getX() - dx * f, (owner.getY() + 0.3D) - dy * f, owner.getZ() - dz * f);
+        }
+    }
+
     @Inject(method = "tick", at = @At("HEAD"))
     private void nicecatch$glueToHookedFish(CallbackInfo ci)
     {

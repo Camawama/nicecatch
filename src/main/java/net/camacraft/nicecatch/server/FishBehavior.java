@@ -305,12 +305,12 @@ public final class FishBehavior
 
     // ---- Queries ----
 
-    /** A bobber attracts fish while it sits in water, its owner is online, and no fight is running on it. */
+    /** A bobber attracts fish while it sits in water, its owner is online, and it is not being fought or reeled in. */
     public static boolean isAttracting(@Nullable FishingHook hook)
     {
         if (hook == null || !hook.isAlive() || !hook.isInWater()) return false;
         if (!(hook.getPlayerOwner() instanceof ServerPlayer owner) || owner.fishing != hook) return false;
-        return !ServerFishingManager.isFighting(owner);
+        return !ServerFishingManager.isBusy(owner);
     }
 
     public static double attractRadius(FishingHook hook)

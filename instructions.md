@@ -32,8 +32,9 @@ escaped fish avoid biting much longer.
   bobber as the fish closes in. Then the bobber tugs, bubbles rise, the bar flashes **red**:
   **right-click once to set the hook** before the window (~2.5 s) closes, or the fish
   spooks and flees. Setting the hook starts the fight (section 4).
-- **A loot nibble** (no fish around) — the bar flashes **gold**: right-click to reel it in
-  instantly, exactly like vanilla. Items don't fight back.
+- **A loot nibble** (no fish around) — the bar flashes **gold**: **hold right-click and reel**
+  to bring the item in. There's no fight and the line can't snap, so reel at full speed (a
+  touch slower than an empty line). See *Reeling in without a fish* below.
 
 ## 4. The fight (reel mode)
 
@@ -49,18 +50,25 @@ triggers a panicked first run, so expect the bar to drop before you can gain an 
 | Motion | Meaning | Effect |
 |---|---|---|
 | **Circle the mouse** (either direction) | Cranking the reel | Physically drags the fish toward you, retrieving line — and wears the fish down |
-| **Pull the mouse straight up** | Lifting the rod | During a **run**: braces against the fish so it takes far less line. While **calm**: "pumping the rod" adds extra reel-in speed |
+| **Pull the mouse straight up** | Lifting the rod | Lifts a **sounding** (diving) fish so it can be reeled at all, braces against other runs so they take less line, and "pumps the rod" for extra reel-in speed while the fish holds |
 
 (Straight back-and-forth shaking is rejected; only real circular motion cranks.)
 
-**The fish alternates between two states:**
+**The fish cycles through five tactics** — the hint text names the one it's using, so you
+always know the right response:
 
-- **Calm** — crank away. The fish comes in steadily (thrashing side to side), tension drains.
-- **Running** (bar shakes, splashing, camera rumbles) — the fish is sprinting off and taking
-  line. It doesn't run straight: it veers left and right, jukes across, and sometimes
-  **charges straight back at you**, dumping slack you have to crank up fast. Cranking
-  through a run only winches a fraction and **builds tension fast** — ease off the crank
-  and **lift** to hold your ground until the run ends.
+- **Holding** — it sits still. Your clean window: reel it straight in.
+- **Thrashing** — it whips from side to side. Keep reeling; it fights the crank a little and
+  the camera swings along with it.
+- **Pulling** (bar shakes, splashing, camera rumbles) — it bores straight away, tearing off
+  line. You **can't out-crank it**: ease off, keep some line, and let it wear itself out.
+- **Sounding** — it dives for the bottom. Cranking barely budges a sounding fish — **pull the
+  rod up** to lift it back toward the surface first, then reel.
+- **Charging** — it rushes straight back at you, dumping slack. **Crank fast** to take the
+  slack up; if you don't answer a charge, the fish gets to rest and **recover its fight**.
+
+Cranking through any run (pull/sound/charge) still winches only a fraction and **builds
+tension fast**, so pick your moments.
 
 **Fatigue is the real war.** Every crank and every run drains the fish's stamina: fresh
 fish rip back most of what you gain, but their runs get shorter, rarer, and weaker as they
@@ -70,13 +78,32 @@ fight is yours to lose. Giving slack lets the fish **rest and recover** — don'
 **The bar's color shows tension** (green → gold → red). Tension maxes out → **the line
 snaps**: bobber, fish, and some rod durability gone. Stop cranking and tension recovers.
 
-**Letting go of right-click** gives slack: tension drains fast, but nothing is holding the
-fish anymore — it **strips line at will**, wanders where it pleases, and recovers stamina.
-Let that go on and it spools you. Slack is an emergency valve, not a rest stop.
+**Letting go of right-click** gives slack: tension drains fast, but you stop gaining line,
+the fish recovers stamina, and during a run it keeps tearing line off. Let that go on and it
+spools you. Slack is a breather for the fish, not for you.
 
-**Landing**: crank the fish all the way in (~5 blocks) while it's calm and it launches
-out of the water, becoming its item in your inventory — bigger fish (by actual hitbox
-size) pull harder and last longer the whole way.
+**Landing**: crank the fish all the way in (~5 blocks) while it's holding or thrashing (not
+mid-run) and it launches out of the water, becoming its item in your inventory — bigger fish
+(by actual hitbox size) pull harder and last longer the whole way.
+
+## 4b. Reeling in without a fish
+
+Right-click no longer snaps the line straight back. Whether the hook is empty or has a loot
+item on it, **hold right-click and reel** — the same reel mode as a fight (camera locks to
+the bobber, slight zoom), just with no tension and no snapping:
+
+- **Empty line** — reel at full speed. Circle the mouse to reel faster; simply holding reels
+  at a steady baseline.
+- **Loot item** (the gold bite) — a little slower, but there's no fight and it can't get
+  away once you're reeling it. Reel it home to collect it.
+
+Let go and the reel-in pauses (the camera pans back); hold again to resume from where the
+bobber is. Reel it to within a couple of blocks and it's fully retrieved.
+
+**Boat / walking away**: as you move away from a cast bobber the reel pays out line. Once you
+reach the end of the spool (~30 blocks) it **drags the bobber along behind you** instead of
+the line retracting — so trolling a lure behind a moving boat works. (A moving boat still
+spooks nearby fish, so they may scatter.)
 
 ## 5. Catch and release
 

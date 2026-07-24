@@ -21,6 +21,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
     charge often; tiring fish hold and thrash; a played-out fish stops running so it can
     be landed), and the same tactic rarely repeats twice in a row.
 - Fight HUD hint now coaches the response to the fish's current tactic.
+- **Gradual reel-in** for a line with no fish on it. Right-click no longer snaps the line
+  straight back; instead **hold right-click and reel** (the same reel mode as a fight —
+  camera locks to the bobber, slight zoom — but with no tension and no snapping):
+  - **Empty line**: reel at full speed; circle the mouse to reel faster, or just hold for a
+    steady baseline. Reel it to within a couple of blocks to retrieve it.
+  - **Loot item** (the gold "something's on the line" bite): a little slower, but there's no
+    fight and it can't slip off once you're reeling — reel it home to collect it.
+  - Let go and the reel-in pauses (camera pans back); hold again to resume. So there are now
+    three reel modes overall: nothing hooked (fastest), loot item (slower, no snap), and a
+    real fish (the full fight).
+  - Can be turned off with `line.gradualReelEnabled` for vanilla instant retrieval.
+- **Spool line / boat trolling**: as you move away from a cast bobber the reel pays out line,
+  and once you reach the end of the spool (`line.spoolLength`, ~30 blocks) the bobber is
+  **dragged along behind you** instead of the line retracting when you get too far. Great for
+  trolling a lure behind a moving boat. Toggle with `line.spoolDragEnabled`.
 
 ### Changed
 - Fish can now bite a **moving** bobber: fish lead a drifting bobber's motion and put on

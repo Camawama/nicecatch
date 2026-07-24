@@ -52,24 +52,31 @@ public class ClientEvents
 
         switch (ClientFishing.phase()) {
             case BITE -> {
-                // A loot nibble retrieves vanilla-style; only a real fish locks the click for the hook-set.
-                if (ClientFishing.isEntityBite()) {
+                // Entity bites lock the click for the hook-set; loot bites do too when gradual
+                // reel-in is on (holding reels the item in), else they retrieve vanilla-style.
+                if (ClientFishing.isEntityBite() || ClientFishing.gradualReelEnabled()) {
                     event.setCanceled(true);
                     event.setSwingHand(false);
                 }
             }
-            case CHARGING, FIGHT -> {
+            case CHARGING, FIGHT, REEL -> {
                 event.setCanceled(true);
                 event.setSwingHand(false);
             }
             case IDLE -> {
                 ItemStack stack = player.getItemInHand(event.getHand());
-                boolean aimingAtNothing = mc.hitResult == null || mc.hitResult.getType() == HitResult.Type.MISS;
-                if (aimingAtNothing && RodUtil.isRod(stack) && player.fishing == null
-                        && !player.isHandsBusy() && ClientFishing.canStartCharge()) {
+                if (!RodUtil.isRod(stack)) break;
+                if (player.fishing == null) {
+                    boolean aimingAtNothing = mc.hitResult == null || mc.hitResult.getType() == HitResult.Type.MISS;
+                    if (aimingAtNothing && !player.isHandsBusy() && ClientFishing.canStartCharge()) {
+                        event.setCanceled(true);
+                        event.setSwingHand(false);
+                        ClientFishing.beginCharge(event.getHand());
+                    }
+                } else if (ClientFishing.gradualReelEnabled()) {
+                    // Bobber is out: block the vanilla instant retract; hold to reel it in.
                     event.setCanceled(true);
                     event.setSwingHand(false);
-                    ClientFishing.beginCharge(event.getHand());
                 }
             }
         }
@@ -88,20 +95,25 @@ public class ClientEvents
 
         switch (ClientFishing.phase()) {
             case IDLE -> {
-                if (player.fishing == null && !player.isHandsBusy() && ClientFishing.canStartCharge()) {
+                if (player.fishing == null) {
+                    if (!player.isHandsBusy() && ClientFishing.canStartCharge()) {
+                        event.setCanceled(true);
+                        event.setCancellationResult(InteractionResult.CONSUME);
+                        ClientFishing.beginCharge(event.getHand());
+                    }
+                } else if (ClientFishing.gradualReelEnabled()) {
+                    // Bobber is out: block the vanilla instant retract; hold to reel it in.
                     event.setCanceled(true);
                     event.setCancellationResult(InteractionResult.CONSUME);
-                    ClientFishing.beginCharge(event.getHand());
                 }
-                // else: bobber is out with no bite -> vanilla retrieve
             }
             case BITE -> {
-                if (ClientFishing.isEntityBite()) {
+                if (ClientFishing.isEntityBite() || ClientFishing.gradualReelEnabled()) {
                     event.setCanceled(true);
                     event.setCancellationResult(InteractionResult.CONSUME);
                 }
             }
-            case CHARGING, FIGHT -> {
+            case CHARGING, FIGHT, REEL -> {
                 event.setCanceled(true);
                 event.setCancellationResult(InteractionResult.CONSUME);
             }
