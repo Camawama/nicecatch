@@ -13,6 +13,7 @@ import net.minecraftforge.client.event.ClientPlayerNetworkEvent;
 import net.minecraftforge.client.event.ComputeFovModifierEvent;
 import net.minecraftforge.client.event.InputEvent;
 import net.minecraftforge.client.event.RenderGuiOverlayEvent;
+import net.minecraftforge.client.event.RenderLevelStageEvent;
 import net.minecraftforge.client.event.ViewportEvent;
 import net.minecraftforge.client.gui.overlay.VanillaGuiOverlay;
 import net.minecraftforge.event.TickEvent;
@@ -127,6 +128,14 @@ public class ClientEvents
         if (!event.getOverlay().id().equals(VanillaGuiOverlay.EXPERIENCE_BAR.id())) return;
         event.setCanceled(true);
         FishingBarOverlay.render(event.getGuiGraphics(), event.getWindow(), event.getPartialTick());
+    }
+
+    /** Draws the fishing line from the player to the fish during a line-arrow fight. */
+    @SubscribeEvent
+    public static void onRenderLevel(RenderLevelStageEvent event)
+    {
+        if (event.getStage() != RenderLevelStageEvent.Stage.AFTER_ENTITIES) return;
+        FishingLineRenderer.render(event.getPoseStack(), event.getCamera().getPosition(), event.getPartialTick());
     }
 
     /** Per-frame (not per-tick) camera follow while reeling, so the pan never steps or jitters. */

@@ -28,6 +28,15 @@ higher-res unless you also scale the blits).
 | `icon_tension.png` | 16×16 | Warning icon for near-snap tension. |
 | `icon_spin.png` | 16×16 | Little circular-arrow glyph used by the reel hint so the motion is obvious without words. |
 
+## Item textures (optional)
+
+| File | Size | Purpose |
+|---|---|---|
+| `../item/line_arrow.png` | 16×16 | The Fishing Line Arrow item. Currently the item model just reuses the vanilla arrow sprite (`minecraft:item/arrow`), so it works with no custom art. To use a custom sprite, drop this PNG under `assets/nicecatch/textures/item/line_arrow.png` and point `models/item/line_arrow.json` `layer0` at `nicecatch:item/line_arrow`. |
+
+The flying arrow entity also just reuses the vanilla arrow entity texture, so no entity texture
+is needed unless you want a distinct look.
+
 ## Nice-to-have (not wired up yet)
 
 | File | Size | Purpose |

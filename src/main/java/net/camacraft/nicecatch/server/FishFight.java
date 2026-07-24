@@ -32,6 +32,12 @@ public class FishFight
     /** Chance to double the caught item (Aquaculture double hook). */
     public float doubleCatchChance;
 
+    /**
+     * True for a line-arrow fight: no rod and no FishingHook bobber (the line runs straight to
+     * the fish), no rod durability cost, and the caught fish is not added to catch-and-release.
+     */
+    public boolean arrow;
+
     /** The fish's current tactic. It cycles between these throughout the fight. */
     public FightPhase phase = FightPhase.PULL;
     /** Ticks left in the current phase; a new phase is picked when this runs out. */

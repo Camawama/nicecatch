@@ -59,6 +59,7 @@ public final class FishConversion
         UUID fishId;
         UUID playerId;
         float doubleCatchChance;
+        boolean skipRelease;
         int ticksLeft;
     }
 
@@ -75,10 +76,20 @@ public final class FishConversion
     /** Called by the fight when the fish is launched out of the water toward the player. */
     public static void beginPull(ServerPlayer player, PathfinderMob fish, float doubleCatchChance)
     {
+        beginPull(player, fish, doubleCatchChance, false);
+    }
+
+    /**
+     * As above, but {@code skipRelease} omits the caught fish from catch-and-release — used for
+     * line-arrow catches, whose item can't be tossed back into water to revive the fish.
+     */
+    public static void beginPull(ServerPlayer player, PathfinderMob fish, float doubleCatchChance, boolean skipRelease)
+    {
         PendingPull pull = new PendingPull();
         pull.fishId = fish.getUUID();
         pull.playerId = player.getUUID();
         pull.doubleCatchChance = doubleCatchChance;
+        pull.skipRelease = skipRelease;
         pull.ticksLeft = NiceCatchConfig.SERVER.pullTimeoutTicks.get();
         PULLS.add(pull);
     }
@@ -120,7 +131,7 @@ public final class FishConversion
             }
             pull.ticksLeft--;
             if (pull.ticksLeft <= 0 || fish.distanceTo(player) < NiceCatchConfig.SERVER.convertDistance.get()) {
-                convert(player, fish, pull.doubleCatchChance);
+                convert(player, fish, pull.doubleCatchChance, pull.skipRelease);
                 it.remove();
             }
         }
@@ -133,7 +144,7 @@ public final class FishConversion
     }
 
     /** Swap the flying fish for its item: splash, pickup sound, straight into the inventory. */
-    private static void convert(ServerPlayer player, PathfinderMob fish, float doubleCatchChance)
+    private static void convert(ServerPlayer player, PathfinderMob fish, float doubleCatchChance, boolean skipRelease)
     {
         ServerLevel level = player.serverLevel();
         ItemStack stack = itemFor(level, fish);
@@ -152,7 +163,10 @@ public final class FishConversion
             stack.grow(1);
         }
 
-        recordCatch(player, stack.getItem(), fish.getType(), nbt, level);
+        // Line-arrow catches skip catch-and-release: the item can't be tossed back to revive the fish.
+        if (!skipRelease) {
+            recordCatch(player, stack.getItem(), fish.getType(), nbt, level);
+        }
 
         if (!player.getInventory().add(stack)) {
             player.drop(stack, false);

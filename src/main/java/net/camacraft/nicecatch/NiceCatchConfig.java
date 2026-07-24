@@ -53,6 +53,10 @@ public class NiceCatchConfig
         public final ForgeConfigSpec.DoubleValue reelCompleteDistance;
         public final ForgeConfigSpec.IntValue reelIdleTimeoutTicks;
 
+        // Fishing-line arrow
+        public final ForgeConfigSpec.BooleanValue arrowFightEnabled;
+        public final ForgeConfigSpec.DoubleValue arrowMaxLine;
+
         // Fish AI
         public final ForgeConfigSpec.BooleanValue entityFishingEnabled;
         public final ForgeConfigSpec.ConfigValue<java.util.List<? extends String>> fishAiBlacklist;
@@ -172,6 +176,13 @@ public class NiceCatchConfig
                     .defineInRange("reelCompleteDistance", 2.5D, 1.0D, 8.0D);
             reelIdleTimeoutTicks = b.comment("If you stop reeling (release right-click) for this many ticks, the reel-in is abandoned and the bobber is left sitting in the water again.")
                     .defineInRange("reelIdleTimeoutTicks", 40, 5, 400);
+            b.pop();
+
+            b.push("lineArrow");
+            arrowFightEnabled = b.comment("A fishing-line arrow fired from a bow that hits a fish starts the reel fight for that fish, with the line running from you to the fish. Fish caught this way are NOT added to catch-and-release (the item can't be tossed back to revive them).")
+                    .define("arrowFightEnabled", true);
+            arrowMaxLine = b.comment("Maximum line length (blocks) for a line-arrow fight. If the fish is hit from further away than this, the line won't take hold and the arrow just behaves like a normal arrow.")
+                    .defineInRange("arrowMaxLine", 40.0D, 10.0D, 120.0D);
             b.pop();
 
             b.push("tension");

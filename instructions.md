@@ -105,10 +105,21 @@ reach the end of the spool (~30 blocks) it **drags the bobber along behind you**
 the line retracting — so trolling a lure behind a moving boat works. (A moving boat still
 spooks nearby fish, so they may scatter.)
 
+## 4c. The fishing-line arrow
+
+Craft a **Fishing Line Arrow** from an arrow + string, and fire it from any bow. If it strikes
+a fish, the line takes hold and the reel fight starts for that fish — you'll see the line
+running from you out to it. Reel it in exactly like a rod fight (hold right-click and circle
+the mouse; your bow won't draw while you're reeling). A fish landed with the arrow is **not**
+added to catch-and-release, so its item can't be tossed back to revive it. Hit the fish from
+too far away (beyond the arrow's line length) and the line won't take — it just behaves like a
+normal arrow.
+
 ## 5. Catch and release
 
-For **one minute** after a catch, tossing that fish item (Q) back into water revives the
-very same fish, which darts off scared. After the minute it's just an item.
+For **one minute** after a rod catch, tossing that fish item (Q) back into water revives the
+very same fish, which darts off scared. After the minute it's just an item. (Arrow-caught fish
+are excluded — see above.)
 
 ## Gear that helps
 

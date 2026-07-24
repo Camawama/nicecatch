@@ -36,6 +36,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   and once you reach the end of the spool (`line.spoolLength`, ~30 blocks) the bobber is
   **dragged along behind you** instead of the line retracting when you get too far. Great for
   trolling a lure behind a moving boat. Toggle with `line.spoolDragEnabled`.
+- **Fishing Line Arrow** (new item): an arrow with a fishing line attached, fired from any bow.
+  - Craft it from an arrow + string (shapeless); found in the Combat creative tab.
+  - Fire it at a fish and, if it hits, the reel fight begins for that fish with the line
+    running from you to the fish — reel it in exactly like a rod fight (hold right-click and
+    circle the mouse; your bow won't draw while you're reeling).
+  - Fish caught with the line arrow are **not** added to catch-and-release: the item can't be
+    tossed back into water to revive the fish.
+  - Range and toggle via `lineArrow.arrowMaxLine` / `lineArrow.arrowFightEnabled`. Uses the
+    vanilla arrow texture for now (a custom texture can be dropped in later).
 
 ### Changed
 - Fish can now bite a **moving** bobber: fish lead a drifting bobber's motion and put on

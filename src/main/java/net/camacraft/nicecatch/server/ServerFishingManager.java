@@ -5,6 +5,7 @@ import net.camacraft.nicecatch.NiceCatch;
 import net.camacraft.nicecatch.NiceCatchConfig;
 import net.camacraft.nicecatch.RodUtil;
 import net.camacraft.nicecatch.compat.AquacultureCompat;
+import net.camacraft.nicecatch.network.ArrowFightMessage;
 import net.camacraft.nicecatch.network.BiteMessage;
 import net.camacraft.nicecatch.network.FightEndMessage;
 import net.camacraft.nicecatch.network.FightTickMessage;
@@ -239,6 +240,7 @@ public class ServerFishingManager
     public static void onCast(ServerPlayer player, float power, InteractionHand hand)
     {
         if (player.fishing != null || player.isSpectator()) return;
+        if (isBusy(player)) return; // e.g. mid line-arrow fight (no bobber out, but still fighting)
         if (!RodUtil.isRod(player.getItemInHand(hand))) {
             hand = RodUtil.findRodHand(player);
             if (hand == null) return;
@@ -311,7 +313,40 @@ public class ServerFishingManager
         FishBehavior.scatterAround(player.serverLevel(), hook.position(),
                 cfg.scatterRadius.get(), cfg.scatterOnHookChance.get().floatValue(), fish,
                 FishBehavior.LIGHT_SCARE_COOLDOWN);
-        beginFight(player, session, hook, fight);
+        // Under 32 blocks so vanilla's own line-break never fires before ours.
+        beginFight(player, session, fight, fish, 31.0D);
+    }
+
+    /**
+     * Starts a line-arrow fight: a fishing-line arrow struck a fish, so the reel fight begins
+     * with the line running straight from the player to the fish (no rod, no bobber). Returns
+     * false — leaving the arrow to behave normally — if the player is busy, the target isn't a
+     * valid free fish, or it is too far for the line to reach.
+     */
+    public static boolean tryStartArrowFight(ServerPlayer player, PathfinderMob fish)
+    {
+        NiceCatchConfig.Server cfg = NiceCatchConfig.SERVER;
+        if (!cfg.arrowFightEnabled.get() || player.isSpectator()) return false;
+        Session session = session(player);
+        if (session.fight != null || session.retrieve != null) return false;
+        if (!FishBehavior.isFishLike(fish) || FishBehavior.isHooked(fish)) return false;
+        double maxLine = cfg.arrowMaxLine.get();
+        if (player.distanceTo(fish) > maxLine - 2.0D) return false;
+
+        FishFight fight = new FishFight();
+        fight.arrow = true;
+        fight.hand = InteractionHand.MAIN_HAND; // unused for arrow fights, but never null
+        fight.fishId = fish.getUUID();
+        fight.strength = sizeStrength(fish);
+        // No rod: default tension/reel scaling and no double-catch.
+
+        FishBehavior.setHooked(fish, true);
+        FishBehavior.scatterAround(player.serverLevel(), fish.position(),
+                cfg.scatterRadius.get(), cfg.scatterOnHookChance.get().floatValue(), fish,
+                FishBehavior.LIGHT_SCARE_COOLDOWN);
+        beginFight(player, session, fight, fish, maxLine);
+        NiceCatchNet.sendTo(player, new ArrowFightMessage(fish.getId()));
+        return true;
     }
 
     /** Hitbox area vs the reference area, on a sub-linear curve so small fish already differ a lot. */
@@ -325,17 +360,18 @@ public class ServerFishingManager
         return Mth.clamp((float) factor, min, max);
     }
 
-    private static void beginFight(ServerPlayer player, Session session, FishingHook hook, FishFight fight)
+    private static void beginFight(ServerPlayer player, Session session, FishFight fight, PathfinderMob fish, double maxLine)
     {
         RandomSource random = player.getRandom();
         NiceCatchConfig.Server cfg = NiceCatchConfig.SERVER;
-        double dist = player.distanceTo(hook);
-        // Give at least a few blocks of line-room beyond wherever the hook was set,
-        // but never enough that vanilla's 32-block check breaks the line before we can.
-        fight.lineLength = (float) Math.min(31.0D, Math.max(cfg.lineLength.get(), dist + 4.0D));
+        double dist = player.distanceTo(fish);
+        // Give at least a few blocks of line-room beyond wherever the fish was hooked, capped by
+        // the reel's spool (a rod fight stays under vanilla's 32-block self-break; an arrow reel
+        // carries more line).
+        fight.lineLength = (float) Math.min(maxLine, Math.max(cfg.lineLength.get(), dist + 4.0D));
         fight.progress = closeness(fight, dist);
-        // Setting the hook always triggers a panicked first run — even a close fish
-        // tears line off before you can start gaining any.
+        // Hooking always triggers a panicked first run — even a close fish tears line off
+        // before you can start gaining any.
         fight.phase = FightPhase.PULL;
         fight.phaseTicks = 25 + random.nextInt(15);
         fight.graceTicks = cfg.escapeGraceTicks.get();
@@ -343,7 +379,7 @@ public class ServerFishingManager
         session.prevBite = true;
 
         ServerLevel level = player.serverLevel();
-        level.playSound(null, hook.getX(), hook.getY(), hook.getZ(),
+        level.playSound(null, fish.getX(), fish.getY(), fish.getZ(),
                 SoundEvents.GENERIC_SPLASH, SoundSource.NEUTRAL, 0.4F, 1.2F);
         NiceCatchNet.sendTo(player, new FightTickMessage(fight.progress, fight.tension, fight.fatigue,
                 fight.phase.isRun(), fight.phase.id()));
@@ -477,6 +513,13 @@ public class ServerFishingManager
 
         Session session = SESSIONS.get(player.getUUID());
         FishingHook hook = player.fishing;
+
+        // A line-arrow fight has no bobber, so it must be ticked independently of player.fishing
+        // (which is null) before the no-bobber cleanup below would wrongly cancel it.
+        if (session != null && session.fight != null && session.fight.arrow) {
+            tickFight(player, session, null);
+            return;
+        }
 
         if (hook == null || !hook.isAlive()) {
             if (session != null) {
@@ -768,12 +811,13 @@ public class ServerFishingManager
         ServerLevel level = player.serverLevel();
         RandomSource random = player.getRandom();
 
-        if (!RodUtil.isRod(player.getItemInHand(fight.hand))) {
+        // A rod fight needs a rod in hand; an arrow fight has no rod at all.
+        if (!fight.arrow && !RodUtil.isRod(player.getItemInHand(fight.hand))) {
             InteractionHand other = RodUtil.findRodHand(player);
             if (other == null) {
                 // Rod put away mid-fight; the hook will discard itself, just end cleanly.
                 unhookFish(level, fight);
-                hook.setHookedEntity(null);
+                if (hook != null) hook.setHookedEntity(null);
                 endFight(player, session, FightEndMessage.ESCAPED);
                 return;
             }
@@ -783,13 +827,15 @@ public class ServerFishingManager
         PathfinderMob fish = resolveFish(level, fight.fishId);
         if (fish == null) {
             // The fish died or unloaded mid-fight; nothing left on the line.
-            hook.setHookedEntity(null);
+            if (hook != null) hook.setHookedEntity(null);
             endFight(player, session, FightEndMessage.ESCAPED);
             return;
         }
-        // No loot-fish may sneak onto the line while a real one is hooked.
-        hook.timeUntilHooked = 0;
-        if (hook.timeUntilLured < 100) hook.timeUntilLured = 100;
+        // No loot-fish may sneak onto the rod's line while a real one is hooked.
+        if (hook != null) {
+            hook.timeUntilHooked = 0;
+            if (hook.timeUntilLured < 100) hook.timeUntilLured = 100;
+        }
 
         fight.ticks++;
         if (fight.graceTicks > 0) fight.graceTicks--;
@@ -798,7 +844,7 @@ public class ServerFishingManager
         // straight away, sounding for the deep, or charging back at you. Each phase changes
         // what the angler must do; a tiring fish favors the calm ones so it can be landed.
         if (--fight.phaseTicks <= 0) {
-            advancePhase(fight, random, level, hook);
+            advancePhase(fight, random, level, fish);
         }
         boolean run = fight.phase.isRun();
 
@@ -842,23 +888,24 @@ public class ServerFishingManager
         fight.fatigue = Mth.clamp(fight.fatigue, 0.0F, 1.0F);
         fight.tension = Mth.clamp(fight.tension, 0.0F, 1.0F);
 
-        // Line snap.
+        // Line snap. An arrow fight's line cannot snap during the reel any more than a rod's,
+        // but there is no rod to damage.
         if (fight.tension >= 1.0F && cfg.lineSnapEnabled.get()) {
             level.playSound(null, player.getX(), player.getY(), player.getZ(),
                     SoundEvents.LEASH_KNOT_BREAK, SoundSource.PLAYERS, 1.0F, 1.3F);
             int snapDamage = cfg.snapRodDamage.get();
-            if (snapDamage > 0) {
+            if (!fight.arrow && snapDamage > 0) {
                 ItemStack rod = player.getItemInHand(fight.hand);
                 InteractionHand hand = fight.hand;
                 rod.hurtAndBreak(snapDamage, player, p -> p.broadcastBreakEvent(hand));
             }
-            freeFish(fish, hook.position());
-            hook.discard(); // the line broke: bobber and fish are gone
+            freeFish(fish, fish.position());
+            if (hook != null) hook.discard(); // the line broke: bobber and fish are gone
             endFight(player, session, FightEndMessage.SNAPPED);
             return;
         }
 
-        moveHookedFish(player, fight, hook, fish, level, random, run, crank, lift);
+        moveHookedFish(player, fight, fish, level, random, run, crank, lift);
 
         // The bar IS the line: distance decides everything from here.
         double dist = fish.distanceTo(player);
@@ -866,9 +913,9 @@ public class ServerFishingManager
 
         // Spooled — the fish took every last block of line and tears free.
         if (dist >= fight.lineLength - 0.25D && fight.graceTicks <= 0) {
-            freeFish(fish, hook.position());
-            hook.setHookedEntity(null);
-            level.playSound(null, hook.getX(), hook.getY(), hook.getZ(),
+            freeFish(fish, fish.position());
+            if (hook != null) hook.setHookedEntity(null);
+            level.playSound(null, fish.getX(), fish.getY(), fish.getZ(),
                     SoundEvents.FISHING_BOBBER_SPLASH, SoundSource.NEUTRAL, 0.3F, 0.6F);
             endFight(player, session, FightEndMessage.ESCAPED);
             return;
@@ -897,7 +944,7 @@ public class ServerFishingManager
      * landed); the same phase rarely repeats back to back. Sets the phase's duration and gives
      * the fish a fresh heading and a splash whenever a run kicks off.
      */
-    private static void advancePhase(FishFight fight, RandomSource random, ServerLevel level, FishingHook hook)
+    private static void advancePhase(FishFight fight, RandomSource random, ServerLevel level, PathfinderMob fish)
     {
         FightPhase prev = fight.phase;
         FightPhase next = pickPhase(fight, random, prev);
@@ -913,7 +960,7 @@ public class ServerFishingManager
         }
 
         if (next.isRun() && !prev.isRun()) {
-            level.playSound(null, hook.getX(), hook.getY(), hook.getZ(),
+            level.playSound(null, fish.getX(), fish.getY(), fish.getZ(),
                     SoundEvents.FISHING_BOBBER_SPLASH, SoundSource.NEUTRAL, 0.4F, 0.7F);
         }
     }
@@ -965,11 +1012,12 @@ public class ServerFishingManager
         fish.setDeltaMovement(dx * 0.1D, dy * 0.1D + Math.sqrt(Math.sqrt(dx * dx + dy * dy + dz * dz)) * 0.12D, dz * 0.1D);
         fish.hurtMarked = true; // force a velocity sync so the leap is visible
 
-        // Keep the AI suppressed for the flight; the conversion discards the entity.
-        FishConversion.beginPull(player, fish, fight.doubleCatchChance);
+        // Keep the AI suppressed for the flight; the conversion discards the entity. An arrow-
+        // caught fish is not added to catch-and-release (its item can't be tossed back to revive it).
+        FishConversion.beginPull(player, fish, fight.doubleCatchChance, fight.arrow);
 
         int rodDamage = NiceCatchConfig.SERVER.entityCatchRodDamage.get();
-        if (rodDamage > 0) {
+        if (!fight.arrow && rodDamage > 0) {
             ItemStack rod = player.getItemInHand(fight.hand);
             // Aquaculture hooks with a durability bonus can spare the rod entirely.
             if (!AquacultureCompat.skipRodDamage(rod, player.getRandom())) {
@@ -980,8 +1028,8 @@ public class ServerFishingManager
         level.playSound(null, fish.getX(), fish.getY(), fish.getZ(),
                 SoundEvents.GENERIC_SPLASH, SoundSource.NEUTRAL, 0.6F, 1.0F);
         level.sendParticles(ParticleTypes.SPLASH, fish.getX(), fish.getY(), fish.getZ(), 10, 0.2D, 0.1D, 0.2D, 0.0D);
-        player.swing(fight.hand, true);
-        hook.discard();
+        if (!fight.arrow) player.swing(fight.hand, true);
+        if (hook != null) hook.discard();
     }
 
     /**
@@ -990,7 +1038,7 @@ public class ServerFishingManager
      * boring straight away, sounding for the bottom, or charging the angler — and the reel
      * winch is layered on top, hauling it in against whatever it's doing.
      */
-    private static void moveHookedFish(ServerPlayer player, FishFight fight, FishingHook hook,
+    private static void moveHookedFish(ServerPlayer player, FishFight fight,
                                        PathfinderMob fish, ServerLevel level, RandomSource random,
                                        boolean run, float crank, float lift)
     {

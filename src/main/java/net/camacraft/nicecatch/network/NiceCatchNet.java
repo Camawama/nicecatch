@@ -26,6 +26,7 @@ public class NiceCatchNet
         CHANNEL.registerMessage(id++, BiteMessage.class, BiteMessage::encode, BiteMessage::decode, BiteMessage::handle);
         CHANNEL.registerMessage(id++, FightTickMessage.class, FightTickMessage::encode, FightTickMessage::decode, FightTickMessage::handle);
         CHANNEL.registerMessage(id++, FightEndMessage.class, FightEndMessage::encode, FightEndMessage::decode, FightEndMessage::handle);
+        CHANNEL.registerMessage(id++, ArrowFightMessage.class, ArrowFightMessage::encode, ArrowFightMessage::decode, ArrowFightMessage::handle);
     }
 
     public static void sendToServer(Object message)

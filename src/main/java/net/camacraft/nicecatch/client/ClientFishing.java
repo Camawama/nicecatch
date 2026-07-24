@@ -14,6 +14,7 @@ import net.minecraft.client.resources.sounds.SimpleSoundInstance;
 import net.minecraft.sounds.SoundEvents;
 import net.minecraft.util.Mth;
 import net.minecraft.world.InteractionHand;
+import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.projectile.FishingHook;
 import net.minecraft.world.phys.Vec3;
 
@@ -43,6 +44,9 @@ public class ClientFishing
     private static float fatigue;
     private static boolean fishRunning;
     private static FightPhase fightPhase = FightPhase.PULL;
+    // >=0 means the current fight is a line-arrow fight anchored to this entity (the fish) rather
+    // than to a rod bobber: the follow camera tracks it and the fishing line renders to it.
+    private static int fightAnchorId = -1;
 
     private static final ReelTracker TRACKER = new ReelTracker();
     private static float revFeedback;
@@ -116,6 +120,12 @@ public class ClientFishing
     public static boolean gradualReelEnabled()
     {
         return NiceCatchConfig.SERVER.gradualReelEnabled.get();
+    }
+
+    /** For a line-arrow fight, the entity id the line is anchored to (the fish); -1 for a rod fight. */
+    public static int fightAnchorId()
+    {
+        return fightAnchorId;
     }
 
     /** Ticks remaining of the "full bar" flourish after landing a fish. */
@@ -280,8 +290,9 @@ public class ClientFishing
             }
             case FIGHT -> {
                 fightTicks++;
-                if (player.fishing == null) {
+                if (fightTargetGone(mc, player)) {
                     phase = Phase.IDLE;
+                    fightAnchorId = -1;
                     break;
                 }
                 reelHeld = mc.screen == null && mc.options.keyUse.isDown();
@@ -314,13 +325,28 @@ public class ClientFishing
     public static void followFishFrame(Minecraft mc, float partialTick, float frameTicks)
     {
         LocalPlayer player = mc.player;
-        if (player == null || (phase != Phase.FIGHT && phase != Phase.REEL) || player.fishing == null
+        if (player == null || (phase != Phase.FIGHT && phase != Phase.REEL)
                 || !NiceCatchConfig.CLIENT.cameraFollowFish.get() || !isCapturingMouse()) {
             followInit = false;
             return;
         }
 
-        Vec3 hookPos = player.fishing.getPosition(partialTick);
+        // Follow the anchored fish for an arrow fight, else the rod's bobber.
+        Vec3 hookPos;
+        if (fightAnchorId >= 0 && phase == Phase.FIGHT) {
+            Entity anchor = mc.level == null ? null : mc.level.getEntity(fightAnchorId);
+            if (anchor == null) {
+                followInit = false;
+                return;
+            }
+            hookPos = anchor.getPosition(partialTick).add(0.0D, anchor.getBbHeight() * 0.5D, 0.0D);
+        } else {
+            if (player.fishing == null) {
+                followInit = false;
+                return;
+            }
+            hookPos = player.fishing.getPosition(partialTick);
+        }
         if (!followInit) {
             followX = hookPos.x;
             followY = hookPos.y;
@@ -396,6 +422,7 @@ public class ClientFishing
         // see the capture->free transition to start the sensitivity ramp.
         fishRunning = false;
         fightPhase = FightPhase.PULL;
+        fightAnchorId = -1;
         reelItem = false;
         progress = shownProgress = 0.0F;
         tension = 0.0F;
@@ -407,6 +434,7 @@ public class ClientFishing
     private static void startFight()
     {
         phase = Phase.FIGHT;
+        fightAnchorId = -1; // a rod fight; the bobber is the anchor
         fightTicks = 0;
         // The bar shows line retrieved; the server's first fight tick fills in the real value.
         progress = shownProgress = 0.0F;
@@ -416,6 +444,27 @@ public class ClientFishing
         fightPhase = FightPhase.PULL;
         revFeedback = 0.0F;
         TRACKER.reset();
+    }
+
+    /**
+     * Enter a line-arrow fight (server-triggered when an arrow strikes a fish). Identical to a
+     * rod fight except the line is anchored to the given fish entity instead of a bobber, so
+     * the follow camera tracks it and the fishing line renders straight to it.
+     */
+    public static void startArrowFight(int fishId)
+    {
+        startFight();
+        fightAnchorId = fishId;
+    }
+
+    /** True when the thing being fought has vanished (bobber gone, or the arrow-anchored fish gone). */
+    private static boolean fightTargetGone(Minecraft mc, LocalPlayer player)
+    {
+        if (fightAnchorId >= 0) {
+            Entity anchor = mc.level == null ? null : mc.level.getEntity(fightAnchorId);
+            return anchor == null || !anchor.isAlive();
+        }
+        return player.fishing == null;
     }
 
     /** Enter reel-in mode for a fishless line (empty hook, or a snagged loot item). */
