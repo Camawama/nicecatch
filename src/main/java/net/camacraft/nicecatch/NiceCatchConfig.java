@@ -136,9 +136,9 @@ public class NiceCatchConfig
                     .defineInRange("fatiguePerRunTick", 0.003D, 0.0D, 0.05D);
             fatigueRecoverPerTick = b.comment("Fish stamina regained per tick while you give it slack — don't let it rest.")
                     .defineInRange("fatigueRecoverPerTick", 0.0015D, 0.0D, 0.05D);
-            slackTakeFactor = b.comment("How hard the fish strips line off a slack reel whenever you release right-click, as a fraction of its run strength.")
+            slackTakeFactor = b.comment("Unused since the fight-phase rework (the run phases strip line intrinsically); kept for config compatibility.")
                     .defineInRange("slackTakeFactor", 0.7D, 0.0D, 1.5D);
-            chargeChance = b.comment("Chance that a run is a charge: the fish sprints back toward you, dumping slack you must crank up.")
+            chargeChance = b.comment("How strongly the Charge tactic is weighted when the fish picks its next move: it sprints back toward you, dumping slack you must crank up. 0 makes it never charge.")
                     .defineInRange("chargeChance", 0.2D, 0.0D, 1.0D);
             maxRevolutionsPerTick = b.comment("Server-side cap on crank speed, in mouse revolutions per tick.")
                     .defineInRange("maxRevolutionsPerTick", 0.25D, 0.05D, 1.0D);

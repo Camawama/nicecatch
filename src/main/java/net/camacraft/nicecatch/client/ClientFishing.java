@@ -1,5 +1,6 @@
 package net.camacraft.nicecatch.client;
 
+import net.camacraft.nicecatch.FightPhase;
 import net.camacraft.nicecatch.NiceCatchConfig;
 import net.camacraft.nicecatch.RodUtil;
 import net.camacraft.nicecatch.network.CastMessage;
@@ -35,6 +36,7 @@ public class ClientFishing
     private static float tension;
     private static float fatigue;
     private static boolean fishRunning;
+    private static FightPhase fightPhase = FightPhase.PULL;
 
     private static final ReelTracker TRACKER = new ReelTracker();
     private static float revFeedback;
@@ -90,6 +92,12 @@ public class ClientFishing
     public static boolean isFishRunning()
     {
         return fishRunning;
+    }
+
+    /** The fish's current fighting tactic, so the HUD can coach the right response. */
+    public static FightPhase fightPhase()
+    {
+        return fightPhase;
     }
 
     /** Ticks remaining of the "full bar" flourish after landing a fish. */
@@ -298,13 +306,14 @@ public class ClientFishing
         }
     }
 
-    public static void handleFightTick(float newProgress, float newTension, float newFatigue, boolean running)
+    public static void handleFightTick(float newProgress, float newTension, float newFatigue, boolean running, byte phaseId)
     {
         if (phase != Phase.FIGHT) return;
         progress = newProgress;
         tension = newTension;
         fatigue = newFatigue;
         fishRunning = running;
+        fightPhase = FightPhase.byId(phaseId);
     }
 
     public static void handleFightEnd(byte result)
@@ -324,6 +333,7 @@ public class ClientFishing
         // wasCapturing intentionally survives reset(): the tick after a fight ends must still
         // see the capture->free transition to start the sensitivity ramp.
         fishRunning = false;
+        fightPhase = FightPhase.PULL;
         progress = shownProgress = 0.0F;
         tension = 0.0F;
         fatigue = 0.0F;
@@ -340,6 +350,7 @@ public class ClientFishing
         tension = 0.0F;
         fatigue = 0.0F;
         fishRunning = false;
+        fightPhase = FightPhase.PULL;
         revFeedback = 0.0F;
         TRACKER.reset();
     }

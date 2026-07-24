@@ -50,6 +50,11 @@ public abstract class FishingHookMixin
      * position, never the bobber's, so nudging the bobber changes nothing about the mechanics.
      * WaterAnimal covers every fish — vanilla AbstractFish, Aquaculture, and Unusual Fish all
      * extend it — with no server-config lookup, and non-fish snags keep vanilla's centre pin.
+     *
+     * The reach is pushed right out to the snout and the pin sits a little low, so the hook
+     * texture at the bottom of the bobber sprite sinks into the front of the head and reads as
+     * a hook set in the fish's mouth rather than a bobber hovering above it. Tunable: REACH
+     * fraction of body width forward, HEIGHT fraction of body height up.
      */
     @Inject(method = "tick", at = @At("RETURN"))
     private void nicecatch$bobberInHead(CallbackInfo ci)
@@ -58,11 +63,13 @@ public abstract class FishingHookMixin
         if (self.currentState != FishingHook.FishHookState.HOOKED_IN_ENTITY) return;
         if (!(self.hookedIn instanceof WaterAnimal fish)) return;
 
+        final double REACH = 0.9D;   // forward along the body, in body-widths — out to the snout
+        final double HEIGHT = 0.42D;  // up the body, in body-heights — low so the hook meets the mouth
         double rad = Math.toRadians(fish.yBodyRot);
-        double reach = fish.getBbWidth() * 0.8D;
+        double reach = fish.getBbWidth() * REACH;
         self.setPos(
                 fish.getX() - Math.sin(rad) * reach,
-                fish.getY(0.5D),
+                fish.getY(HEIGHT),
                 fish.getZ() + Math.cos(rad) * reach);
     }
 }

@@ -52,12 +52,17 @@ public class FishingBarOverlay
 
                 if (ClientFishing.tension() > 0.8F) {
                     drawHint(graphics, window, y, "nicecatch.hint.tension", 0xFFFF4040, true);
-                } else if (ClientFishing.isFishRunning()) {
-                    drawHint(graphics, window, y, "nicecatch.hint.run", 0xFFE8C33A, false);
                 } else if (ClientFishing.fatigue() > 0.85F) {
                     drawHint(graphics, window, y, "nicecatch.hint.tired", 0xFF7EE0C8, false);
                 } else {
-                    drawHint(graphics, window, y, "nicecatch.hint.reel", 0xFFB6E8A0, false);
+                    // Coach the response to whatever the fish is doing right now.
+                    switch (ClientFishing.fightPhase()) {
+                        case HOLD -> drawHint(graphics, window, y, "nicecatch.hint.phase.hold", 0xFFB6E8A0, false);
+                        case SWEEP -> drawHint(graphics, window, y, "nicecatch.hint.phase.sweep", 0xFFB6E8A0, false);
+                        case PULL -> drawHint(graphics, window, y, "nicecatch.hint.run", 0xFFE8C33A, false);
+                        case SOUND -> drawHint(graphics, window, y, "nicecatch.hint.phase.sound", 0xFFE8C33A, false);
+                        case CHARGE -> drawHint(graphics, window, y, "nicecatch.hint.phase.charge", 0xFFF08A3A, true);
+                    }
                 }
             }
             default -> {

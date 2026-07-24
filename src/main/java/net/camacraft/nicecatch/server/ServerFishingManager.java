@@ -1,5 +1,6 @@
 package net.camacraft.nicecatch.server;
 
+import net.camacraft.nicecatch.FightPhase;
 import net.camacraft.nicecatch.NiceCatch;
 import net.camacraft.nicecatch.NiceCatchConfig;
 import net.camacraft.nicecatch.RodUtil;
@@ -311,7 +312,8 @@ public class ServerFishingManager
         fight.progress = closeness(fight, dist);
         // Setting the hook always triggers a panicked first run — even a close fish
         // tears line off before you can start gaining any.
-        fight.runTicks = 25 + random.nextInt(15);
+        fight.phase = FightPhase.PULL;
+        fight.phaseTicks = 25 + random.nextInt(15);
         fight.graceTicks = cfg.escapeGraceTicks.get();
         session.fight = fight;
         session.prevBite = true;
@@ -319,7 +321,8 @@ public class ServerFishingManager
         ServerLevel level = player.serverLevel();
         level.playSound(null, hook.getX(), hook.getY(), hook.getZ(),
                 SoundEvents.GENERIC_SPLASH, SoundSource.NEUTRAL, 0.4F, 1.2F);
-        NiceCatchNet.sendTo(player, new FightTickMessage(fight.progress, fight.tension, fight.fatigue, true));
+        NiceCatchNet.sendTo(player, new FightTickMessage(fight.progress, fight.tension, fight.fatigue,
+                fight.phase.isRun(), fight.phase.id()));
     }
 
     public static void onReelInput(ServerPlayer player, float crank, float lift, boolean holding)
@@ -461,7 +464,8 @@ public class ServerFishingManager
                 return;
             }
             session.approachTicks--;
-            if (fish.distanceToSqr(hook) < 0.81D || session.approachTicks <= 0) {
+            // A touch more forgiving than point-blank so a drifting bobber can still be reached.
+            if (fish.distanceToSqr(hook) < 1.4D || session.approachTicks <= 0) {
                 session.approachFish = null;
                 beginBite(session, level, hook, fish);
                 return;
@@ -651,31 +655,13 @@ public class ServerFishingManager
         fight.ticks++;
         if (fight.graceTicks > 0) fight.graceTicks--;
 
-        // Run/calm phases: a tiring fish runs shorter, less often, and less hard.
-        boolean run;
-        if (fight.runTicks > 0) {
-            fight.runTicks--;
-            run = fight.runTicks > 0;
-            if (!run) {
-                fight.calmTicks = (int) ((30 + random.nextInt(40)) * (1.0F + fight.fatigue));
-            }
-        } else {
-            fight.calmTicks--;
-            run = fight.calmTicks <= 0;
-            if (run && fight.fatigue >= 0.97F) {
-                // Played out: there is no fight left in it, just keep cranking it in.
-                run = false;
-                fight.calmTicks = 30 + random.nextInt(30);
-            }
-            if (run) {
-                fight.runTicks = (int) ((20 + random.nextInt(20)) * (0.7F + 0.6F * fight.strength)
-                        * (1.0F - 0.55F * fight.fatigue));
-                fight.charge = random.nextFloat() < cfg.chargeChance.get().floatValue();
-                fight.veerTicks = 0; // pick a fresh heading the moment the run starts
-                level.playSound(null, hook.getX(), hook.getY(), hook.getZ(),
-                        SoundEvents.FISHING_BOBBER_SPLASH, SoundSource.NEUTRAL, 0.4F, 0.7F);
-            }
+        // The fish cycles between its tactics — holding, thrashing side to side, boring
+        // straight away, sounding for the deep, or charging back at you. Each phase changes
+        // what the angler must do; a tiring fish favors the calm ones so it can be landed.
+        if (--fight.phaseTicks <= 0) {
+            advancePhase(fight, random, level, hook);
         }
+        boolean run = fight.phase.isRun();
 
         float crank = Math.min(fight.pendingCrank, cfg.maxRevolutionsPerTick.get().floatValue());
         float lift = Math.min(fight.pendingLift, 0.6F);
@@ -685,10 +671,14 @@ public class ServerFishingManager
         // Fatigue is the fish's stamina: fighting the crank drains it, runs are exhausting,
         // slack lets it recover. Big fish have deeper reserves.
         float wear = 1.0F / (0.5F + 1.5F * fight.strength);
+        boolean charging = fight.phase == FightPhase.CHARGE;
         if (fight.holding) {
             if (run) {
+                // Winching up a charging fish's slack tires it fast; boring and sounding runs
+                // are the fish's own exertion, so cranking through them costs mostly tension.
+                float chargeDrain = charging ? crank * cfg.fatiguePerRevolution.get().floatValue() : 0.0F;
                 fight.fatigue += (cfg.fatiguePerRunTick.get().floatValue()
-                        + crank * cfg.fatiguePerRevolution.get().floatValue() * 0.5F) * wear;
+                        + crank * cfg.fatiguePerRevolution.get().floatValue() * 0.5F + chargeDrain) * wear;
                 fight.tension += (crank * cfg.tensionPerRevolutionRun.get().floatValue()
                         + 0.004F * (0.5F + fight.strength)) / fight.tensionScale;
             } else {
@@ -698,8 +688,16 @@ public class ServerFishingManager
                 fight.tension -= cfg.tensionRecoveryPerTick.get().floatValue();
             }
         } else {
-            fight.fatigue += run ? cfg.fatiguePerRunTick.get().floatValue() * wear * 0.5F
-                    : -cfg.fatigueRecoverPerTick.get().floatValue();
+            // Not cranking. A charging fish you don't answer gets to rest and recover — that's
+            // why you must crank fast through a charge; other runs are still its own exertion,
+            // and calm phases (hold/thrash) simply let it catch its breath.
+            if (charging) {
+                fight.fatigue -= cfg.fatigueRecoverPerTick.get().floatValue() * 2.0F;
+            } else if (run) {
+                fight.fatigue += cfg.fatiguePerRunTick.get().floatValue() * wear * 0.5F;
+            } else {
+                fight.fatigue -= cfg.fatigueRecoverPerTick.get().floatValue();
+            }
             fight.tension -= cfg.tensionRecoveryPerTick.get().floatValue() * 2.0F;
         }
         fight.fatigue = Mth.clamp(fight.fatigue, 0.0F, 1.0F);
@@ -750,7 +748,65 @@ public class ServerFishingManager
             return;
         }
 
-        NiceCatchNet.sendTo(player, new FightTickMessage(fight.progress, fight.tension, fight.fatigue, run));
+        NiceCatchNet.sendTo(player, new FightTickMessage(fight.progress, fight.tension, fight.fatigue,
+                run, fight.phase.id()));
+    }
+
+    /**
+     * Chooses the fish's next tactic when a phase ends. Runs dominate a fresh fish and calm
+     * phases take over as it tires (a played-out fish gives up running entirely so it can be
+     * landed); the same phase rarely repeats back to back. Sets the phase's duration and gives
+     * the fish a fresh heading and a splash whenever a run kicks off.
+     */
+    private static void advancePhase(FishFight fight, RandomSource random, ServerLevel level, FishingHook hook)
+    {
+        FightPhase prev = fight.phase;
+        FightPhase next = pickPhase(fight, random, prev);
+        fight.phase = next;
+        fight.veerTicks = 0; // pick a fresh heading on the very next movement tick
+
+        switch (next) {
+            case HOLD -> fight.phaseTicks = 20 + random.nextInt(30);
+            case SWEEP -> fight.phaseTicks = 30 + random.nextInt(35);
+            case PULL, SOUND -> fight.phaseTicks = Math.max(10, (int) ((20 + random.nextInt(20))
+                    * (0.7F + 0.6F * fight.strength) * (1.0F - 0.55F * fight.fatigue)));
+            case CHARGE -> fight.phaseTicks = 14 + random.nextInt(14);
+        }
+
+        if (next.isRun() && !prev.isRun()) {
+            level.playSound(null, hook.getX(), hook.getY(), hook.getZ(),
+                    SoundEvents.FISHING_BOBBER_SPLASH, SoundSource.NEUTRAL, 0.4F, 0.7F);
+        }
+    }
+
+    /** Weighted random next phase, biased by fatigue and away from immediately repeating. */
+    private static FightPhase pickPhase(FishFight fight, RandomSource random, FightPhase prev)
+    {
+        float f = fight.fatigue;
+        // Played out: no run left in it, just hold or thrash weakly so it can be reeled home.
+        if (f >= 0.9F) {
+            return random.nextFloat() < 0.6F ? FightPhase.HOLD : FightPhase.SWEEP;
+        }
+        NiceCatchConfig.Server cfg = NiceCatchConfig.SERVER;
+        float chargePref = cfg.chargeChance.get().floatValue();
+        float wHold = 0.6F + 1.8F * f;
+        float wSweep = 1.0F + 0.8F * f;
+        float wPull = 1.4F * (1.0F - 0.6F * f) * (0.6F + fight.strength);
+        float wSound = 1.1F * (1.0F - 0.6F * f);
+        float wCharge = 4.0F * chargePref * (1.0F - 0.7F * f);
+        switch (prev) { // discourage repeating the same tactic twice in a row
+            case HOLD -> wHold *= 0.15F;
+            case SWEEP -> wSweep *= 0.2F;
+            case PULL -> wPull *= 0.1F;
+            case SOUND -> wSound *= 0.2F;
+            case CHARGE -> wCharge *= 0.05F;
+        }
+        float roll = random.nextFloat() * (wHold + wSweep + wPull + wSound + wCharge);
+        if ((roll -= wHold) < 0.0F) return FightPhase.HOLD;
+        if ((roll -= wSweep) < 0.0F) return FightPhase.SWEEP;
+        if ((roll -= wPull) < 0.0F) return FightPhase.PULL;
+        if ((roll -= wSound) < 0.0F) return FightPhase.SOUND;
+        return FightPhase.CHARGE;
     }
 
     /** 0..1 line-retrieved fraction for the HUD bar: 1 at landing range, 0 with all line out. */
@@ -789,7 +845,12 @@ public class ServerFishingManager
         hook.discard();
     }
 
-    /** The fish is the thing that runs; the bobber rides it via the hooked-entity glue. */
+    /**
+     * The fish is the thing that moves; the bobber rides it via the hooked-entity glue. Its
+     * drive this tick depends on its current phase — holding still, thrashing side to side,
+     * boring straight away, sounding for the bottom, or charging the angler — and the reel
+     * winch is layered on top, hauling it in against whatever it's doing.
+     */
     private static void moveHookedFish(ServerPlayer player, FishFight fight, FishingHook hook,
                                        PathfinderMob fish, ServerLevel level, RandomSource random,
                                        boolean run, float crank, float lift)
@@ -804,12 +865,13 @@ public class ServerFishingManager
         }
         Vec3 toward = toPlayer.normalize();
 
-        // Erratic swimming: ease the heading toward a lateral offset that gets re-picked
-        // every few ticks, with an occasional hard juke across to the other side.
+        // Erratic swimming: ease the heading toward a lateral offset re-picked every few ticks,
+        // with the odd hard juke. A thrashing (SWEEP) fish veers wider and jukes far more often.
+        boolean sweeping = fight.phase == FightPhase.SWEEP;
         if (--fight.veerTicks <= 0) {
-            fight.veerTicks = 6 + random.nextInt(10);
-            fight.veerTarget = (random.nextFloat() - 0.5F) * 2.4F;
-            if (random.nextFloat() < 0.2F) {
+            fight.veerTicks = 6 + random.nextInt(sweeping ? 6 : 10);
+            fight.veerTarget = (random.nextFloat() - 0.5F) * (sweeping ? 2.4F : 1.4F);
+            if (random.nextFloat() < (sweeping ? 0.4F : 0.2F)) {
                 fight.veerTarget = -fight.veerTarget * 1.4F;
             }
             fight.diveTarget = random.nextFloat() * 0.9F - 0.65F; // mostly down, occasionally up
@@ -817,37 +879,104 @@ public class ServerFishingManager
         fight.veer += (fight.veerTarget - fight.veer) * 0.3F;
         fight.dive += (fight.diveTarget - fight.dive) * 0.3F;
 
-        // Top speed (blocks/tick) the crank is dragging the fish player-ward this tick.
-        // Strong fish drag their heels; fatigue erodes that resistance; lifting the rod
-        // while calm pumps extra speed.
+        // Top reel-in speed (blocks/tick) the crank drags the fish player-ward this tick. How
+        // effective the crank is depends on the phase: a clean pull while it holds, near-nothing
+        // against a straight run, near-nothing on a sounding fish until you pump the rod up to
+        // lift it, and a fast take-up of a charging fish's slack.
         double target = 0.0D;
         if (fight.holding && crank > 0.001F && dist > 1.2D) {
             double crankFrac = Math.min(1.0D, crank / cfg.maxRevolutionsPerTick.get());
             double resist = 0.5D * fight.strength * (1.0D - 0.6D * fight.fatigue);
-            double pump = run ? 1.0D : 1.0D + Math.min(1.0D, lift * cfg.liftPumpBonus.get());
-            target = cfg.reelInSpeed.get() / 20.0D * crankFrac * (1.0D - resist) * pump * fight.reelScale;
-            if (run) target *= cfg.runReelEffectiveness.get();
+            double liftFrac = Math.min(1.0D, lift * cfg.liftPumpBonus.get());
+            double eff = switch (fight.phase) {
+                case HOLD -> 1.0D + liftFrac;                       // pump the rod to reel faster
+                case SWEEP -> 0.75D;                                // thrashing fights the crank a little
+                case PULL -> cfg.runReelEffectiveness.get();        // you barely winch against a run
+                case SOUND -> cfg.runReelEffectiveness.get()
+                        * (0.4D + 0.9D * Math.min(1.0D, lift * 2.0D)); // lift a diver before it will come
+                case CHARGE -> 1.3D;                                // take up its slack fast
+            };
+            target = cfg.reelInSpeed.get() / 20.0D * crankFrac * (1.0D - resist) * eff * fight.reelScale;
         }
 
+        // The fish's own drive this tick: which way it wants to go, and how hard.
+        double baseForce = (0.05D + 0.06D * fight.strength) * (1.0D - 0.7D * fight.fatigue);
+        Vec3 heading;
+        double damping;
+        switch (fight.phase) {
+            case HOLD -> {
+                heading = Vec3.ZERO;   // parks in place; only the reel moves it
+                damping = 0.6D;
+            }
+            case SWEEP -> {
+                // Thrash mostly sideways (perpendicular to the line), leaning to the veer side.
+                Vec3 side = new Vec3(-toward.z, 0.0D, toward.x).scale(fight.veer >= 0.0F ? 1.0D : -1.0D);
+                heading = side.add(toward.scale(-0.15D)).normalize();
+                damping = 0.72D;
+                baseForce *= 0.9D;
+            }
+            case PULL -> {
+                heading = rotateY(toward.scale(-1.0D), fight.veer);
+                heading = new Vec3(heading.x, fight.dive * 0.4D, heading.z).normalize();
+                damping = 0.7D;
+            }
+            case SOUND -> {
+                // Sound for the bottom: mostly straight down, a little away. Pulling the rod up
+                // (lift) fights the dive, so the fish can be lifted and then reeled in.
+                double liftResist = Mth.clamp(lift * cfg.liftRunResistance.get(), 0.0D, 0.9D);
+                Vec3 awaySlight = rotateY(toward.scale(-1.0D), fight.veer * 0.5F).scale(0.5D);
+                heading = new Vec3(awaySlight.x, -0.85D, awaySlight.z).normalize();
+                damping = 0.7D;
+                baseForce *= (1.0D - liftResist);
+            }
+            case CHARGE -> {
+                // Rush the angler and dump slack. Break off into an away-run if it gets too
+                // close, so it never beaches itself or lands the fight during a run.
+                if (dist < cfg.landDistance.get() + 2.0D) {
+                    heading = rotateY(toward.scale(-1.0D), fight.veer);
+                } else {
+                    heading = rotateY(toward, fight.veer * 0.5F);
+                    heading = new Vec3(heading.x, fight.dive * 0.3D, heading.z).normalize();
+                }
+                damping = 0.65D;
+                baseForce *= 1.1D;
+            }
+            default -> {
+                heading = Vec3.ZERO;
+                damping = 0.7D;
+            }
+        }
+
+        Vec3 wobble = new Vec3((random.nextDouble() - 0.5D) * 0.05D, 0.0D, (random.nextDouble() - 0.5D) * 0.05D);
+        Vec3 v = fish.getDeltaMovement().scale(damping).add(heading.scale(baseForce)).add(wobble);
+
+        // The reel winch, layered on top: hauls the fish toward the player, and upward when it
+        // has sounded below the rod (landing is gated on 3D distance, so a deep diver must be
+        // brought up before it can come in).
+        if (target > 0.0D) {
+            double up = Mth.clamp((player.getY() - fish.getY()) * 0.1D, 0.0D, 0.8D);
+            Vec3 pull = rotateY(toward, fight.veer * 0.3F).add(0.0D, up, 0.0D).normalize();
+            v = v.add(pull.scale(target * (run ? 0.3D : 0.2D)));
+            // In a calm phase the hard clamp means the fish can never be flung in faster than
+            // the reel speed — it always eases toward the player, thrash and all.
+            if (!run) {
+                double horiz = Math.sqrt(v.x * v.x + v.z * v.z);
+                if (horiz > target) {
+                    v = new Vec3(v.x * target / horiz, v.y, v.z * target / horiz);
+                }
+            }
+        }
+
+        // At the very end of the spool a run may not tear the fish clean past the line — the
+        // escape check holds it here until the grace period lapses, then it breaks free.
+        if (run && dist >= fight.lineLength) {
+            v = new Vec3(v.x * 0.5D, v.y, v.z * 0.5D);
+        }
+
+        fish.setDeltaMovement(v);
+
+        // A running fish churns the surface; a calm reeled one leaves a gentler fishing wake.
         if (run) {
-            // A charge that gets too close breaks off into a normal run instead of beaching itself on you.
-            if (fight.charge && dist < cfg.landDistance.get() + 2.0D) {
-                fight.charge = false;
-            }
-            if (dist < fight.lineLength) {
-                // The run's pull, sapped by fatigue and resisted by rod lift; cranking
-                // still winches against it at reduced effect (and heavy tension cost).
-                double liftResist = Mth.clamp(lift * cfg.liftRunResistance.get(), 0.0D, 0.85D);
-                double force = (0.05D + 0.06D * fight.strength) * (1.0D - 0.7D * fight.fatigue) * (1.0D - liftResist);
-                Vec3 heading = rotateY(fight.charge ? toward : toward.scale(-1.0D), fight.veer);
-                // Tilt the run by the dive whim: sounding for the bottom is a fish's best move.
-                heading = new Vec3(heading.x, fight.dive, heading.z).normalize();
-                Vec3 wobble = new Vec3((random.nextDouble() - 0.5D) * 0.08D, 0.0D, (random.nextDouble() - 0.5D) * 0.08D);
-                fish.setDeltaMovement(fish.getDeltaMovement().scale(0.7D)
-                        .add(heading.scale(force)).add(toward.scale(target * 0.3D)).add(wobble));
-            } else {
-                fish.setDeltaMovement(fish.getDeltaMovement().scale(0.5D));
-            }
             if (fight.ticks % 4 == 0) {
                 level.sendParticles(ParticleTypes.SPLASH, fish.getX(), fish.getY() + 0.3D, fish.getZ(),
                         4, 0.15D, 0.05D, 0.15D, 0.0D);
@@ -856,34 +985,11 @@ public class ServerFishingManager
                 level.playSound(null, fish.getX(), fish.getY(), fish.getZ(),
                         SoundEvents.GENERIC_SPLASH, SoundSource.NEUTRAL, 0.25F, 1.2F + random.nextFloat() * 0.3F);
             }
-        } else if (target > 0.0D) {
-            // Speed-limited tug of war: the hard clamp means the fish can never fling in.
-            // It still thrashes side to side on the way, so the pull direction sways too.
-            Vec3 wobble = new Vec3((random.nextDouble() - 0.5D) * 0.04D, 0.0D, (random.nextDouble() - 0.5D) * 0.04D);
-            // The winch also hauls upward when the fish has sounded below the rod — landing
-            // is gated on 3D distance, so a deep diver must come up before it can come in.
-            double up = Mth.clamp((player.getY() - fish.getY()) * 0.1D, 0.0D, 0.8D);
-            Vec3 pull = rotateY(toward, fight.veer * 0.5F).add(0.0D, up, 0.0D).normalize();
-            Vec3 v = fish.getDeltaMovement().scale(0.8D).add(pull.scale(target * 0.2D)).add(wobble);
-            double horiz = Math.sqrt(v.x * v.x + v.z * v.z);
-            if (horiz > target) {
-                v = new Vec3(v.x * target / horiz, v.y, v.z * target / horiz);
-            }
-            fish.setDeltaMovement(v);
-            if (fight.ticks % 6 == 0) {
-                level.sendParticles(ParticleTypes.FISHING, fish.getX(), fish.getY() + 0.1D, fish.getZ(),
-                        2, 0.1D, 0.05D, 0.1D, 0.0D);
-            }
-        } else if (!fight.holding && dist < fight.lineLength) {
-            // Slack line: nothing resists it, so the fish strips line at will and wanders
-            // wherever its heading takes it.
-            double force = (0.05D + 0.06D * fight.strength) * (1.0D - 0.7D * fight.fatigue)
-                    * cfg.slackTakeFactor.get();
-            Vec3 heading = rotateY(toward.scale(-1.0D), fight.veer);
-            heading = new Vec3(heading.x, fight.dive, heading.z).normalize();
-            Vec3 wobble = new Vec3((random.nextDouble() - 0.5D) * 0.05D, 0.0D, (random.nextDouble() - 0.5D) * 0.05D);
-            fish.setDeltaMovement(fish.getDeltaMovement().scale(0.75D).add(heading.scale(force)).add(wobble));
+        } else if (target > 0.0D && fight.ticks % 6 == 0) {
+            level.sendParticles(ParticleTypes.FISHING, fish.getX(), fish.getY() + 0.1D, fish.getZ(),
+                    2, 0.1D, 0.05D, 0.1D, 0.0D);
         }
+
         keepUnderSurface(fish);
         FishSteering.faceMovement(fish);
     }

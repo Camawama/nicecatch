@@ -4,6 +4,10 @@
   "nicecatch.hint.loot_bite": "Something's on the line! Right-click to reel it in",
   "nicecatch.hint.reel": "Hold right-click and circle your mouse to reel it in",
   "nicecatch.hint.run": "It's running! Ease off and pull the rod up",
+  "nicecatch.hint.phase.hold": "It's holding — reel it in!",
+  "nicecatch.hint.phase.sweep": "It's thrashing — keep on it and reel",
+  "nicecatch.hint.phase.sound": "It's sounding — pull the rod up to lift it!",
+  "nicecatch.hint.phase.charge": "It's charging — reel fast, take up the slack!",
   "nicecatch.hint.tension": "Line about to snap — stop cranking!",
   "nicecatch.hint.tired": "It's worn out — reel it home!",
   "nicecatch.hint.caught": "Nice catch!"

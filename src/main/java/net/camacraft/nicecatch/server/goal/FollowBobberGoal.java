@@ -134,10 +134,18 @@ public class FollowBobberGoal extends Goal
         FishingHook hook = state.biteBobber != null ? state.biteBobber : state.bobber;
         if (hook == null) return;
 
+        // A bobber can drift — water current, a boat towing the line, a player reeling it in.
+        // Aim where it's heading and put on enough extra speed to keep pace, or a moving bobber
+        // is impossible for the fish to catch up to and it never gets close enough to bite.
+        Vec3 hookVel = hook.getDeltaMovement();
+        double hookSpeed = hookVel.horizontalDistance();
+        double lead = 3.0D;
+        double chaseBoost = hookSpeed * 1.6D;
+
         if (state.biteBobber != null) {
-            // Nibbling: press right up under the bobber, wiggling.
-            Vec3 target = new Vec3(hook.getX(), hook.getY() - 0.25D, hook.getZ());
-            FishSteering.swimToward(fish, target, 0.035D, 0.3D);
+            // Nibbling: press right up under the bobber, wiggling, tracking it as it drifts.
+            Vec3 target = new Vec3(hook.getX() + hookVel.x * lead, hook.getY() - 0.25D, hook.getZ() + hookVel.z * lead);
+            FishSteering.swimToward(fish, target, 0.035D + hookSpeed * 0.05D, 0.3D + chaseBoost);
             if (fish.tickCount % 4 == 0) {
                 FishSteering.jink(fish, 0.04D);
             }
@@ -145,8 +153,9 @@ public class FollowBobberGoal extends Goal
         }
 
         double distSq = fish.distanceToSqr(hook);
-        if (distSq > 6.25D) { // > 2.5 blocks: dart over with purpose
-            FishSteering.swimToward(fish, new Vec3(hook.getX(), hook.getY() - 0.6D, hook.getZ()), 0.03D, 0.33D);
+        if (distSq > 6.25D) { // > 2.5 blocks: dart over with purpose, leading the drift
+            Vec3 target = new Vec3(hook.getX() + hookVel.x * lead, hook.getY() - 0.6D, hook.getZ() + hookVel.z * lead);
+            FishSteering.swimToward(fish, target, 0.03D + hookSpeed * 0.05D, 0.33D + chaseBoost);
             return;
         }
 
@@ -175,10 +184,10 @@ public class FollowBobberGoal extends Goal
 
         orbitAngle += orbitDir * 0.09D;
         Vec3 target = new Vec3(
-                hook.getX() + Math.cos(orbitAngle) * orbitRadius,
+                hook.getX() + hookVel.x * lead + Math.cos(orbitAngle) * orbitRadius,
                 hook.getY() - orbitDepth,
-                hook.getZ() + Math.sin(orbitAngle) * orbitRadius);
-        FishSteering.swimToward(fish, target, 0.022D, 0.2D);
+                hook.getZ() + hookVel.z * lead + Math.sin(orbitAngle) * orbitRadius);
+        FishSteering.swimToward(fish, target, 0.022D, 0.2D + chaseBoost);
     }
 
     private void rerollOrbit(RandomSource random)

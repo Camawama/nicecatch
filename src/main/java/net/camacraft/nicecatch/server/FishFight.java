@@ -1,5 +1,6 @@
 package net.camacraft.nicecatch.server;
 
+import net.camacraft.nicecatch.FightPhase;
 import net.minecraft.world.InteractionHand;
 
 import javax.annotation.Nullable;
@@ -30,8 +31,11 @@ public class FishFight
     public float reelScale = 1.0F;
     /** Chance to double the caught item (Aquaculture double hook). */
     public float doubleCatchChance;
-    public int runTicks;
-    public int calmTicks;
+
+    /** The fish's current tactic. It cycles between these throughout the fight. */
+    public FightPhase phase = FightPhase.PULL;
+    /** Ticks left in the current phase; a new phase is picked when this runs out. */
+    public int phaseTicks;
     public int graceTicks;
     public int ticks;
 
@@ -43,8 +47,6 @@ public class FishFight
     /** Vertical analogue of veer, biased downward: a fighting fish likes to sound for the deep. */
     public float dive;
     public float diveTarget;
-    /** This run is a charge: the fish sprints back toward the player, dumping slack on you. */
-    public boolean charge;
 
     // Input accumulated from ReelMessages since the last fight tick.
     public float pendingCrank;
