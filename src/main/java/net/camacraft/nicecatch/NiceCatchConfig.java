@@ -381,6 +381,9 @@ public class NiceCatchConfig
         public final ForgeConfigSpec.DoubleValue cameraFollowStrength;
         public final ForgeConfigSpec.BooleanValue showHints;
         public final ForgeConfigSpec.IntValue mouseRampTicks;
+        public final ForgeConfigSpec.IntValue castCooldownTicks;
+        public final ForgeConfigSpec.BooleanValue bobberHookInMouth;
+        public final ForgeConfigSpec.DoubleValue bobberHookRotationDegrees;
 
         Client(ForgeConfigSpec.Builder b)
         {
@@ -404,6 +407,12 @@ public class NiceCatchConfig
                     .define("showHints", true);
             mouseRampTicks = b.comment("Ticks over which camera sensitivity ramps back up after leaving reel mode, so a spinning hand doesn't whip the camera.")
                     .defineInRange("mouseRampTicks", 10, 0, 60);
+            castCooldownTicks = b.comment("Cooldown (ticks) after a fight ends or you finish reeling your line in before you can charge another cast, so a held right-click doesn't fling the line straight back out.")
+                    .defineInRange("castCooldownTicks", 12, 0, 100);
+            bobberHookInMouth = b.comment("When a fish is hooked, roll the bobber so its hook clips up into the fish's mouth (cosmetic). The bobber is also slid forward to the fish's snout regardless of this setting.")
+                    .define("bobberHookInMouth", true);
+            bobberHookRotationDegrees = b.comment("Degrees to roll the hooked bobber in the screen plane so the hook points into the fish. 180 flips it so the hook (bottom of the bobber sprite) points up into the mouth; 0 disables the roll.")
+                    .defineInRange("bobberHookRotationDegrees", 180.0D, 0.0D, 360.0D);
         }
     }
 }

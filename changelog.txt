@@ -46,7 +46,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Range and toggle via `lineArrow.arrowMaxLine` / `lineArrow.arrowFightEnabled`. Uses the
     vanilla arrow texture for now (a custom texture can be dropped in later).
 
+### Fixed
+- The Fishing Line Arrow could not be fired from a bow (bows check the `minecraft:arrows`
+  item tag, not the item class). The arrow is now in that tag, so any bow accepts it as ammo.
+  Note: if you carry both regular and line arrows, the bow may grab the regular ones first —
+  keep line arrows as your only arrows (or in the off-hand) to fire them.
+
 ### Changed
+- The hooked bobber now **rolls so its hook clips up into the fish's mouth** (on top of the
+  existing slide to the snout), for a proper "hooked in the mouth" look. Tunable/toggle via
+  `client` config `bobberHookInMouth` / `bobberHookRotationDegrees` (180 = flip; 0 = off).
+- Added a short **cooldown after a fight or reel-in finishes** before you can charge another
+  cast, so a still-held right-click doesn't immediately fling the line back out
+  (`client.castCooldownTicks`, default 12).
 - Fish can now bite a **moving** bobber: fish lead a drifting bobber's motion and put on
   extra speed to keep pace with it, so a bobber pushed by a current, towed by a boat, or
   being reeled can still be approached and bitten. The bite-arrival range is a touch more

@@ -408,6 +408,9 @@ public class ClientFishing
     {
         boolean caught = result == FightEndMessage.CAUGHT;
         reset();
+        // A brief cooldown after a fight or a reel-in finishes, so a still-held right-click
+        // doesn't immediately charge and fling the line straight back out.
+        castCooldown = Math.max(castCooldown, NiceCatchConfig.CLIENT.castCooldownTicks.get());
         if (caught) {
             // Linger on a full bar for a moment so the catch lands visually.
             celebrateTicks = 20;

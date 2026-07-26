@@ -8,6 +8,7 @@
     "FishingHookMixin"
   ],
   "client": [
+    "FishingHookRendererMixin",
     "MouseHandlerMixin"
   ],
   "injectors": {
