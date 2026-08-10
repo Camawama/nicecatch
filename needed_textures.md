@@ -33,6 +33,8 @@ higher-res unless you also scale the blits).
 | File | Size | Purpose |
 |---|---|---|
 | `../item/line_arrow.png` | 16×16 | The Fishing Line Arrow item. Currently the item model just reuses the vanilla arrow sprite (`minecraft:item/arrow`), so it works with no custom art. To use a custom sprite, drop this PNG under `assets/nicecatch/textures/item/line_arrow.png` and point `models/item/line_arrow.json` `layer0` at `nicecatch:item/line_arrow`. |
+| `../item/fishing_net.png` | 16×16 | The Fishing Net item. Placeholder is the vanilla cobweb sprite (`minecraft:block/cobweb`). Drop the PNG under `assets/nicecatch/textures/item/fishing_net.png` and point `models/item/fishing_net.json` `layer0` at `nicecatch:item/fishing_net`. |
+| `../block/fish_trap.png` | 16×16 | The Fish Trap block (all six faces; placeholder is vanilla `minecraft:block/barrel_side`). Drop the PNG under `assets/nicecatch/textures/block/fish_trap.png` and point `models/block/fish_trap.json` `all` at `nicecatch:block/fish_trap`. A wicker/slatted cage reads best — the block model is a full cube (`cube_all`), so a fancier cage model can come later. |
 
 The flying arrow entity also just reuses the vanilla arrow entity texture, so no entity texture
 is needed unless you want a distinct look.

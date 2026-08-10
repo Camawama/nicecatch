@@ -4,7 +4,10 @@ import net.camacraft.nicecatch.NiceCatch;
 import net.camacraft.nicecatch.NiceCatchConfig;
 import net.camacraft.nicecatch.RodUtil;
 import net.camacraft.nicecatch.server.goal.FollowBobberGoal;
+import net.camacraft.nicecatch.server.goal.FoodInterestGoal;
+import net.camacraft.nicecatch.server.goal.HabitatGoal;
 import net.camacraft.nicecatch.server.goal.HookedFishGoal;
+import net.camacraft.nicecatch.server.goal.HuntPreyGoal;
 import net.camacraft.nicecatch.server.goal.ScatterGoal;
 import net.camacraft.nicecatch.server.goal.SchoolBoidsGoal;
 import net.minecraft.core.BlockPos;
@@ -17,6 +20,7 @@ import net.minecraft.world.entity.LivingEntity;
 import net.minecraft.world.entity.ai.goal.AvoidEntityGoal;
 import net.minecraft.world.entity.ai.goal.FollowFlockLeaderGoal;
 import net.minecraft.world.entity.ai.goal.PanicGoal;
+import net.minecraft.world.entity.ai.goal.RandomSwimmingGoal;
 import net.minecraft.world.entity.PathfinderMob;
 import net.minecraft.world.entity.animal.AbstractFish;
 import net.minecraft.world.entity.player.Player;
@@ -73,6 +77,10 @@ public final class FishBehavior
          */
         public float interest;
         public long nibbleCooldownUntil;
+        /** Game time until which this fish ignores thrown food (it just ate). */
+        public long foodSatiatedUntil;
+        /** Game time until which a predator won't hunt (it just ate a fish). */
+        public long huntSatiatedUntil;
     }
 
     public static FishState state(PathfinderMob fish)
@@ -166,6 +174,7 @@ public final class FishBehavior
                 BOID_BLACKLIST_CACHE.clear();
                 WHITELIST_CACHE.clear();
                 SCHOOL_SPAWN_CACHE.clear();
+                FishProfiles.clearCache();
             }
         }
     }
@@ -198,7 +207,8 @@ public final class FishBehavior
         }
     }
 
-    private static MobSpawnSettings.SpawnerData boostedSpawn(MobSpawnSettings.SpawnerData data)
+    /** School-sized replacement for a biome fish spawner entry (or the entry itself, untouched). */
+    public static MobSpawnSettings.SpawnerData boostedSpawn(MobSpawnSettings.SpawnerData data)
     {
         return SCHOOL_SPAWN_CACHE.computeIfAbsent(data, d -> {
             var id = net.minecraftforge.registries.ForgeRegistries.ENTITY_TYPES.getKey(d.type);
@@ -234,14 +244,22 @@ public final class FishBehavior
         // approaching a bobber cast near its owner, and their panic is a slow pathfinding
         // crawl. Our scatter system replaces both with a meaner, faster, situational fear
         // (close players, swimmers, attacks, damage), so drop the vanilla goals. The boids
-        // school likewise supersedes vanilla's pathfinding flock-follow when enabled.
+        // school likewise supersedes vanilla's pathfinding flock-follow, and the habitat
+        // goal supersedes vanilla's random-swim pathfinding crawl, when enabled.
         boolean boids = NiceCatchConfig.SERVER.boidSchoolingEnabled.get() && !isBoidBlacklisted(fish.getType());
+        boolean habitat = NiceCatchConfig.SERVER.habitatMovementEnabled.get();
         fish.goalSelector.removeAllGoals(g -> g instanceof AvoidEntityGoal || g instanceof PanicGoal
-                || (boids && g instanceof FollowFlockLeaderGoal));
+                || (boids && g instanceof FollowFlockLeaderGoal)
+                || (habitat && g instanceof RandomSwimmingGoal));
         fish.goalSelector.addGoal(0, new HookedFishGoal(fish));
         fish.goalSelector.addGoal(1, new ScatterGoal(fish));
         fish.goalSelector.addGoal(2, new FollowBobberGoal(fish));
-        fish.goalSelector.addGoal(3, new SchoolBoidsGoal(fish));
+        fish.goalSelector.addGoal(3, new FoodInterestGoal(fish));
+        fish.goalSelector.addGoal(4, new HuntPreyGoal(fish));
+        fish.goalSelector.addGoal(5, new SchoolBoidsGoal(fish));
+        if (habitat) {
+            fish.goalSelector.addGoal(6, new HabitatGoal(fish));
+        }
     }
 
     /** Swinging at any fish spooks the school; melee fishing should feel nearly hopeless. */
@@ -430,6 +448,16 @@ public final class FishBehavior
         return !hook.level().getEntitiesOfClass(PathfinderMob.class, box,
                 f -> f.isAlive() && f.isInWater() && isFishLike(f)
                         && horizontalDistSqr(f, hook) <= radius * radius).isEmpty();
+    }
+
+    /**
+     * Bite/interest multiplier for the water at this spot: fish are sluggish where it is cold
+     * enough to snow. They still bite — just noticeably slower and with less enthusiasm.
+     */
+    public static float coldFactor(net.minecraft.world.level.Level level, BlockPos pos)
+    {
+        return level.getBiome(pos).value().coldEnoughToSnow(pos)
+                ? NiceCatchConfig.SERVER.coldBiteMultiplier.get().floatValue() : 1.0F;
     }
 
     /** How fast this bobber grows fish interest (Aquaculture bait speeds it up). */

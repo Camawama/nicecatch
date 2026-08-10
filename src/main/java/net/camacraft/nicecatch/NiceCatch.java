@@ -1,6 +1,8 @@
 package net.camacraft.nicecatch;
 
 import net.camacraft.nicecatch.network.NiceCatchNet;
+import net.camacraft.nicecatch.registry.ModBlockEntities;
+import net.camacraft.nicecatch.registry.ModBlocks;
 import net.camacraft.nicecatch.registry.ModEntities;
 import net.camacraft.nicecatch.registry.ModItems;
 import net.minecraftforge.eventbus.api.IEventBus;
@@ -17,8 +19,10 @@ public class NiceCatch
     {
         IEventBus modBus = context.getModEventBus();
         NiceCatchNet.register();
+        ModBlocks.register(modBus);
         ModItems.register(modBus);
         ModEntities.register(modBus);
+        ModBlockEntities.register(modBus);
 
         context.registerConfig(ModConfig.Type.SERVER, NiceCatchConfig.SERVER_SPEC);
         context.registerConfig(ModConfig.Type.CLIENT, NiceCatchConfig.CLIENT_SPEC);

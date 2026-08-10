@@ -94,6 +94,15 @@ public final class FishConversion
         PULLS.add(pull);
     }
 
+    /**
+     * A net scoop or trap catch: the fish becomes its item on the spot — no launch arc, no
+     * pull — with the usual catch-and-release window.
+     */
+    public static void catchDirectly(ServerPlayer player, PathfinderMob fish)
+    {
+        convert(player, fish, 0.0F, false);
+    }
+
     @SubscribeEvent
     public static void onServerTick(TickEvent.ServerTickEvent event)
     {
@@ -174,6 +183,12 @@ public final class FishConversion
         player.awardStat(Stats.FISH_CAUGHT, 1);
         level.addFreshEntity(new ExperienceOrb(level, player.getX(), player.getY() + 0.5D, player.getZ(),
                 1 + level.random.nextInt(5)));
+    }
+
+    /** Public face of {@link #itemFor} for the net and trap: what item is this fish? */
+    public static ItemStack itemForFish(ServerLevel level, PathfinderMob fish)
+    {
+        return itemFor(level, fish);
     }
 
     /**

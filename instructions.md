@@ -17,7 +17,16 @@ water, you're loot-fishing: vanilla wait times apply and you can pull up junk or
 
 Each fish tracks its own **interest**: every time it notices a bobber its curiosity grows
 (faster with Aquaculture bait), and interested fish approach sooner and bite far more often.
-Getting spooked knocks interest back down.
+Getting spooked knocks interest back down. Interest sticks between casts, so a spot you
+keep casting into genuinely warms up over time.
+
+**Species matter.** Every fish has a behavior profile (size-based defaults, all overridable
+in `species.fishProfiles`): little schoolers are bold, curious, and easy to land; big fish
+are wary, fight hard, and lurk near kelp, seagrass, and the bottom; predators (salmon,
+sharks from fish mods) hunt much smaller fish — you'll see prey scatter as one cruises
+through. **Chumming works**: food tossed into water startles some fish but draws hungry
+ones over to eat it, and a fed fish trusts the water (its bobber interest jumps). In
+**snowy-cold water** everything is sluggish — fish still bite, just noticeably slower.
 
 Keep still! Moving or swinging within a few blocks of fish scares them off, as does
 swimming near them or hurting one. Startled fish sit out briefly; genuinely hurt or
@@ -29,9 +38,12 @@ escaped fish avoid biting much longer.
   is there to hook: a fish is just nibbling. Hold your nerve; a nibble occasionally turns
   into the real thing (and makes that fish more interested).
 - **A real fish bites** — you'll first see the vanilla V-shaped wake streaking toward your
-  bobber as the fish closes in. Then the bobber tugs, bubbles rise, the bar flashes **red**:
-  **right-click once to set the hook** before the window (~2.5 s) closes, or the fish
-  spooks and flees. Setting the hook starts the fight (section 4).
+  bobber as the fish closes in. Then the bobber tugs, bubbles rise, the bar flashes **red**
+  and the hint tells you which way to strike: **yank the rod LEFT or RIGHT** (a quick
+  sideways jolt of the mouse) before the window (~2.5 s) closes. The right way sets the
+  hook and starts the fight (section 4); the wrong way pulls the hook straight out of its
+  mouth and the fish bolts. (Turn `bite.directionalHookSet` off to set the hook with a
+  plain right-click instead; `client.hookSetJoltDegrees` tunes how hard a yank must be.)
 - **A loot nibble** (no fish around) — the bar flashes **gold**: **hold right-click and reel**
   to bring the item in. There's no fight and the line can't snap, so reel at full speed (a
   touch slower than an empty line). See *Reeling in without a fish* below.
@@ -114,6 +126,25 @@ the mouse; your bow won't draw while you're reeling). A fish landed with the arr
 added to catch-and-release, so its item can't be tossed back to revive it. Hit the fish from
 too far away (beyond the arrow's line length) and the line won't take — it just behaves like a
 normal arrow.
+
+## 4d. The fishing net
+
+Craft a **Fishing Net** (2×2 string over a stick) and sweep it through nearby water — or
+right-click a fish with it. One fish inside the small sweep radius may be scooped straight
+into your inventory: great odds on small fish up close, poor odds on big ones (they thrash
+free), and a missed swipe scatters the whole spot. It has a short cooldown and wears out,
+so it's a shallows tool, not a rod replacement.
+
+**Teamwork**: netting a fish that another player is fighting on their line lands the catch
+for them instantly — one of you works the rod, the other waits in the shallows with the net.
+
+## 4e. The fish trap
+
+Craft a **Fish Trap** (planks + string ring) and place it underwater. It slowly catches
+fish that swim inside it — and **baiting it with any food item** (right-click with the food)
+multiplies the odds and actively draws nearby fish over to nose around it; each catch eats
+one bait. Right-click to collect the haul; break it and everything spills out. It's
+deliberately slow, passive fishing — bait it, go do something else, come back.
 
 ## 5. Catch and release
 

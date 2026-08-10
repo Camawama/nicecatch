@@ -6,7 +6,7 @@ import net.minecraftforge.event.BuildCreativeModeTabContentsEvent;
 import net.minecraftforge.eventbus.api.SubscribeEvent;
 import net.minecraftforge.fml.common.Mod;
 
-/** Mod-bus setup: puts the fishing-line arrow into a creative tab so it's obtainable. */
+/** Mod-bus setup: puts the mod's items into creative tabs so they're obtainable. */
 @Mod.EventBusSubscriber(modid = NiceCatch.MODID, bus = Mod.EventBusSubscriber.Bus.MOD)
 public final class ModSetup
 {
@@ -17,6 +17,10 @@ public final class ModSetup
     {
         if (event.getTabKey() == CreativeModeTabs.COMBAT) {
             event.accept(ModItems.LINE_ARROW.get());
+        }
+        if (event.getTabKey() == CreativeModeTabs.TOOLS_AND_UTILITIES) {
+            event.accept(ModItems.FISHING_NET.get());
+            event.accept(ModItems.FISH_TRAP.get());
         }
     }
 }

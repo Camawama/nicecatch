@@ -42,9 +42,11 @@ public class ScatterGoal extends Goal
         // per fish anyway, and any thinner than that reads as "fish didn't notice me".
         FishBehavior.Threat threat = FishBehavior.findThreat(fish);
         if (threat == null) return false;
-        if (!threat.certain()
-                && fish.getRandom().nextFloat() >= NiceCatchConfig.SERVER.swimScareChance.get().floatValue()) {
-            return false;
+        if (!threat.certain()) {
+            // Bold species hold their nerve near a looming figure a little longer.
+            float chance = NiceCatchConfig.SERVER.swimScareChance.get().floatValue()
+                    * (1.3F - 0.6F * net.camacraft.nicecatch.server.FishProfiles.of(fish).boldness);
+            if (fish.getRandom().nextFloat() >= chance) return false;
         }
 
         // Proximity scares are startling, not traumatic: fish flee fast but only sit out

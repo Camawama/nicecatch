@@ -43,6 +43,7 @@ public class NiceCatchConfig
         public final ForgeConfigSpec.DoubleValue maxRevolutionsPerTick;
         public final ForgeConfigSpec.DoubleValue reelInSpeed;
         public final ForgeConfigSpec.IntValue escapeGraceTicks;
+        public final ForgeConfigSpec.DoubleValue arrowFatigueMultiplier;
 
         // Line & reel-in (no fish on the line)
         public final ForgeConfigSpec.BooleanValue spoolDragEnabled;
@@ -50,12 +51,40 @@ public class NiceCatchConfig
         public final ForgeConfigSpec.BooleanValue gradualReelEnabled;
         public final ForgeConfigSpec.DoubleValue emptyReelSpeed;
         public final ForgeConfigSpec.DoubleValue itemReelSpeed;
+        public final ForgeConfigSpec.DoubleValue entityReelSpeed;
         public final ForgeConfigSpec.DoubleValue reelCompleteDistance;
         public final ForgeConfigSpec.IntValue reelIdleTimeoutTicks;
 
         // Fishing-line arrow
         public final ForgeConfigSpec.BooleanValue arrowFightEnabled;
         public final ForgeConfigSpec.DoubleValue arrowMaxLine;
+
+        // Hook-set minigame
+        public final ForgeConfigSpec.BooleanValue directionalHookSet;
+
+        // Species profiles, food, predation, habitat, environment
+        public final ForgeConfigSpec.ConfigValue<java.util.List<? extends String>> fishProfiles;
+        public final ForgeConfigSpec.BooleanValue foodAttractionEnabled;
+        public final ForgeConfigSpec.DoubleValue foodAttractRadius;
+        public final ForgeConfigSpec.DoubleValue foodStartleChance;
+        public final ForgeConfigSpec.DoubleValue foodInterestBoost;
+        public final ForgeConfigSpec.IntValue foodSatiationTicks;
+        public final ForgeConfigSpec.BooleanValue predationEnabled;
+        public final ForgeConfigSpec.DoubleValue predatorHuntRadius;
+        public final ForgeConfigSpec.IntValue predationSatiationTicks;
+        public final ForgeConfigSpec.BooleanValue habitatMovementEnabled;
+        public final ForgeConfigSpec.DoubleValue coldBiteMultiplier;
+
+        // Fishing net & fish trap
+        public final ForgeConfigSpec.DoubleValue netCatchRadius;
+        public final ForgeConfigSpec.DoubleValue netCatchChance;
+        public final ForgeConfigSpec.IntValue netCooldownTicks;
+        public final ForgeConfigSpec.IntValue trapCheckIntervalTicks;
+        public final ForgeConfigSpec.DoubleValue trapCatchChance;
+        public final ForgeConfigSpec.DoubleValue trapCatchRadius;
+        public final ForgeConfigSpec.DoubleValue trapAttractRadius;
+        public final ForgeConfigSpec.DoubleValue trapAmbientCatchChance;
+        public final ForgeConfigSpec.DoubleValue trapBaitMultiplier;
 
         // Fish AI
         public final ForgeConfigSpec.BooleanValue entityFishingEnabled;
@@ -95,6 +124,10 @@ public class NiceCatchConfig
         public final ForgeConfigSpec.IntValue schoolSpawnMinSize;
         public final ForgeConfigSpec.IntValue schoolSpawnMaxSize;
         public final ForgeConfigSpec.DoubleValue schoolSpawnWeightMultiplier;
+        public final ForgeConfigSpec.BooleanValue extraSpawningEnabled;
+        public final ForgeConfigSpec.IntValue extraSpawnIntervalTicks;
+        public final ForgeConfigSpec.IntValue extraSpawnTargetCount;
+        public final ForgeConfigSpec.IntValue extraSpawnRadius;
 
         // Entity catches
         public final ForgeConfigSpec.DoubleValue sizeStrengthExponent;
@@ -132,6 +165,8 @@ public class NiceCatchConfig
             b.push("bite");
             biteWindowMultiplier = b.comment("How much longer a fish stays on the line before you hook it, compared to vanilla (1.0 = vanilla 1-2 seconds).")
                     .defineInRange("biteWindowMultiplier", 2.0D, 1.0D, 5.0D);
+            directionalHookSet = b.comment("When a real fish bites you must yank the rod (jolt the mouse) LEFT or RIGHT — the HUD shows which — inside the bite window to set the hook; the wrong way (or too slow) loses the fish. Disable to set the hook with a plain right-click instead.")
+                    .define("directionalHookSet", true);
             b.pop();
 
             b.push("fight");
@@ -159,6 +194,8 @@ public class NiceCatchConfig
                     .defineInRange("reelInSpeed", 4.0D, 0.5D, 10.0D);
             escapeGraceTicks = b.comment("Ticks after hooking a fish before it is allowed to escape by taking all the line.")
                     .defineInRange("escapeGraceTicks", 50, 0, 200);
+            arrowFatigueMultiplier = b.comment("How much faster a fish speared by a fishing-line arrow tires compared to a mouth-hooked fish. It still fights at first, but gives up much sooner — and it never recovers stamina on slack.")
+                    .defineInRange("arrowFatigueMultiplier", 3.0D, 1.0D, 10.0D);
             b.pop();
 
             b.push("line");
@@ -172,6 +209,8 @@ public class NiceCatchConfig
                     .defineInRange("emptyReelSpeed", 7.0D, 1.0D, 20.0D);
             itemReelSpeed = b.comment("Top speed, in blocks per second, at which you can reel in a snagged loot item. Slightly slower than an empty line, but there is no fight and the line cannot snap.")
                     .defineInRange("itemReelSpeed", 4.5D, 1.0D, 20.0D);
+            entityReelSpeed = b.comment("Top speed, in blocks per second, at which reeling drags a snagged non-fish entity (a mob, on land or in water) toward you. Heavier entities are dragged slower.")
+                    .defineInRange("entityReelSpeed", 3.0D, 0.5D, 20.0D);
             reelCompleteDistance = b.comment("Distance from you at which a reeled-in bobber is fully retrieved (collecting any snagged item).")
                     .defineInRange("reelCompleteDistance", 2.5D, 1.0D, 8.0D);
             reelIdleTimeoutTicks = b.comment("If you stop reeling (release right-click) for this many ticks, the reel-in is abandoned and the bobber is left sitting in the water again.")
@@ -302,6 +341,66 @@ public class NiceCatchConfig
                     .defineInRange("fishSwimSoundVolume", 0.1D, 0.0D, 1.0D);
             b.pop();
 
+            b.push("species");
+            fishProfiles = b.comment("Per-species behavior overrides as 'entityid=trait:value,trait:value'. Traits: boldness (0-1, approach willingness), curiosity (interest gain mult), bite (bite chance mult), strength (fight strength mult), stamina (tires slower >1), food (thrown-food attraction mult), predator (true/false), prey_ratio (min own/prey hitbox area ratio to hunt), depth (surface|open|bottom), cover (0-1 kelp/seagrass lurking). Species not listed get sensible size-based defaults: small fish are bold, weak and quick to tire; big fish are wary, strong, and lurk near cover.")
+                    .defineListAllowEmpty("fishProfiles",
+                            java.util.List.of(
+                                    "minecraft:cod=boldness:0.65,curiosity:1.2,depth:open",
+                                    "minecraft:salmon=boldness:0.45,strength:1.2,stamina:1.15,predator:true,prey_ratio:3.5,depth:open",
+                                    "minecraft:tropical_fish=boldness:0.75,curiosity:1.3,strength:0.8,stamina:0.75,depth:surface,cover:0.5",
+                                    "minecraft:pufferfish=boldness:0.3,curiosity:0.7,food:0.6,cover:0.4",
+                                    "unusualfishmod:clownthorn_shark=predator:true,strength:1.35,stamina:1.4,boldness:0.35",
+                                    "unusualfishmod:jungleshark=predator:true,strength:1.35,stamina:1.4,boldness:0.35",
+                                    "unusualfishmod:spoon_shark=predator:true,strength:1.25,stamina:1.3,boldness:0.35",
+                                    "unusualfishmod:gnasher=predator:true,strength:1.2,stamina:1.2,boldness:0.45",
+                                    "unusualfishmod:ripper=predator:true,strength:1.2,stamina:1.2,boldness:0.5"),
+                            o -> o instanceof String s && s.contains("="));
+            foodAttractionEnabled = b.comment("Food items thrown into water attract fish: the splash startles some, then hungry fish come investigate and eat it — and a fed fish's interest in bobbers rises (chumming works).")
+                    .define("foodAttractionEnabled", true);
+            foodAttractRadius = b.comment("Radius in which fish notice a food item floating in water.")
+                    .defineInRange("foodAttractRadius", 8.0D, 2.0D, 24.0D);
+            foodStartleChance = b.comment("Chance (scaled down by boldness) that a fish's first reaction to a fresh splash is to bolt briefly before curiosity can win.")
+                    .defineInRange("foodStartleChance", 0.4D, 0.0D, 1.0D);
+            foodInterestBoost = b.comment("Bobber interest a fish gains when it eats thrown food.")
+                    .defineInRange("foodInterestBoost", 0.25D, 0.0D, 1.0D);
+            foodSatiationTicks = b.comment("How long a fish that just ate ignores further food.")
+                    .defineInRange("foodSatiationTicks", 1600, 0, 24000);
+            predationEnabled = b.comment("Predator species (see fishProfiles) hunt, chase, and eat much smaller fish; prey flees and schools scatter.")
+                    .define("predationEnabled", true);
+            predatorHuntRadius = b.comment("Radius in which a hungry predator looks for prey.")
+                    .defineInRange("predatorHuntRadius", 10.0D, 2.0D, 24.0D);
+            predationSatiationTicks = b.comment("How long a predator that just ate a fish waits before hunting again.")
+                    .defineInRange("predationSatiationTicks", 2400, 200, 24000);
+            habitatMovementEnabled = b.comment("Fish idle organically per species: cruising, loitering, depth changes, pauses, and big fish lurking in kelp and seagrass (replaces vanilla's random-swim pathfinding for managed fish).")
+                    .define("habitatMovementEnabled", true);
+            coldBiteMultiplier = b.comment("Bite/interest multiplier in snowy-cold water (biome cold enough to snow at the bobber). Fish still bite, just noticeably slower.")
+                    .defineInRange("coldBiteMultiplier", 0.5D, 0.05D, 1.0D);
+            b.pop();
+
+            b.push("net");
+            netCatchRadius = b.comment("Radius around the struck water (or targeted fish) in which the fishing net can scoop fish.")
+                    .defineInRange("netCatchRadius", 2.5D, 1.0D, 6.0D);
+            netCatchChance = b.comment("Base chance the net catches a fish in range. Scaled down for big fish and for fleeing fish; a missed fish scatters. Netting a fish another player has hooked always lands it for them.")
+                    .defineInRange("netCatchChance", 0.55D, 0.0D, 1.0D);
+            netCooldownTicks = b.comment("Cooldown between net sweeps.")
+                    .defineInRange("netCooldownTicks", 40, 0, 400);
+            b.pop();
+
+            b.push("trap");
+            trapCheckIntervalTicks = b.comment("Ticks between a placed fish trap's catch attempts. Traps are meant to be slow, passive fishing.")
+                    .defineInRange("trapCheckIntervalTicks", 600, 100, 24000);
+            trapCatchChance = b.comment("Chance per attempt that a real fish swimming inside the trap's catch radius is caught.")
+                    .defineInRange("trapCatchChance", 0.35D, 0.0D, 1.0D);
+            trapCatchRadius = b.comment("Radius around the trap in which a fish can be caught by it.")
+                    .defineInRange("trapCatchRadius", 2.5D, 1.0D, 6.0D);
+            trapAttractRadius = b.comment("Radius in which a baited trap draws fish in to investigate (they treat it like food).")
+                    .defineInRange("trapAttractRadius", 10.0D, 2.0D, 24.0D);
+            trapAmbientCatchChance = b.comment("Chance per attempt that a baited trap catches a biome-appropriate fish even with none swimming nearby. Keeps traps slowly productive without replacing rod fishing.")
+                    .defineInRange("trapAmbientCatchChance", 0.05D, 0.0D, 1.0D);
+            trapBaitMultiplier = b.comment("Catch chance multiplier while the trap holds bait (any food item). Each catch consumes one bait.")
+                    .defineInRange("trapBaitMultiplier", 1.8D, 1.0D, 5.0D);
+            b.pop();
+
             b.push("spawning");
             schoolSpawnBoostEnabled = b.comment("Spawn the fish listed below in much bigger natural groups, so boids schools actually have members.")
                     .define("schoolSpawnBoostEnabled", true);
@@ -314,7 +413,15 @@ public class NiceCatchConfig
             schoolSpawnMaxSize = b.comment("Largest boosted spawn group. Note the vanilla water-ambient mob cap still limits totals: a big school spawns whole, then spawning pauses until fish despawn.")
                     .defineInRange("schoolSpawnMaxSize", 32, 1, 64);
             schoolSpawnWeightMultiplier = b.comment("Multiplier on the listed fishes' spawn weight (how often the spawner picks them over other water mobs).")
-                    .defineInRange("schoolSpawnWeightMultiplier", 1.0D, 0.1D, 10.0D);
+                    .defineInRange("schoolSpawnWeightMultiplier", 2.5D, 0.1D, 10.0D);
+            extraSpawningEnabled = b.comment("Supplemental fish spawning: when the water around a player runs light on fish, spawn a fresh school out of sight. Uses its own accounting (the count below) and never touches vanilla mob caps or other mobs' spawning.")
+                    .define("extraSpawningEnabled", true);
+            extraSpawnIntervalTicks = b.comment("Ticks between supplemental spawn checks per player.")
+                    .defineInRange("extraSpawnIntervalTicks", 200, 40, 6000);
+            extraSpawnTargetCount = b.comment("The fish population the supplemental spawner maintains within its radius of each player. No spawns happen while at least this many fish are around.")
+                    .defineInRange("extraSpawnTargetCount", 26, 4, 128);
+            extraSpawnRadius = b.comment("Horizontal radius of the supplemental spawner's population count and spawn placement (schools appear 24 blocks out or further, never in your face).")
+                    .defineInRange("extraSpawnRadius", 48, 32, 96);
             b.pop();
 
             b.push("entityCatch");
@@ -384,6 +491,8 @@ public class NiceCatchConfig
         public final ForgeConfigSpec.IntValue castCooldownTicks;
         public final ForgeConfigSpec.BooleanValue bobberHookInMouth;
         public final ForgeConfigSpec.DoubleValue bobberHookRotationDegrees;
+        public final ForgeConfigSpec.DoubleValue hookSetJoltDegrees;
+        public final ForgeConfigSpec.BooleanValue fishPitchEnabled;
 
         Client(ForgeConfigSpec.Builder b)
         {
@@ -413,6 +522,10 @@ public class NiceCatchConfig
                     .define("bobberHookInMouth", true);
             bobberHookRotationDegrees = b.comment("Degrees to roll the hooked bobber in the screen plane so the hook points into the fish. 180 flips it so the hook (bottom of the bobber sprite) points up into the mouth; 0 disables the roll.")
                     .defineInRange("bobberHookRotationDegrees", 180.0D, 0.0D, 360.0D);
+            hookSetJoltDegrees = b.comment("How hard you must yank the view sideways (degrees of quick yaw motion) to set the hook when a fish bites. Lower = easier.")
+                    .defineInRange("hookSetJoltDegrees", 22.0D, 5.0D, 90.0D);
+            fishPitchEnabled = b.comment("Fish visually pitch their nose up and down with their vertical swimming (cosmetic, smoothed).")
+                    .define("fishPitchEnabled", true);
         }
     }
 }

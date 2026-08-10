@@ -1,0 +1,13 @@
+{
+  "type": "minecraft:crafting_shaped",
+  "pattern": [
+    "SS",
+    "SS",
+    "T "
+  ],
+  "key": {
+    "S": { "item": "minecraft:string" },
+    "T": { "item": "minecraft:stick" }
+  },
+  "result": { "item": "nicecatch:fishing_net" }
+}

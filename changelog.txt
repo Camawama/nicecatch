@@ -6,6 +6,42 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- **Species behavior profiles** (`species.fishProfiles`): every fish species now has a
+  disposition — boldness, curiosity, bite bias, fight strength, stamina, food affinity,
+  predator flag + prey size ratio, preferred depth, and cover (kelp/seagrass) affinity.
+  Unlisted species get sensible size-based defaults (small fish bold/weak/quick to tire,
+  big fish wary/strong/cover-loving); the config ships with tuned entries for vanilla fish
+  and Unusual Fish's sharks.
+- **Directional hook-set**: when a real fish bites, the HUD now tells you to **yank the rod
+  LEFT or RIGHT** (a quick sideways mouse jolt) inside the bite window. The right way sets
+  the hook; the wrong way (or dithering) loses the fish. Server-authoritative; toggle with
+  `bite.directionalHookSet`, tune the required jolt with `client.hookSetJoltDegrees`.
+- **Food attraction / chumming**: food items thrown into water attract fish. The fresh
+  splash startles timid fish; bolder or hungrier ones swim over, circle, and eat it — which
+  raises their bobber interest (chumming a spot genuinely improves the fishing). Config
+  under `species.food*`.
+- **Predation**: predator species (salmon and modded sharks by default) hunt fish much
+  smaller than themselves — chase, gulp, satiation. Prey flees through the normal scatter
+  system, so jinks and school panic come with it. Config under `species.predation*`.
+- **Habitat idle movement**: fish now cruise on meandering headings, loiter, pause, drift
+  between depth bands, and (big/cover species) lurk in kelp and seagrass, per species —
+  replacing vanilla's pathfinding random-swim for managed fish (`species.habitatMovementEnabled`).
+- **Snowy-biome fishing**: in water cold enough to snow, bite/interest rates are multiplied
+  by `species.coldBiteMultiplier` (default 0.5) — slower, never dead.
+- **Supplemental fish spawner**: when the water around a player runs light on fish, a fresh
+  school (species and school size from the biome's own spawn list) appears 24+ blocks out.
+  Own accounting — never touches vanilla mob caps or other mobs' spawning. Config under
+  `spawning.extraSpawn*`; the school-spawn weight multiplier default also rose 1.0 → 2.5.
+- **Fishing Net** (new item): sweep nearby water (or click a fish) to scoop one fish inside
+  a small radius straight into your inventory — strong on small fish up close, weak on big
+  ones, misses scatter the spot; cooldown + durability. **Cooperative**: netting a fish
+  another player has hooked lands the catch for them instantly. Config under `net.*`.
+- **Fish Trap** (new block): place underwater; it slowly catches fish that swim inside.
+  Bait it with any food (right-click) to multiply the odds and actively draw fish over to
+  investigate (via the same food-interest AI); each catch eats one bait. Right-click to
+  collect; deliberately slow passive fishing. Config under `trap.*`.
+- **Fish pitch**: fish visually tip their nose up/down with their vertical swimming,
+  smoothed, client-side only (`client.fishPitchEnabled`).
 - Fish fight tactics ("phases"): a hooked fish now cycles at random through five
   distinct behaviours during the fight, and the reel minigame changes with each one:
   - **Hold** — it sits still: your clean window to reel it straight in.
@@ -47,6 +83,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
     vanilla arrow texture for now (a custom texture can be dropped in later).
 
 ### Fixed
+- **Reeling a snagged entity on land finally works.** The gradual reel-in pulled the
+  *bobber*, but a bobber stuck in an entity is re-pinned to that entity's position every
+  tick (that's the hooked-entity glue), so nothing ever moved and the retrieve only
+  "worked" at point-blank range. The reel now drags the **entity itself** toward you with
+  real velocity — including on land, where a small hop breaks ground friction — scaled
+  down by the entity's bulk, hard-capped so nothing is flung, finishing with vanilla's
+  own final tug (`line.entityReelSpeed`).
+- **True 3D reeling.** The fight winch now pulls the fish along the actual line direction:
+  a fish below you is hauled upward, diagonal fish move along the diagonal, and a fish
+  directly underneath rises instead of being ignored by the old horizontal-only pull.
+- **Fights are winnable from above the water.** Landing (and the HUD bar) now uses an
+  effective distance that forgives the height an elevated angler stands above the surface
+  — fishing from a cliff, bridge, or boat deck no longer leaves the fish permanently
+  outside landing range. Depth below the surface still counts in full, so a sounding fish
+  must genuinely be lifted.
 - The Fishing Line Arrow could not be fired from a bow (bows check the `minecraft:arrows`
   item tag, not the item class). The arrow is now in that tag, so any bow accepts it as ammo.
   Note: if you carry both regular and line arrows, the bow may grab the regular ones first —
@@ -71,6 +122,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `fight.chargeChance` now weights how often the Charge tactic is chosen (previously the
   chance that a run was a charge). `fight.slackTakeFactor` is unused by the phase system
   and kept only for config compatibility.
+- Fight strength now folds in the species' strength trait and a per-fish roll (±12%), so
+  two same-size fish never fight identically; species stamina scales how fast fatigue
+  builds. Existing `entityCatch.size*` configs still set the size curve underneath.
+- A fish speared by the **fishing-line arrow** tires ~3× faster than a mouth-hooked one
+  and never recovers stamina on slack — it still opens with a real fight but gives up much
+  sooner (`fight.arrowFatigueMultiplier`).
+- Species traits also color the wider AI: bold species approach bobbers sooner and spook
+  less at a looming figure; curious species build interest faster; bite-prone species
+  convert nibbles more often and win the "who bites" pick.
 
 ### Notes
 - Initial project setup.

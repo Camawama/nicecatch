@@ -51,13 +51,17 @@ public class FollowBobberGoal extends Goal
 
         FishingHook hook = FishBehavior.findNearbyBobber(fish);
         if (hook != null) {
-            // Seeing a bobber builds curiosity every check (faster with Aquaculture bait);
-            // the more interested the fish, the sooner it commits to approaching.
+            // Seeing a bobber builds curiosity every check (faster with Aquaculture bait, and
+            // faster for curious species); the more interested the fish, the sooner it commits.
+            // Bold species need less convincing; cold water makes everything sluggish.
+            var profile = net.camacraft.nicecatch.server.FishProfiles.of(fish);
+            float cold = FishBehavior.coldFactor(fish.level(), hook.blockPosition());
             state.interest = Math.min(1.0F, state.interest
                     + NiceCatchConfig.SERVER.interestGainPerCheck.get().floatValue()
-                    * FishBehavior.interestGainMultiplier(hook));
+                    * FishBehavior.interestGainMultiplier(hook) * profile.curiosity * cold);
             float approach = NiceCatchConfig.SERVER.interestChance.get().floatValue()
-                    * (0.25F + 0.75F * state.interest * 2.0F);
+                    * (0.25F + 0.75F * state.interest * 2.0F)
+                    * (0.5F + profile.boldness) * cold;
             if (random.nextFloat() < approach) {
                 state.bobber = hook;
                 return true;

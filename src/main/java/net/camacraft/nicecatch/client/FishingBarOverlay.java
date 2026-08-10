@@ -34,8 +34,15 @@ public class FishingBarOverlay
                 if (flashOn) {
                     drawFill(graphics, x, y, 1.0F, ClientFishing.isEntityBite() ? 0xFFE03434 : 0xFFE8C33A);
                 }
-                String key = ClientFishing.isEntityBite() ? "nicecatch.hint.bite" : "nicecatch.hint.loot_bite";
-                drawHint(graphics, window, y, key, 0xFFFF6A5A, true);
+                // A directional bite tells the player which way to yank; the hint flashes on its
+                // own cadence (not the shared flash gate) so the direction is never off-screen long.
+                String key = !ClientFishing.isEntityBite() ? "nicecatch.hint.loot_bite"
+                        : switch (ClientFishing.biteDirection()) {
+                            case 1 -> "nicecatch.hint.bite_left";
+                            case 2 -> "nicecatch.hint.bite_right";
+                            default -> "nicecatch.hint.bite";
+                        };
+                drawHint(graphics, window, y, key, 0xFFFF6A5A, ClientFishing.biteDirection() == 0);
             }
             case REEL -> {
                 drawBackground(graphics, x, y);

@@ -29,6 +29,11 @@ public class ClientFishing
     private static int castCooldown;
     private static int biteTicks;
     private static boolean biteIsEntity;
+    /** Which way the rod must be yanked to set the hook: 0 any (plain click), 1 left, 2 right. */
+    private static byte biteDir;
+    // Jolt detection: recent yaw motion with decay, so only a quick flick reads as a yank.
+    private static float joltAccum;
+    private static float lastYaw = Float.NaN;
     private static int fightTicks;
     private static boolean reelHeld;
 
@@ -76,6 +81,12 @@ public class ClientFishing
     public static boolean isEntityBite()
     {
         return biteIsEntity;
+    }
+
+    /** The required hook-set yank direction for the current bite: 0 any, 1 left, 2 right. */
+    public static byte biteDirection()
+    {
+        return biteDir;
     }
 
     public static int fightTicks()
@@ -246,11 +257,28 @@ public class ClientFishing
                     phase = Phase.IDLE;
                     break;
                 }
+                boolean directional = biteIsEntity && biteDir != 0;
+                if (directional) {
+                    // Setting the hook is a physical yank: a quick sideways jolt of the view.
+                    // Recent yaw motion accumulates with decay, so slow panning never trips it;
+                    // the server judges whether the reported direction was the right one.
+                    float yaw = player.getYRot();
+                    float delta = Float.isNaN(lastYaw) ? 0.0F : Mth.wrapDegrees(yaw - lastYaw);
+                    lastYaw = yaw;
+                    joltAccum = joltAccum * 0.55F + delta;
+                    if (Math.abs(joltAccum) >= NiceCatchConfig.CLIENT.hookSetJoltDegrees.get().floatValue()) {
+                        NiceCatchNet.sendToServer(new HookSetMessage(joltAccum < 0.0F ? (byte) 1 : (byte) 2));
+                        startFight();
+                        break;
+                    }
+                }
                 if (mc.screen == null && mc.options.keyUse.isDown()) {
                     if (biteIsEntity) {
-                        // A real fish: set the hook and start the fight.
-                        NiceCatchNet.sendToServer(new HookSetMessage());
-                        startFight();
+                        if (!directional) {
+                            // Directional hook-set disabled: a plain click sets the hook.
+                            NiceCatchNet.sendToServer(new HookSetMessage((byte) 0));
+                            startFight();
+                        }
                     } else if (gradualReelEnabled()) {
                         // A loot item on the line: reel it in (no fight, no snapping).
                         startReel(player, true);
@@ -378,19 +406,23 @@ public class ClientFishing
 
     // ---- Packet handlers (client main thread) ----
 
-    public static void handleBite(boolean biting, boolean entity)
+    public static void handleBite(boolean biting, boolean entity, byte direction)
     {
         if (biting) {
             biteIsEntity = entity;
+            biteDir = direction;
             if (phase == Phase.IDLE) {
                 phase = Phase.BITE;
                 biteTicks = 0;
+                joltAccum = 0.0F;
+                lastYaw = Float.NaN;
                 Minecraft mc = Minecraft.getInstance();
                 mc.getSoundManager().play(SimpleSoundInstance.forUI(SoundEvents.ARROW_HIT_PLAYER, 1.4F, 0.5F));
             }
         } else if (phase == Phase.BITE) {
             phase = Phase.IDLE;
             biteIsEntity = false;
+            biteDir = 0;
         }
     }
 
@@ -421,6 +453,9 @@ public class ClientFishing
     {
         phase = Phase.IDLE;
         reelHeld = false;
+        biteDir = 0;
+        joltAccum = 0.0F;
+        lastYaw = Float.NaN;
         // wasCapturing intentionally survives reset(): the tick after a fight ends must still
         // see the capture->free transition to start the sensitivity ramp.
         fishRunning = false;

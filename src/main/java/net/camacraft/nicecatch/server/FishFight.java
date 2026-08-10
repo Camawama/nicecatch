@@ -12,8 +12,10 @@ public class FishFight
     public InteractionHand hand;
     /** The real fish on the line, or null for a loot-table fight (no fish entities around). */
     @Nullable public UUID fishId;
-    /** 0..1, how hard this fish fights. Entity fights derive this from hitbox size. */
+    /** 0..1, how hard this fish fights. Entity fights derive this from hitbox size and species. */
     public float strength;
+    /** Species stamina multiplier: >1 tires slower. From the fish's profile. */
+    public float stamina = 1.0F;
     /**
      * 0..1, line retrieved — derived from the fish's distance each tick, this is what the
      * HUD bar shows. Full means the fish is at landing range; empty means it took all the line.

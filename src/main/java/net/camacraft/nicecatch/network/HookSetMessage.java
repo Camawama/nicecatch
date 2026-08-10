@@ -7,16 +7,28 @@ import net.minecraftforge.network.NetworkEvent;
 
 import java.util.function.Supplier;
 
-/** Client -> server: the player grabbed the rod while a fish was biting; start the fight. */
+/**
+ * Client -> server: the player answered a bite. {@code direction} is which way they yanked
+ * the rod (1 left, 2 right; 0 for the plain-click hook-set when the directional minigame is
+ * off). The server compares it against the direction it rolled for the bite.
+ */
 public class HookSetMessage
 {
-    public HookSetMessage() {}
+    private final byte direction;
 
-    public static void encode(HookSetMessage msg, FriendlyByteBuf buf) {}
+    public HookSetMessage(byte direction)
+    {
+        this.direction = direction;
+    }
+
+    public static void encode(HookSetMessage msg, FriendlyByteBuf buf)
+    {
+        buf.writeByte(msg.direction);
+    }
 
     public static HookSetMessage decode(FriendlyByteBuf buf)
     {
-        return new HookSetMessage();
+        return new HookSetMessage(buf.readByte());
     }
 
     public static void handle(HookSetMessage msg, Supplier<NetworkEvent.Context> ctx)
@@ -24,7 +36,7 @@ public class HookSetMessage
         ctx.get().enqueueWork(() -> {
             ServerPlayer sender = ctx.get().getSender();
             if (sender != null) {
-                ServerFishingManager.onHookSet(sender);
+                ServerFishingManager.onHookSet(sender, msg.direction);
             }
         });
         ctx.get().setPacketHandled(true);
