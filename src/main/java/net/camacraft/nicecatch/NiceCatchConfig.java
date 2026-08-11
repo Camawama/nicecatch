@@ -355,13 +355,14 @@ public class NiceCatchConfig
             b.pop();
 
             b.push("species");
-            fishProfiles = b.comment("Per-species behavior overrides as 'entityid=trait:value,trait:value'. Traits: boldness (0-1, approach willingness), curiosity (interest gain mult), bite (bite chance mult), strength (fight strength mult), stamina (tires slower >1), food (thrown-food attraction mult), predator (true/false), prey_ratio (min own/prey hitbox area ratio to hunt), depth (surface|open|bottom), cover (0-1 kelp/seagrass lurking). Species not listed get sensible size-based defaults: small fish are bold, weak and quick to tire; big fish are wary, strong, and lurk near cover.")
+            fishProfiles = b.comment("Per-species behavior overrides as 'entityid=trait:value,trait:value'. Traits: boldness (0-1, approach willingness), curiosity (interest gain mult), bite (bite chance mult), strength (fight strength mult), stamina (tires slower >1), food (thrown-food attraction mult), predator (true/false), prey_ratio (min own/prey hitbox area ratio to hunt), depth (surface|open|bottom), cover (0-1 kelp/seagrass lurking), size_min/size_max (species size band replacing the global weight.sizeVariance range — grow undersized species like Aquaculture's tuna to trophy size, or set both to 1 to opt a species out of size variance). Species not listed get sensible size-based defaults: small fish are bold, weak and quick to tire; big fish are wary, strong, and lurk near cover.")
                     .defineListAllowEmpty("fishProfiles",
                             java.util.List.of(
                                     "minecraft:cod=boldness:0.65,curiosity:1.2,depth:open",
                                     "minecraft:salmon=boldness:0.45,strength:1.2,stamina:1.15,predator:true,prey_ratio:3.5,depth:open",
                                     "minecraft:tropical_fish=boldness:0.75,curiosity:1.3,strength:0.8,stamina:0.75,depth:surface,cover:0.5",
                                     "minecraft:pufferfish=boldness:0.3,curiosity:0.7,food:0.6,cover:0.4",
+                                    "aquaculture:tuna=size_min:0.9,size_max:2.6,strength:1.25,stamina:1.35,boldness:0.4,depth:open",
                                     "unusualfishmod:clownthorn_shark=predator:true,strength:1.35,stamina:1.4,boldness:0.35",
                                     "unusualfishmod:jungleshark=predator:true,strength:1.35,stamina:1.4,boldness:0.35",
                                     "unusualfishmod:spoon_shark=predator:true,strength:1.25,stamina:1.3,boldness:0.35",

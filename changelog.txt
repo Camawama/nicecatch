@@ -31,6 +31,26 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   bait, and in the fight it bends with line tension, judders through runs, rises as you
   lift, and stirs in a small circle locked to your actual crank input.
 
+### Fixed (AI stability)
+- **Crowded fish settle down.** Fish now habituate: every scare stokes a panic fatigue that
+  decays with quiet time — a fish spooked over and over runs shorter, shrugs off most
+  further scares (even swimmers, once fully worn out), and stops extending its flight while
+  a threat loiters nearby. A packed pond calms instead of thrashing itself frantic forever.
+- **A fish attracted to your line stays on your line.** The attraction flag flickered with
+  the bobber's own bobbing (isInWater blinks as the float pops above the surface), which
+  made committed fish "snap" away to their school and back. Attraction now keys on the
+  bobber's stable settled state, and a committed fish additionally holds its attention
+  through brief wobbles (~1.5 s grace) — its focus breaks only for real reasons (scatter,
+  hooked, the line leaves, or it drifts out of the leash).
+
+### Added (compat & tuning)
+- **Aquaculture fish mounts keep trait auras**: mount a Glimmering/Cosmic/Molten/etc. catch
+  on a wall fish mount and it goes on shimmering with its trait's particles.
+- **Per-species size bands**: fishProfiles entries now take `size_min`/`size_max`, replacing
+  the global variance band for that species — used to let Aquaculture's weirdly tiny tuna
+  grow to trophy size (default entry: 0.9-2.6x), and setting both to 1 opts a species out of
+  size variance entirely.
+
 ### Changed
 - Fish weights display in **lbs by default** (`weight.weightUnit`, LBS or KG) — tooltips and
   the catch line both. Stored data stays metric, so flipping the unit never changes a fish.

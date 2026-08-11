@@ -82,6 +82,18 @@ public final class AquacultureCompat
         return LOADED && Impl.skipRodDamage(rod, random);
     }
 
+    /** True when this entity is one of Aquaculture's wall fish mounts. */
+    public static boolean isFishMount(net.minecraft.world.entity.Entity entity)
+    {
+        return LOADED && Impl.isFishMount(entity);
+    }
+
+    /** The fish item displayed on a mount; EMPTY when bare or not a mount. */
+    public static ItemStack mountedItem(net.minecraft.world.entity.Entity entity)
+    {
+        return LOADED ? Impl.mountedItem(entity) : ItemStack.EMPTY;
+    }
+
     private static Map<String, Float> hookNibbleScales()
     {
         return parseScales(NiceCatchConfig.SERVER.hookNibbleScales.get());
@@ -160,6 +172,17 @@ public final class AquacultureCompat
             com.teammetallurgy.aquaculture.api.fishing.Hook hook = hook(rod);
             return hook != null && hook.getDurabilityChance() > 0.0D
                     && random.nextDouble() < hook.getDurabilityChance();
+        }
+
+        static boolean isFishMount(net.minecraft.world.entity.Entity entity)
+        {
+            return entity instanceof com.teammetallurgy.aquaculture.entity.FishMountEntity;
+        }
+
+        static ItemStack mountedItem(net.minecraft.world.entity.Entity entity)
+        {
+            return entity instanceof com.teammetallurgy.aquaculture.entity.FishMountEntity mount
+                    ? mount.getDisplayedItem() : ItemStack.EMPTY;
         }
 
         @javax.annotation.Nullable

@@ -68,6 +68,13 @@ public final class FishProfiles
         public Depth depth = Depth.OPEN;
         /** 0..1: fondness for lurking in kelp/seagrass cover. */
         public float cover = 0.0F;
+        /**
+         * Species size band overriding the global weight.sizeVariance range (NaN = use the
+         * global band). Lets undersized species like Aquaculture's tuna grow to trophy size,
+         * and setting both to 1 opts a species out of size variance entirely.
+         */
+        public float sizeMin = Float.NaN;
+        public float sizeMax = Float.NaN;
     }
 
     private static final Map<EntityType<?>, FishProfile> CACHE = new ConcurrentHashMap<>();
@@ -150,6 +157,8 @@ public final class FishProfiles
                     case "prey_ratio" -> p.preyRatio = Mth.clamp(Float.parseFloat(value), 1.2F, 100.0F);
                     case "depth" -> p.depth = Depth.parse(value, p.depth);
                     case "cover" -> p.cover = Mth.clamp(Float.parseFloat(value), 0.0F, 1.0F);
+                    case "size_min" -> p.sizeMin = Mth.clamp(Float.parseFloat(value), 0.2F, 4.0F);
+                    case "size_max" -> p.sizeMax = Mth.clamp(Float.parseFloat(value), 0.2F, 4.0F);
                 }
             } catch (NumberFormatException ignored) {
                 // A malformed number leaves that trait at its default; better than dying on config.

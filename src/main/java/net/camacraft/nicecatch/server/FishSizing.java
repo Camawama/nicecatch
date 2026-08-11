@@ -30,7 +30,12 @@ public final class FishSizing
 
     private FishSizing() {}
 
-    /** This fish's body scale: UUID roll inside the configured variance band, times traits. */
+    /**
+     * This fish's body scale: UUID roll inside its size band, times traits. The band is the
+     * global weight.sizeVariance range unless the species' profile overrides it (size_min /
+     * size_max in fishProfiles) — which also works with global variance off, so specific
+     * species can be resized or opted out either way.
+     */
     public static float scaleOf(Entity fish)
     {
         if (!NiceCatchConfig.SERVER_SPEC.isLoaded()) return 1.0F;
@@ -38,10 +43,14 @@ public final class FishSizing
         // follow — report 1 so the rendered model stays honest about the real hitbox.
         if (fish.getType().getDimensions().fixed) return 1.0F;
         NiceCatchConfig.Server cfg = NiceCatchConfig.SERVER;
+        FishProfiles.FishProfile profile = FishProfiles.of(fish.getType());
+        boolean hasOverride = !Float.isNaN(profile.sizeMin) || !Float.isNaN(profile.sizeMax);
         float base = 1.0F;
-        if (cfg.sizeVarianceEnabled.get()) {
-            float min = cfg.sizeVarianceMin.get().floatValue();
-            float max = Math.max(min, cfg.sizeVarianceMax.get().floatValue());
+        if (cfg.sizeVarianceEnabled.get() || hasOverride) {
+            float min = !Float.isNaN(profile.sizeMin) ? profile.sizeMin
+                    : cfg.sizeVarianceMin.get().floatValue();
+            float max = Math.max(min, !Float.isNaN(profile.sizeMax) ? profile.sizeMax
+                    : cfg.sizeVarianceMax.get().floatValue());
             // Two independent rolls averaged: sizes cluster around the middle of the band,
             // with the extremes rare enough to be worth mentioning to a friend.
             long h = FishTraits.mix(fish.getUUID(), SIZE_SALT);

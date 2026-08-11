@@ -81,6 +81,13 @@ public final class FishBehavior
         public long foodSatiatedUntil;
         /** Game time until which a predator won't hunt (it just ate a fish). */
         public long huntSatiatedUntil;
+        /**
+         * Habituation: rises with every scare and decays with quiet time. A fish that keeps
+         * getting spooked runs shorter, ignores most further scares, and settles down —
+         * instead of a crowded pond thrashing itself into permanent hysteria.
+         */
+        public float panicFatigue;
+        public long lastPanicTime;
     }
 
     public static FishState state(PathfinderMob fish)
@@ -329,10 +336,17 @@ public final class FishBehavior
 
     // ---- Queries ----
 
-    /** A bobber attracts fish while it sits in water, its owner is online, and it is not being fought or reeled in. */
+    /**
+     * A bobber attracts fish while it sits settled on the water, its owner is online, and it
+     * is not being fought or reeled in. Settled means the BOBBING state, not isInWater(): a
+     * bobbing float (and our nibble dips) keeps popping above the surface, and an attraction
+     * flag that flickers with it makes every interested fish "snap" between the line and its
+     * school. BOBBING is stable from splashdown to pickup.
+     */
     public static boolean isAttracting(@Nullable FishingHook hook)
     {
-        if (hook == null || !hook.isAlive() || !hook.isInWater()) return false;
+        if (hook == null || !hook.isAlive()) return false;
+        if (hook.currentState != FishingHook.FishHookState.BOBBING) return false;
         if (!(hook.getPlayerOwner() instanceof ServerPlayer owner) || owner.fishing != hook) return false;
         return !ServerFishingManager.isBusy(owner);
     }
@@ -401,6 +415,25 @@ public final class FishBehavior
     /** Ticks a lightly-spooked fish waits before biting again; proximity scares use this. */
     public static final int LIGHT_SCARE_COOLDOWN = 100;
 
+    /** Ticks for one full unit of panic fatigue to decay (~20 s of quiet). */
+    private static final float PANIC_DECAY_TICKS = 400.0F;
+
+    /**
+     * 0..1 habituation level right now: how burned out this fish's flight response is.
+     * At 1 the fish barely reacts to further scares and its scatters are short.
+     */
+    public static float panicFatigue(PathfinderMob fish)
+    {
+        FishState state = STATES.get(fish);
+        if (state == null) return 0.0F;
+        return Math.min(1.0F, decayedPanic(state, fish.level().getGameTime()));
+    }
+
+    private static float decayedPanic(FishState state, long now)
+    {
+        return Math.max(0.0F, state.panicFatigue - (now - state.lastPanicTime) / PANIC_DECAY_TICKS);
+    }
+
     /** Full-cooldown scatter: for real trouble (damage, failed bites, thrown hooks). */
     public static void scatter(PathfinderMob fish, Vec3 from, int durationTicks)
     {
@@ -411,7 +444,13 @@ public final class FishBehavior
     {
         FishState state = state(fish);
         long now = fish.level().getGameTime();
-        state.scatterUntil = now + durationTicks;
+        // Habituation: each scare stokes the fatigue, and a worn-out fish runs far shorter.
+        // It banks a little above 1 so a long ordeal takes a while to fully wear off.
+        float fatigue = decayedPanic(state, now);
+        state.panicFatigue = Math.min(1.6F, fatigue + 0.3F);
+        state.lastPanicTime = now;
+        int duration = Math.max(20, Math.round(durationTicks * (1.0F - 0.55F * Math.min(1.0F, fatigue))));
+        state.scatterUntil = now + duration;
         state.scatterFrom = from;
         state.bobber = null;
         state.biteBobber = null;
@@ -430,7 +469,8 @@ public final class FishBehavior
         AABB box = AABB.ofSize(center, radius * 2.0D, radius * 2.0D, radius * 2.0D);
         for (PathfinderMob fish : level.getEntitiesOfClass(PathfinderMob.class, box,
                 f -> f != except && !isHooked(f) && isFishLike(f))) {
-            if (level.random.nextFloat() < chance) {
+            // Habituated fish mostly shrug off yet another chain-panic.
+            if (level.random.nextFloat() < chance * (1.0F - 0.7F * panicFatigue(fish))) {
                 scatter(fish, center, NiceCatchConfig.SERVER.scatterDurationTicks.get(), biteCooldownTicks);
             }
         }

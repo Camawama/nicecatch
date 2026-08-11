@@ -42,12 +42,19 @@ public class ScatterGoal extends Goal
         // per fish anyway, and any thinner than that reads as "fish didn't notice me".
         FishBehavior.Threat threat = FishBehavior.findThreat(fish);
         if (threat == null) return false;
-        if (!threat.certain()) {
+        // Habituation: a fish that has been spooked over and over stops taking the bait —
+        // even a swimmer barely registers once its flight response is worn out. This is what
+        // lets a crowded pond settle down instead of churning itself frantic forever.
+        float panicFatigue = FishBehavior.panicFatigue(fish);
+        if (threat.certain()) {
+            if (fish.getRandom().nextFloat() < panicFatigue * 0.8F) return false;
+        } else {
             // Bold species — and fish born bold or ghostly — hold their nerve near a looming
             // figure a little longer; the timid bolt at shadows.
             float chance = NiceCatchConfig.SERVER.swimScareChance.get().floatValue()
                     * (1.3F - 0.6F * net.camacraft.nicecatch.server.FishProfiles.of(fish).boldness)
-                    * net.camacraft.nicecatch.server.FishTraits.of(fish).fear();
+                    * net.camacraft.nicecatch.server.FishTraits.of(fish).fear()
+                    * (1.0F - 0.8F * panicFatigue);
             if (fish.getRandom().nextFloat() >= chance) return false;
         }
 
@@ -91,13 +98,17 @@ public class ScatterGoal extends Goal
 
         // A pursuer keeps the fear fresh: while any threat is still in range, flee from where
         // it is NOW and keep the scatter alive, instead of committing to a stale snapshot a
-        // chasing swimmer swam past two seconds ago.
+        // chasing swimmer swam past two seconds ago. A habituated fish stops extending the
+        // flight, though — it puts some distance in and then settles even with the threat
+        // still hanging around (otherwise a busy pond never calms down).
         if ((fish.tickCount + fish.getId()) % 5 == 0) {
             FishBehavior.Threat threat = FishBehavior.findThreat(fish);
             if (threat != null) {
                 state.scatterFrom = threat.pos();
-                state.scatterUntil = Math.max(state.scatterUntil, fish.level().getGameTime()
-                        + NiceCatchConfig.SERVER.scatterDurationTicks.get());
+                if (FishBehavior.panicFatigue(fish) < 1.0F) {
+                    state.scatterUntil = Math.max(state.scatterUntil, fish.level().getGameTime()
+                            + NiceCatchConfig.SERVER.scatterDurationTicks.get());
+                }
                 commitTicks = Math.min(commitTicks, 5); // re-plan soon against the new position
             }
         }

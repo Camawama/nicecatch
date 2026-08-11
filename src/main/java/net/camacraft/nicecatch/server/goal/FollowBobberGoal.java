@@ -18,6 +18,9 @@ import java.util.EnumSet;
  */
 public class FollowBobberGoal extends Goal
 {
+    /** Ticks a committed fish keeps faith with a bobber that momentarily stops attracting. */
+    private static final int ATTENTION_GRACE_TICKS = 30;
+
     private final PathfinderMob fish;
     private double orbitAngle;
     private double orbitDir = 1.0D;
@@ -25,6 +28,7 @@ public class FollowBobberGoal extends Goal
     private double orbitDepth = 0.6D;
     private int behaviorTicks;
     private int pauseTicks;
+    private int loseTicks;
 
     public FollowBobberGoal(PathfinderMob fish)
     {
@@ -90,10 +94,15 @@ public class FollowBobberGoal extends Goal
             state.biteBobber = null;
         }
         FishingHook hook = state.bobber;
+        if (hook == null) return false;
         if (!FishBehavior.isAttracting(hook)) {
+            // Attention holds through a brief wobble (owner busy for a moment, odd hook
+            // state blip) — a committed fish must never snap away to its school and back.
+            if (hook.isAlive() && ++loseTicks <= ATTENTION_GRACE_TICKS) return true;
             state.bobber = null;
             return false;
         }
+        loseTicks = 0;
         // Horizontal leash only — a fish climbing up from the depths is still on its way.
         double leash = FishBehavior.attractRadius(hook) * 1.5D;
         if (FishBehavior.horizontalDistSqr(fish, hook) > leash * leash) {
@@ -113,6 +122,7 @@ public class FollowBobberGoal extends Goal
         rerollOrbit(random);
         behaviorTicks = 0;
         pauseTicks = 0;
+        loseTicks = 0;
     }
 
     @Override

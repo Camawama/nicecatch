@@ -192,6 +192,24 @@ public final class FishTraits
         CACHE.clear();
     }
 
+    /**
+     * The aura carried by a caught-fish item's NBT (first aura trait wins), or null. Lets
+     * displayed fish — Aquaculture wall mounts, and whatever else shows a fish item — keep
+     * shimmering with the trait they were caught with.
+     */
+    @Nullable
+    public static SimpleParticleType auraFromStack(net.minecraft.world.item.ItemStack stack)
+    {
+        net.minecraft.nbt.CompoundTag info = stack.getTagElement("NiceCatch");
+        if (info == null || !info.contains("Traits", net.minecraft.nbt.Tag.TAG_LIST)) return null;
+        net.minecraft.nbt.ListTag list = info.getList("Traits", net.minecraft.nbt.Tag.TAG_STRING);
+        for (int i = 0; i < list.size(); i++) {
+            FishTrait trait = REGISTRY.get(list.getString(i));
+            if (trait != null && trait.aura != null) return trait.aura;
+        }
+        return null;
+    }
+
     /** Rebuild traits from a list of ids (for tooltips off item NBT). Unknown ids are skipped. */
     public static List<FishTrait> fromIds(List<String> ids)
     {
