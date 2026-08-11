@@ -4,6 +4,10 @@ import net.camacraft.nicecatch.NiceCatch;
 import net.camacraft.nicecatch.NiceCatchConfig;
 import net.minecraft.core.particles.ParticleTypes;
 import net.minecraft.nbt.CompoundTag;
+import net.minecraft.nbt.ListTag;
+import net.minecraft.nbt.StringTag;
+import net.minecraft.network.chat.Component;
+import net.minecraft.network.chat.MutableComponent;
 import net.minecraft.resources.ResourceKey;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.server.MinecraftServer;
@@ -158,9 +162,25 @@ public final class FishConversion
         ServerLevel level = player.serverLevel();
         ItemStack stack = itemFor(level, fish);
 
+        // The UUID stays in the snapshot: size and traits derive from it, so a released fish
+        // comes back as exactly the fish that was caught. (Safe — the original is discarded.)
         CompoundTag nbt = new CompoundTag();
         fish.saveWithoutId(nbt);
-        nbt.remove("UUID"); // the revived fish gets a fresh identity
+        nbt.putUUID("UUID", fish.getUUID());
+
+        // Stamp the catch: weight from the individual's scaled hitbox, plus any born traits.
+        float weightKg = FishSizing.weightKg(fish);
+        FishTraits.Modifiers traits = FishTraits.of(fish);
+        CompoundTag info = new CompoundTag();
+        info.putFloat("Weight", weightKg);
+        if (!traits.isEmpty()) {
+            ListTag traitIds = new ListTag();
+            for (FishTraits.FishTrait trait : traits.traits()) {
+                traitIds.add(StringTag.valueOf(trait.id));
+            }
+            info.put("Traits", traitIds);
+        }
+        stack.addTagElement("NiceCatch", info);
 
         level.sendParticles(ParticleTypes.SPLASH, fish.getX(), fish.getY() + 0.2D, fish.getZ(), 8, 0.2D, 0.15D, 0.2D, 0.0D);
         level.sendParticles(ParticleTypes.BUBBLE_POP, fish.getX(), fish.getY() + 0.2D, fish.getZ(), 4, 0.15D, 0.1D, 0.15D, 0.02D);
@@ -176,6 +196,14 @@ public final class FishConversion
         if (!skipRelease) {
             recordCatch(player, stack.getItem(), fish.getType(), nbt, level);
         }
+
+        // The angler's trophy line: name, weight, and any traits, on the actionbar.
+        MutableComponent caughtMsg = Component.translatable("nicecatch.catch.info",
+                stack.getHoverName(), FishSizing.formatWeight(weightKg), FishSizing.unitLabel());
+        for (FishTraits.FishTrait trait : traits.traits()) {
+            caughtMsg.append(" ").append(Component.translatable(trait.nameKey()).withStyle(trait.color));
+        }
+        player.displayClientMessage(caughtMsg, true);
 
         if (!player.getInventory().add(stack)) {
             player.drop(stack, false);

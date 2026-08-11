@@ -57,6 +57,16 @@ public class ClientFishing
     private static float revFeedback;
     private static int celebrateTicks;
 
+    // First-person rod animation state (visual only; consumed by RodHandAnimator).
+    /** Ticks remaining of the forward whip right after a cast is released. */
+    private static int castAnimTicks;
+    private static final int CAST_ANIM_LENGTH = 8;
+    /** Smoothed 0..1 "rod being lifted" signal from recent lift input. */
+    private static float liftAnim;
+    /** Smoothed crank speed (revolutions/tick) and the running crank angle (radians). */
+    private static float crankVel;
+    private static float crankAngle;
+
     // Sensitivity ramp after leaving reel mode, so a still-spinning hand can't whip the camera.
     private static boolean wasCapturing;
     private static int mouseRampTicks;
@@ -145,6 +155,31 @@ public class ClientFishing
         return celebrateTicks;
     }
 
+    /** 1 at the instant of cast release, easing to 0 — drives the rod's forward whip. */
+    public static float castWhip(float partialTick)
+    {
+        if (castAnimTicks <= 0) return 0.0F;
+        return Mth.clamp((castAnimTicks - partialTick) / CAST_ANIM_LENGTH, 0.0F, 1.0F);
+    }
+
+    /** Smoothed 0..1 rod-lift signal for the hand animation. */
+    public static float liftAnim()
+    {
+        return liftAnim;
+    }
+
+    /** Smoothed crank speed (rev/tick), 0 when idle — scales the crank wobble. */
+    public static float crankVel()
+    {
+        return crankVel;
+    }
+
+    /** Running crank angle in radians, advanced by actual reel input. */
+    public static float crankAngle(float partialTick)
+    {
+        return crankAngle + crankVel * (float) (Math.PI * 2.0D) * partialTick;
+    }
+
     /** The oscillating cast power bar: sweeps 0 -> 1 -> 0 repeatedly. */
     public static float chargeValue(float partialTick)
     {
@@ -217,6 +252,13 @@ public class ClientFishing
         if (castCooldown > 0) castCooldown--;
         if (celebrateTicks > 0) celebrateTicks--;
 
+        // Animation signals decay every tick; live reel input below re-feeds them, and the
+        // crank angle keeps coasting so the wobble spins down instead of freezing.
+        if (castAnimTicks > 0) castAnimTicks--;
+        liftAnim *= 0.82F;
+        crankVel *= 0.7F;
+        crankAngle += crankVel * (float) (Math.PI * 2.0D);
+
         boolean capturing = isCapturingMouse();
         if (wasCapturing && !capturing) {
             mouseRampTotal = NiceCatchConfig.CLIENT.mouseRampTicks.get();
@@ -247,6 +289,7 @@ public class ClientFishing
                     NiceCatchNet.sendToServer(new CastMessage(chargeValue(0.0F), chargeHand));
                     phase = Phase.IDLE;
                     castCooldown = 4;
+                    castAnimTicks = CAST_ANIM_LENGTH; // the rod whips forward
                 } else {
                     chargeTicks++;
                 }
@@ -259,14 +302,17 @@ public class ClientFishing
                 }
                 boolean directional = biteIsEntity && biteDir != 0;
                 if (directional) {
-                    // Setting the hook is a physical yank: a quick sideways jolt of the view.
-                    // Recent yaw motion accumulates with decay, so slow panning never trips it;
-                    // the server judges whether the reported direction was the right one.
+                    // Setting the hook is a physical yank: gripping the rod (holding right-click)
+                    // and jolting the view sideways. Recent yaw motion accumulates with decay, so
+                    // slow panning never trips it; without the grip the yank counts for nothing.
+                    // The server judges whether the reported direction was the right one.
+                    boolean gripping = mc.screen == null && mc.options.keyUse.isDown();
                     float yaw = player.getYRot();
                     float delta = Float.isNaN(lastYaw) ? 0.0F : Mth.wrapDegrees(yaw - lastYaw);
                     lastYaw = yaw;
-                    joltAccum = joltAccum * 0.55F + delta;
-                    if (Math.abs(joltAccum) >= NiceCatchConfig.CLIENT.hookSetJoltDegrees.get().floatValue()) {
+                    joltAccum = gripping ? joltAccum * 0.55F + delta : 0.0F;
+                    if (gripping && Math.abs(joltAccum)
+                            >= NiceCatchConfig.CLIENT.hookSetJoltDegrees.get().floatValue()) {
                         NiceCatchNet.sendToServer(new HookSetMessage(joltAccum < 0.0F ? (byte) 1 : (byte) 2));
                         startFight();
                         break;
@@ -300,6 +346,7 @@ public class ClientFishing
                 }
                 ReelTracker.Result input = TRACKER.consume(true);
                 NiceCatchNet.sendToServer(new ReelMessage(input.crank(), input.lift(), true));
+                feedAnimation(input);
 
                 if (NiceCatchConfig.CLIENT.reelClickSounds.get()) {
                     revFeedback += input.crank();
@@ -326,6 +373,7 @@ public class ClientFishing
                 reelHeld = mc.screen == null && mc.options.keyUse.isDown();
                 ReelTracker.Result input = TRACKER.consume(reelHeld);
                 NiceCatchNet.sendToServer(new ReelMessage(input.crank(), input.lift(), reelHeld));
+                feedAnimation(input);
 
                 if (reelHeld && NiceCatchConfig.CLIENT.reelClickSounds.get()) {
                     revFeedback += input.crank();
@@ -505,6 +553,13 @@ public class ClientFishing
         return player.fishing == null;
     }
 
+    /** Feeds this tick's real reel input into the hand-animation signals. */
+    private static void feedAnimation(ReelTracker.Result input)
+    {
+        crankVel = Math.min(0.4F, crankVel + input.crank() * 0.5F);
+        liftAnim = Math.max(liftAnim, Math.min(1.0F, input.lift() * 2.5F));
+    }
+
     /** Enter reel-in mode for a fishless line (empty hook, or a snagged loot item). */
     private static void startReel(LocalPlayer player, boolean item)
     {
@@ -529,7 +584,8 @@ public class ClientFishing
         NiceCatchConfig.Server cfg = NiceCatchConfig.SERVER;
         double speedBps = reelItem ? cfg.itemReelSpeed.get() : cfg.emptyReelSpeed.get();
         double crankFrac = Mth.clamp(crank / cfg.maxRevolutionsPerTick.get(), 0.0D, 1.0D);
-        double step = speedBps / 20.0D * (0.45D + 0.55D * crankFrac);
+        // Mirrors the server: cranking is the only thing that reels.
+        double step = speedBps / 20.0D * crankFrac;
 
         Vec3 aim = new Vec3(player.getX(), player.getY() + 0.3D, player.getZ());
         Vec3 pos = hook.position();

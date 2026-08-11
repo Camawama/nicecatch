@@ -6,6 +6,45 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- **Individual fish sizes & the weight system**: every fish (modded included) rolls its own
+  body scale — hitbox and model — from its UUID, so it needs no network sync, survives
+  saves, and persists through catch-and-release. Small salmon are genuinely lighter, weaker
+  fights; big ones heavier and harder (fight strength, net odds, and predator/prey checks
+  all read the live hitbox). Weight = body volume x `weight.weightPerVolume`, shown on every
+  caught fish's tooltip and in the on-screen catch line ("Caught Salmon — 4.2 kg Feisty").
+  Config: `weight.sizeVariance*`. Note: fish items now carry weight NBT, so different
+  individuals no longer stack.
+- **Fish traits** (25 to start, trivially extensible — one register() line + two lang keys):
+  a quarter of fish are born with a named quirk that changes how they behave and fight —
+  Feisty (thrashes harder), Tough (strains the line), Mighty/Frail, Tireless/Lazy,
+  Swift/Sluggish, Cunning (loves the charge), Slippery (shorter hook-set window),
+  Greedy/Timid/Bold, Giant/Dwarf (size), Dense/Featherweight (heft), Lucky (bonus XP +
+  double-catch) — plus rare aura fish that visibly shimmer in the water: Verdant,
+  Glimmering, Molten, Ghostly, Abyssal, Cosmic, and Ancient. Traits are UUID-derived
+  (deterministic, no sync), colored on the caught item's tooltip with a one-line
+  description, and tuned via `weight.traitChance` / `doubleTraitChance` / `traitAurasEnabled`.
+- **More fight sounds**: the hook setting home, line being stripped off the spool during a
+  run, the rod creaking as tension nears the snap, and the line going sickeningly slack on
+  an escape.
+- **First-person rod animations** (`client.rodAnimationsEnabled`): the rod cocks back and
+  trembles with the charge bar, whips forward on release, twitches while a fish worries the
+  bait, and in the fight it bends with line tension, judders through runs, rises as you
+  lift, and stirs in a small circle locked to your actual crank input.
+
+### Changed
+- Fish weights display in **lbs by default** (`weight.weightUnit`, LBS or KG) — tooltips and
+  the catch line both. Stored data stays metric, so flipping the unit never changes a fish.
+- First-person rod animation directions corrected: the rod now rises with the charge bar
+  (it dipped before), the cast whip snaps forward-and-down, line tension bends the rod down,
+  and lifting raises it.
+- **Controls tightened**: holding right-click alone no longer reels anything — circling the
+  mouse is the reel, everywhere (fights already worked this way; plain retrieves now match).
+  The old hold-to-reel behavior moved behind the accessibility option
+  `client.requireCircularMotion = false`. The bite yank (hook-set) now also requires
+  right-click held while jolting — no grip, no strike. Lifting the rod already required the
+  grip (mouse input only reaches the reel while right-click is down).
+- Catch-and-release now revives the exact fish: same size, same weight, same traits (the
+  released fish keeps its identity instead of rolling a new one).
 - **Species behavior profiles** (`species.fishProfiles`): every fish species now has a
   disposition — boldness, curiosity, bite bias, fight strength, stamina, food affinity,
   predator flag + prey size ratio, preferred depth, and cover (kelp/seagrass) affinity.

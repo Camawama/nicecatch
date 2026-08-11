@@ -39,12 +39,39 @@ public final class FishPitchRenderer
     @SubscribeEvent
     public static void onRenderLiving(RenderLivingEvent.Pre<?, ?> event)
     {
-        if (!NiceCatchConfig.CLIENT.fishPitchEnabled.get()) return;
         LivingEntity entity = event.getEntity();
         if (!FishBehavior.isFishKind(entity)) return;
+
+        PoseStack pose = event.getPoseStack();
+        // The pitch tilt goes on the stack FIRST (outermost — world units, so its pivot is
+        // the scaled hitbox center), the body scale LAST (innermost, about the feet origin,
+        // so the model grows to match its individually-scaled hitbox — see FishSizing).
+        float pitch = smoothedPitch(entity);
+        if (Math.abs(pitch) >= 0.5F) {
+            float yaw = Mth.lerp(event.getPartialTick(), entity.yBodyRotO, entity.yBodyRot);
+            double pivotY = entity.getBbHeight() * 0.5D;
+            pose.translate(0.0D, pivotY, 0.0D);
+            pose.mulPose(Axis.YP.rotationDegrees(-yaw));
+            pose.mulPose(Axis.XP.rotationDegrees(pitch));
+            pose.mulPose(Axis.YP.rotationDegrees(yaw));
+            pose.translate(0.0D, -pivotY, 0.0D);
+        }
+        float scale = net.camacraft.nicecatch.server.FishSizing.scaleOf(entity);
+        if (Math.abs(scale - 1.0F) >= 0.001F) {
+            pose.scale(scale, scale, scale);
+        }
+    }
+
+    /**
+     * Advance and return this fish's smoothed swim pitch; 0 out of water (vanilla's land
+     * flopping stays untouched) or when the feature is off.
+     */
+    private static float smoothedPitch(LivingEntity entity)
+    {
+        if (!NiceCatchConfig.CLIENT.fishPitchEnabled.get()) return 0.0F;
         if (!entity.isInWater()) {
             SMOOTHED.remove(entity);
-            return;
+            return 0.0F;
         }
 
         // Last-tick movement (client-interpolated positions update xOld/yOld/zOld every tick).
@@ -63,18 +90,6 @@ public final class FishPitchRenderer
         float pitch = SMOOTHED.getOrDefault(entity, 0.0F);
         pitch += (target - pitch) * ease;
         SMOOTHED.put(entity, pitch);
-        if (Math.abs(pitch) < 0.5F) return;
-
-        // Tilt around the fish's lateral axis through its body center: align the frame to the
-        // body yaw, pitch, and restore — composed before the renderer's own rotations, which
-        // it applies on top without caring.
-        float yaw = Mth.lerp(event.getPartialTick(), entity.yBodyRotO, entity.yBodyRot);
-        double pivotY = entity.getBbHeight() * 0.5D;
-        PoseStack pose = event.getPoseStack();
-        pose.translate(0.0D, pivotY, 0.0D);
-        pose.mulPose(Axis.YP.rotationDegrees(-yaw));
-        pose.mulPose(Axis.XP.rotationDegrees(pitch));
-        pose.mulPose(Axis.YP.rotationDegrees(yaw));
-        pose.translate(0.0D, -pivotY, 0.0D);
+        return pitch;
     }
 }

@@ -318,12 +318,14 @@ public class ServerFishingManager
         fight.hand = hand;
         fight.fishId = fish.getUUID();
         fight.strength = sizeStrength(fish, player.getRandom());
-        fight.stamina = FishProfiles.of(fish).stamina;
+        applyFishCharacter(fight, fish);
 
         ItemStack rod = player.getItemInHand(hand);
-        fight.tensionScale = Math.max(1.0F, AquacultureCompat.tensionScale(rod));
+        fight.tensionScale = Math.max(1.0F, AquacultureCompat.tensionScale(rod))
+                / FishTraits.of(fish).tension();
         fight.reelScale = Math.max(1.0F, AquacultureCompat.reelEffectiveness(rod));
-        fight.doubleCatchChance = AquacultureCompat.doubleCatchChance(rod);
+        fight.doubleCatchChance = AquacultureCompat.doubleCatchChance(rod)
+                + FishTraits.of(fish).doubleCatch();
 
         FishBehavior.setHooked(fish, true);
         // Pin the bobber to the fish via vanilla's hooked-entity glue (see FishingHookMixin):
@@ -358,8 +360,9 @@ public class ServerFishingManager
         fight.hand = InteractionHand.MAIN_HAND; // unused for arrow fights, but never null
         fight.fishId = fish.getUUID();
         fight.strength = sizeStrength(fish, player.getRandom());
-        fight.stamina = FishProfiles.of(fish).stamina;
-        // No rod: default tension/reel scaling and no double-catch.
+        applyFishCharacter(fight, fish);
+        fight.tensionScale /= FishTraits.of(fish).tension();
+        // No rod: default reel scaling and no Aquaculture double-catch.
 
         FishBehavior.setHooked(fish, true);
         FishBehavior.scatterAround(player.serverLevel(), fish.position(),
@@ -371,9 +374,10 @@ public class ServerFishingManager
     }
 
     /**
-     * How hard this particular fish fights: hitbox area vs the reference area on a sub-linear
-     * curve (so small fish already differ a lot), scaled by the species' strength trait, with
-     * a per-fish roll so two identical fish never fight identically.
+     * How hard this particular fish fights: LIVE hitbox area (which carries the individual
+     * size roll — a small salmon really is a lighter fight) vs the reference area on a
+     * sub-linear curve, scaled by the species' strength trait and the fish's born traits,
+     * with a final roll so even twins never fight identically.
      */
     private static float sizeStrength(PathfinderMob fish, RandomSource random)
     {
@@ -381,10 +385,22 @@ public class ServerFishingManager
         double area = fish.getBbWidth() * fish.getBbHeight();
         double factor = Math.pow(area / cfg.sizeReferenceArea.get(), cfg.sizeStrengthExponent.get())
                 * FishProfiles.of(fish).strength
+                * FishTraits.of(fish).strength()
                 * (0.88D + 0.24D * random.nextDouble());
         float min = cfg.fishStrengthMin.get().floatValue();
         float max = Math.max(min, cfg.fishStrengthMax.get().floatValue());
         return Mth.clamp((float) factor, min, max);
+    }
+
+    /** Stamps the fish's species stamina and born-trait fighting quirks onto the fight. */
+    private static void applyFishCharacter(FishFight fight, PathfinderMob fish)
+    {
+        FishTraits.Modifiers traits = FishTraits.of(fish);
+        fight.stamina = FishProfiles.of(fish).stamina * traits.stamina();
+        fight.sweepAmp = traits.sweep();
+        fight.runForce = traits.runForce();
+        fight.chargeBias = traits.chargeBias();
+        fight.bonusXp = traits.xpBonus();
     }
 
     private static void beginFight(ServerPlayer player, Session session, FishFight fight, PathfinderMob fish, double maxLine)
@@ -408,6 +424,9 @@ public class ServerFishingManager
         ServerLevel level = player.serverLevel();
         level.playSound(null, fish.getX(), fish.getY(), fish.getZ(),
                 SoundEvents.GENERIC_SPLASH, SoundSource.NEUTRAL, 0.4F, 1.2F);
+        // The satisfying thunk of the hook setting home.
+        level.playSound(null, player.getX(), player.getY(), player.getZ(),
+                SoundEvents.FISHING_BOBBER_RETRIEVE, SoundSource.PLAYERS, 0.6F, 1.15F);
         NiceCatchNet.sendTo(player, new FightTickMessage(fight.progress, fight.tension, fight.fatigue,
                 fight.phase.isRun(), fight.phase.id()));
     }
@@ -502,8 +521,7 @@ public class ServerFishingManager
         // Bulk resists the drag: a chicken skids right along, a cow barely budges per crank.
         double bulk = snagged.getBbWidth() * snagged.getBbWidth() * snagged.getBbHeight();
         double bulkFactor = Mth.clamp(0.35D / Math.max(0.05D, bulk), 0.25D, 1.0D);
-        double target = cfg.entityReelSpeed.get() / 20.0D
-                * (0.45D + 0.55D * crankFrac) * r.reelScale * bulkFactor;
+        double target = cfg.entityReelSpeed.get() / 20.0D * crankFrac * r.reelScale * bulkFactor;
 
         Vec3 dir = to.scale(1.0D / dist);
         Vec3 v = snagged.getDeltaMovement();
@@ -538,8 +556,9 @@ public class ServerFishingManager
         NiceCatchConfig.Server cfg = NiceCatchConfig.SERVER;
         double speedBps = r.item ? cfg.itemReelSpeed.get() : cfg.emptyReelSpeed.get();
         double crankFrac = Mth.clamp(crank / cfg.maxRevolutionsPerTick.get(), 0.0D, 1.0D);
-        // Holding alone reels at a baseline; circling the mouse ramps it up to full speed.
-        double step = speedBps / 20.0D * (0.45D + 0.55D * crankFrac) * r.reelScale;
+        // Cranking is the reel: no circling, no progress. (The accessibility option that lets
+        // holding alone reel lives client-side — it synthesizes a modest crank instead.)
+        double step = speedBps / 20.0D * crankFrac * r.reelScale;
 
         Vec3 aim = new Vec3(player.getX(), player.getY() + 0.3D, player.getZ());
         Vec3 pos = hook.position();
@@ -759,7 +778,8 @@ public class ServerFishingManager
                 ItemStack nibbleRod = nibbleHand != null ? player.getItemInHand(nibbleHand) : ItemStack.EMPTY;
                 float setChance = Math.min(0.9F, cfg.nibbleToBiteChance.get().floatValue()
                         * AquacultureCompat.nibbleBiteMultiplier(nibbleRod)
-                        * FishProfiles.of(fish).biteBias);
+                        * FishProfiles.of(fish).biteBias
+                        * FishTraits.of(fish).bite());
                 if (level.random.nextFloat() < setChance) {
                     beginBite(session, level, hook, fish);
                 } else {
@@ -826,21 +846,30 @@ public class ServerFishingManager
         }
         float total = 0.0F;
         for (PathfinderMob fish : candidates) {
-            total += (FishBehavior.state(fish).interest + 0.2F) * FishProfiles.of(fish).biteBias;
+            total += biteWeight(fish);
         }
         float roll = level.random.nextFloat() * total;
         for (PathfinderMob fish : candidates) {
-            roll -= (FishBehavior.state(fish).interest + 0.2F) * FishProfiles.of(fish).biteBias;
+            roll -= biteWeight(fish);
             if (roll <= 0.0F) return fish;
         }
         return candidates.get(candidates.size() - 1);
+    }
+
+    /** How eager this fish is to be the one that bites: interest x species x born traits. */
+    private static float biteWeight(PathfinderMob fish)
+    {
+        return (FishBehavior.state(fish).interest + 0.2F)
+                * FishProfiles.of(fish).biteBias * FishTraits.of(fish).bite();
     }
 
     /** The moment of the bite itself: bobber dips, splash, and the hook-set window opens. */
     private static void beginBite(Session session, ServerLevel level, FishingHook hook, PathfinderMob fish)
     {
         session.pendingFish = fish.getUUID();
-        session.pendingBiteTicks = NiceCatchConfig.SERVER.biteWindowTicks.get();
+        // A slippery fish spits the hook fast: its bite window is meaningfully shorter.
+        session.pendingBiteTicks = Math.max(10, Math.round(
+                NiceCatchConfig.SERVER.biteWindowTicks.get() * FishTraits.of(fish).biteWindow()));
         // The hook-set direction for this bite, rolled here so it can ride the bite packet.
         session.pendingBiteDir = NiceCatchConfig.SERVER.directionalHookSet.get()
                 ? (byte) (1 + level.random.nextInt(2)) : 0;
@@ -1006,12 +1035,29 @@ public class ServerFishingManager
         double effDist = effectiveFightDistance(player, fish);
         fight.progress = closeness(fight, effDist);
 
+        // The reel's voice, at the angler's ear: line being stripped off the spool during a
+        // run, and the rod creaking as tension nears the snapping point.
+        if (run && fight.lastDist >= 0.0D && dist > fight.lastDist + 0.03D && fight.ticks % 6 == 0) {
+            level.playSound(null, player.getX(), player.getY(), player.getZ(),
+                    SoundEvents.CROSSBOW_LOADING_MIDDLE, SoundSource.PLAYERS,
+                    0.4F, 1.7F + random.nextFloat() * 0.25F);
+        }
+        if (fight.tension > 0.75F && fight.ticks % 10 == 0) {
+            level.playSound(null, player.getX(), player.getY(), player.getZ(),
+                    SoundEvents.LEASH_KNOT_PLACE, SoundSource.PLAYERS,
+                    0.5F, 0.5F + fight.tension * 0.4F);
+        }
+        fight.lastDist = dist;
+
         // Spooled — the fish took every last block of line and tears free.
         if (dist >= fight.lineLength - 0.25D && fight.graceTicks <= 0) {
             freeFish(fish, fish.position());
             if (hook != null) hook.setHookedEntity(null);
             level.playSound(null, fish.getX(), fish.getY(), fish.getZ(),
                     SoundEvents.FISHING_BOBBER_SPLASH, SoundSource.NEUTRAL, 0.3F, 0.6F);
+            // The line going suddenly, sickeningly slack.
+            level.playSound(null, player.getX(), player.getY(), player.getZ(),
+                    SoundEvents.FISHING_BOBBER_RETRIEVE, SoundSource.PLAYERS, 0.5F, 0.55F);
             endFight(player, session, FightEndMessage.ESCAPED);
             return;
         }
@@ -1019,11 +1065,12 @@ public class ServerFishingManager
         // Landed — hauled all the way in while it isn't running.
         if (!run && effDist <= cfg.landDistance.get() && fight.graceTicks <= 0) {
             landEntityFish(player, session, hook, fight, fish, level);
+            int bonus = fight.bonusXp; // lucky/ancient fish carry their own prize
             if (cfg.bonusXp.get() && fight.strength > 0.6F) {
-                int bonus = Math.round((fight.strength - 0.6F) * 8.0F);
-                if (bonus > 0) {
-                    level.addFreshEntity(new ExperienceOrb(level, player.getX(), player.getY() + 0.5D, player.getZ(), bonus));
-                }
+                bonus += Math.round((fight.strength - 0.6F) * 8.0F);
+            }
+            if (bonus > 0) {
+                level.addFreshEntity(new ExperienceOrb(level, player.getX(), player.getY() + 0.5D, player.getZ(), bonus));
             }
             endFight(player, session, FightEndMessage.CAUGHT);
             return;
@@ -1074,7 +1121,7 @@ public class ServerFishingManager
         float wSweep = 1.0F + 0.8F * f;
         float wPull = 1.4F * (1.0F - 0.6F * f) * (0.6F + fight.strength);
         float wSound = 1.1F * (1.0F - 0.6F * f);
-        float wCharge = 4.0F * chargePref * (1.0F - 0.7F * f);
+        float wCharge = 4.0F * chargePref * (1.0F - 0.7F * f) * fight.chargeBias;
         switch (prev) { // discourage repeating the same tactic twice in a row
             case HOLD -> wHold *= 0.15F;
             case SWEEP -> wSweep *= 0.2F;
@@ -1159,7 +1206,8 @@ public class ServerFishingManager
         boolean sweeping = fight.phase == FightPhase.SWEEP;
         if (--fight.veerTicks <= 0) {
             fight.veerTicks = 6 + random.nextInt(sweeping ? 6 : 10);
-            fight.veerTarget = (random.nextFloat() - 0.5F) * (sweeping ? 2.4F : 1.4F);
+            fight.veerTarget = (random.nextFloat() - 0.5F)
+                    * (sweeping ? 2.4F * fight.sweepAmp : 1.4F);
             if (random.nextFloat() < (sweeping ? 0.4F : 0.2F)) {
                 fight.veerTarget = -fight.veerTarget * 1.4F;
             }
@@ -1188,8 +1236,10 @@ public class ServerFishingManager
             target = cfg.reelInSpeed.get() / 20.0D * crankFrac * (1.0D - resist) * eff * fight.reelScale;
         }
 
-        // The fish's own drive this tick: which way it wants to go, and how hard.
-        double baseForce = (0.05D + 0.06D * fight.strength) * (1.0D - 0.7D * fight.fatigue);
+        // The fish's own drive this tick: which way it wants to go, and how hard. Swift fish
+        // hit harder in their runs; sluggish ones softer.
+        double baseForce = (0.05D + 0.06D * fight.strength) * (1.0D - 0.7D * fight.fatigue)
+                * (run ? fight.runForce : 1.0D);
         Vec3 heading;
         double damping;
         switch (fight.phase) {

@@ -39,11 +39,12 @@ escaped fish avoid biting much longer.
   into the real thing (and makes that fish more interested).
 - **A real fish bites** — you'll first see the vanilla V-shaped wake streaking toward your
   bobber as the fish closes in. Then the bobber tugs, bubbles rise, the bar flashes **red**
-  and the hint tells you which way to strike: **yank the rod LEFT or RIGHT** (a quick
-  sideways jolt of the mouse) before the window (~2.5 s) closes. The right way sets the
-  hook and starts the fight (section 4); the wrong way pulls the hook straight out of its
-  mouth and the fish bolts. (Turn `bite.directionalHookSet` off to set the hook with a
-  plain right-click instead; `client.hookSetJoltDegrees` tunes how hard a yank must be.)
+  and the hint tells you which way to strike: **hold right-click and yank the rod LEFT or
+  RIGHT** (a quick sideways jolt of the mouse while gripping) before the window (~2.5 s)
+  closes. Yanking without holding right-click does nothing — you're not on the rod. The
+  right way sets the hook and starts the fight (section 4); the wrong way pulls the hook
+  straight out of its mouth and the fish bolts. (Turn `bite.directionalHookSet` off to set
+  the hook with a plain right-click instead; `client.hookSetJoltDegrees` tunes the yank.)
 - **A loot nibble** (no fish around) — the bar flashes **gold**: **hold right-click and reel**
   to bring the item in. There's no fight and the line can't snap, so reel at full speed (a
   touch slower than an empty line). See *Reeling in without a fish* below.
@@ -104,10 +105,11 @@ Right-click no longer snaps the line straight back. Whether the hook is empty or
 item on it, **hold right-click and reel** — the same reel mode as a fight (camera locks to
 the bobber, slight zoom), just with no tension and no snapping:
 
-- **Empty line** — reel at full speed. Circle the mouse to reel faster; simply holding reels
-  at a steady baseline.
+- **Empty line** — circle the mouse to crank it home at full speed. Holding right-click
+  alone holds the line but reels nothing — the crank is the reel. (The accessibility option
+  `client.requireCircularMotion = false` restores hold-to-reel at a moderate pace.)
 - **Loot item** (the gold bite) — a little slower, but there's no fight and it can't get
-  away once you're reeling it. Reel it home to collect it.
+  away once you're reeling it. Crank it home to collect it.
 
 Let go and the reel-in pauses (the camera pans back); hold again to resume from where the
 bobber is. Reel it to within a couple of blocks and it's fully retrieved.
@@ -145,6 +147,21 @@ fish that swim inside it — and **baiting it with any food item** (right-click 
 multiplies the odds and actively draws nearby fish over to nose around it; each catch eats
 one bait. Right-click to collect the haul; break it and everything spills out. It's
 deliberately slow, passive fishing — bait it, go do something else, come back.
+
+## 4f. Weight, sizes, and traits
+
+**No two fish are the same anymore.** Every individual rolls its own body size — hitbox and
+model both — so a school of salmon has runts and monsters, and the runt genuinely is a
+lighter, easier fight. Weight comes from the actual body volume and is stamped on every
+caught fish's tooltip (`Weight: 4.2 kg`), along with the catch line on screen.
+
+Fish can also be **born with traits** (about a quarter of them are): *Feisty* fish thrash
+harder, *Tough* ones strain the line toward snapping, *Slippery* ones spit the hook faster,
+*Cunning* ones love the charge, *Giant*/*Dwarf* bend the size roll, *Lucky* ones pay bonus
+XP — and the rare aura fish (*Cosmic*, *Glimmering*, *Molten*, *Ghostly*, *Abyssal*,
+*Ancient*...) visibly shimmer in the water so you know exactly which one to cast at. A
+caught fish's traits are named on its tooltip in their own colors. Tuning under the
+`weight` config section (`traitChance`, size variance band, kg-per-volume).
 
 ## 5. Catch and release
 

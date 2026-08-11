@@ -14,8 +14,18 @@ public class FishFight
     @Nullable public UUID fishId;
     /** 0..1, how hard this fish fights. Entity fights derive this from hitbox size and species. */
     public float strength;
-    /** Species stamina multiplier: >1 tires slower. From the fish's profile. */
+    /** Stamina multiplier: >1 tires slower. Species profile x traits. */
     public float stamina = 1.0F;
+    /** Thrash amplitude while sweeping (feisty fish). */
+    public float sweepAmp = 1.0F;
+    /** Force multiplier on its runs (swift/sluggish fish). */
+    public float runForce = 1.0F;
+    /** Weighting toward the Charge tactic (cunning fish). */
+    public float chargeBias = 1.0F;
+    /** Extra XP granted on landing (lucky/ancient fish). */
+    public int bonusXp;
+    /** Distance to the player last tick; watched to hear line being stripped off the reel. */
+    public double lastDist = -1.0D;
     /**
      * 0..1, line retrieved — derived from the fish's distance each tick, this is what the
      * HUD bar shows. Full means the fish is at landing range; empty means it took all the line.

@@ -4,6 +4,9 @@ import net.minecraftforge.common.ForgeConfigSpec;
 
 public class NiceCatchConfig
 {
+    /** Display unit for fish weights. Data is always stored metric; this is presentation only. */
+    public enum WeightUnit { LBS, KG }
+
     public static final ForgeConfigSpec SERVER_SPEC;
     public static final Server SERVER;
     public static final ForgeConfigSpec CLIENT_SPEC;
@@ -74,6 +77,16 @@ public class NiceCatchConfig
         public final ForgeConfigSpec.IntValue predationSatiationTicks;
         public final ForgeConfigSpec.BooleanValue habitatMovementEnabled;
         public final ForgeConfigSpec.DoubleValue coldBiteMultiplier;
+
+        // Weight, size variance & traits
+        public final ForgeConfigSpec.EnumValue<WeightUnit> weightUnit;
+        public final ForgeConfigSpec.BooleanValue sizeVarianceEnabled;
+        public final ForgeConfigSpec.DoubleValue sizeVarianceMin;
+        public final ForgeConfigSpec.DoubleValue sizeVarianceMax;
+        public final ForgeConfigSpec.DoubleValue weightPerVolume;
+        public final ForgeConfigSpec.DoubleValue traitChance;
+        public final ForgeConfigSpec.DoubleValue doubleTraitChance;
+        public final ForgeConfigSpec.BooleanValue traitAurasEnabled;
 
         // Fishing net & fish trap
         public final ForgeConfigSpec.DoubleValue netCatchRadius;
@@ -377,6 +390,25 @@ public class NiceCatchConfig
                     .defineInRange("coldBiteMultiplier", 0.5D, 0.05D, 1.0D);
             b.pop();
 
+            b.push("weight");
+            weightUnit = b.comment("Unit fish weights are shown in (tooltips and the catch message): LBS or KG. Stored data is always metric, so flipping this never changes any fish.")
+                    .defineEnum("weightUnit", WeightUnit.LBS);
+            sizeVarianceEnabled = b.comment("Every individual fish rolls its own body size (hitbox and model both) — no two salmon alike. Smaller fish are genuinely lighter, weaker fights; bigger ones heavier and harder. Derived from the fish's UUID, so it needs no syncing and survives saves and catch-and-release.")
+                    .define("sizeVarianceEnabled", true);
+            sizeVarianceMin = b.comment("Smallest body scale a fish can roll.")
+                    .defineInRange("sizeVarianceMin", 0.7D, 0.3D, 1.0D);
+            sizeVarianceMax = b.comment("Largest body scale a fish can roll (before the giant/dwarf traits, which multiply on top).")
+                    .defineInRange("sizeVarianceMax", 1.4D, 1.0D, 2.5D);
+            weightPerVolume = b.comment("Kilograms per block-volume of hitbox; weight = width x width x height x this (x density traits). Shown on every caught fish's tooltip.")
+                    .defineInRange("weightPerVolume", 25.0D, 1.0D, 500.0D);
+            traitChance = b.comment("Chance a fish is born with a trait (feisty, tough, cosmic...). Traits color the fight, the fish's temperament, its size or heft — and are named on the caught item's tooltip.")
+                    .defineInRange("traitChance", 0.25D, 0.0D, 1.0D);
+            doubleTraitChance = b.comment("Chance a trait-bearing fish carries a second trait.")
+                    .defineInRange("doubleTraitChance", 0.1D, 0.0D, 1.0D);
+            traitAurasEnabled = b.comment("Special-trait fish (cosmic, glimmering, molten...) shed ambient particles so you can spot them in the water.")
+                    .define("traitAurasEnabled", true);
+            b.pop();
+
             b.push("net");
             netCatchRadius = b.comment("Radius around the struck water (or targeted fish) in which the fishing net can scoop fish.")
                     .defineInRange("netCatchRadius", 2.5D, 1.0D, 6.0D);
@@ -493,6 +525,7 @@ public class NiceCatchConfig
         public final ForgeConfigSpec.DoubleValue bobberHookRotationDegrees;
         public final ForgeConfigSpec.DoubleValue hookSetJoltDegrees;
         public final ForgeConfigSpec.BooleanValue fishPitchEnabled;
+        public final ForgeConfigSpec.BooleanValue rodAnimationsEnabled;
 
         Client(ForgeConfigSpec.Builder b)
         {
@@ -500,7 +533,7 @@ public class NiceCatchConfig
                     .defineInRange("chargeSweepTicks", 30, 5, 200);
             reelSensitivity = b.comment("Multiplier on how much reeling you get out of your mouse motion.")
                     .defineInRange("reelSensitivity", 1.0D, 0.1D, 5.0D);
-            requireCircularMotion = b.comment("If true, you must spin the mouse in circles to reel. If false, simply holding right-click reels (accessibility).")
+            requireCircularMotion = b.comment("Accessibility. If true (the default), reeling ALWAYS requires circling the mouse — holding right-click alone never reels, in fights or plain retrieves. Set false if circular mouse motion is difficult: holding right-click then reels at a steady moderate speed by itself (circling still reels faster).")
                     .define("requireCircularMotion", true);
             reelFovMultiplier = b.comment("FOV multiplier while focused on reeling a fish (lower = more zoom).")
                     .defineInRange("reelFovMultiplier", 0.87D, 0.5D, 1.0D);
@@ -526,6 +559,8 @@ public class NiceCatchConfig
                     .defineInRange("hookSetJoltDegrees", 22.0D, 5.0D, 90.0D);
             fishPitchEnabled = b.comment("Fish visually pitch their nose up and down with their vertical swimming (cosmetic, smoothed).")
                     .define("fishPitchEnabled", true);
+            rodAnimationsEnabled = b.comment("First-person rod animations: draw-back while charging a cast, the cast whip, bite twitches, and strain/shake/lift/crank motion during the fight.")
+                    .define("rodAnimationsEnabled", true);
         }
     }
 }

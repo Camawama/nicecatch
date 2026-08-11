@@ -43,9 +43,11 @@ public class ScatterGoal extends Goal
         FishBehavior.Threat threat = FishBehavior.findThreat(fish);
         if (threat == null) return false;
         if (!threat.certain()) {
-            // Bold species hold their nerve near a looming figure a little longer.
+            // Bold species — and fish born bold or ghostly — hold their nerve near a looming
+            // figure a little longer; the timid bolt at shadows.
             float chance = NiceCatchConfig.SERVER.swimScareChance.get().floatValue()
-                    * (1.3F - 0.6F * net.camacraft.nicecatch.server.FishProfiles.of(fish).boldness);
+                    * (1.3F - 0.6F * net.camacraft.nicecatch.server.FishProfiles.of(fish).boldness)
+                    * net.camacraft.nicecatch.server.FishTraits.of(fish).fear();
             if (fish.getRandom().nextFloat() >= chance) return false;
         }
 

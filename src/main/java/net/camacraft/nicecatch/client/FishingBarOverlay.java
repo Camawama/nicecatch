@@ -84,7 +84,8 @@ public class FishingBarOverlay
                 if (ClientFishing.celebrateTicks() > 0) {
                     drawBackground(graphics, x, y);
                     drawFill(graphics, x, y, 1.0F, 0xFF7EE044);
-                    drawHint(graphics, window, y, "nicecatch.hint.caught", 0xFF7EE044, false);
+                    // No hint here: the server's actionbar line (name, weight, traits) owns
+                    // this screen spot during the celebration.
                 }
             }
         }

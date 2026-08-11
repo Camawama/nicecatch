@@ -175,6 +175,7 @@ public final class FishBehavior
                 WHITELIST_CACHE.clear();
                 SCHOOL_SPAWN_CACHE.clear();
                 FishProfiles.clearCache();
+                FishTraits.clearCache();
             }
         }
     }
@@ -285,7 +286,12 @@ public final class FishBehavior
     public static void onFishTick(LivingEvent.LivingTickEvent event)
     {
         if (!(event.getEntity() instanceof PathfinderMob fish) || fish.level().isClientSide) return;
-        if (!fish.isInWater() || isHooked(fish) || !isFishLike(fish)) return;
+        if (!isFishLike(fish)) return;
+
+        // Special-trait fish (cosmic, glimmering...) shimmer at all times — hooked included.
+        FishTraits.tickAura((ServerLevel) fish.level(), fish);
+
+        if (!fish.isInWater() || isHooked(fish)) return;
 
         BlockPos pos = fish.blockPosition();
         FluidState fluid = fish.level().getFluidState(pos);
