@@ -192,6 +192,13 @@ public final class FishTraits
         CACHE.clear();
     }
 
+    /** A caught-fish item carrying at least one trait — these show the enchantment glint. */
+    public static boolean stackHasTraits(net.minecraft.world.item.ItemStack stack)
+    {
+        net.minecraft.nbt.CompoundTag info = stack.getTagElement("NiceCatch");
+        return info != null && !info.getList("Traits", net.minecraft.nbt.Tag.TAG_STRING).isEmpty();
+    }
+
     /**
      * The aura carried by a caught-fish item's NBT (first aura trait wins), or null. Lets
      * displayed fish — Aquaculture wall mounts, and whatever else shows a fish item — keep

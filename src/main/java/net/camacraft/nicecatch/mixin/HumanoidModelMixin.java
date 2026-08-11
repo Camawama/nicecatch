@@ -22,6 +22,10 @@ public abstract class HumanoidModelMixin
     private void nicecatch$fishCarryPoses(LivingEntity entity, float limbSwing, float limbSwingAmount,
                                           float ageInTicks, float netHeadYaw, float headPitch, CallbackInfo ci)
     {
+        // A swing owns the arm: vanilla's attack animation runs earlier in setupAnim, and
+        // stomping it from here is what made swinging look broken. Resume posing after.
+        if (entity.swinging || entity.attackAnim > 0.0F) return;
+
         HumanoidModel<?> self = (HumanoidModel<?>) (Object) this;
         if (FishCarryRenderer.usesTwoHandCarry(entity)) {
             // Both forearms out and spread for the wide carry.

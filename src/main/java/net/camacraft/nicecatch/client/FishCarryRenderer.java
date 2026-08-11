@@ -59,6 +59,8 @@ public final class FishCarryRenderer
     private static final float DANGLE_DROP_TP = 0.25F;
     /** Dangle, first person: lift so the hanging fish sits on screen instead of below it. */
     private static final float DANGLE_RAISE_FP = 0.45F;
+    /** First person, both poses: an extra touch of lift so the catch reads clearly on screen. */
+    private static final float FIRST_PERSON_LIFT = 0.12F;
     /**
      * Dangle, third person: the item socket tilts with the outstretched arm (xRot -0.75 rad
      * = -43 degrees — see HumanoidModelMixin.holdOut), so counter-rotate by exactly that to
@@ -111,6 +113,11 @@ public final class FishCarryRenderer
 
         boolean thirdPerson = context == ItemDisplayContext.THIRD_PERSON_LEFT_HAND
                 || context == ItemDisplayContext.THIRD_PERSON_RIGHT_HAND;
+
+        // First person rides a touch higher across the board, so the catch stays in view.
+        if (!thirdPerson) {
+            pose.translate(0.0D, FIRST_PERSON_LIFT, 0.0D);
+        }
 
         if (lbs < TWO_HAND_LBS) {
             // The third-person item socket sits in a rotated, model-flipped frame
