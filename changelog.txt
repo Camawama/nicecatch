@@ -51,6 +51,27 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   grow to trophy size (default entry: 0.9-2.6x), and setting both to 1 opts a species out of
   size variance entirely.
 
+### Added (commands & multiplayer polish)
+- **/nicecatch command suite** (op level 2). Type suggestions list ONLY the fish Nice
+  Catch manages (no creepers or arrows in a fishing command), and non-fish types are
+  rejected:
+  - `summon <type> [count] [weightLbs] [traits]` — summon fish with a chosen weight and/or
+    traits (comma-separated ids, or `none`). Sizes and traits are a pure function of the
+    fish's UUID, so the command searches the lottery for a real matching individual and
+    spawns exactly it — the result keeps its size and traits through saves and
+    catch-and-release like any other fish. Spawns where you're aiming.
+  - `give <type> [weightLbs] [traits]` — the caught item, stamped exactly as asked.
+  - `inspect` — full report on the fish you're looking at: weight, scale, traits,
+    interest, panic fatigue, hooked/fleeing flags.
+  - `traits` — every registered trait with its color, id, rarity, and description.
+  - `population [radius]` — per-species fish census around you.
+  - `calm` / `scatter` / `chum` `[radius]` — clear fear and cooldowns, spook everything,
+    or crank nearby fishes' bobber interest for testing.
+- **Arrow-fight lines are visible to other players**: the line-arrow fight had no synced
+  entity (a rod fight's bobber carries that for free), so only the angler ever saw the
+  line. Arrow line state is now broadcast to everyone tracking the fish, and spectators
+  render the angler-to-fish line; entries clean themselves up when either end disappears.
+
 ### Fixed (fish carry, third pass)
 - Small fish now hang **vertically** (a rotation-order bug turned the nose-down pitch into
   a roll, leaving the fish horizontal), the third-person dangle renders at the hand instead

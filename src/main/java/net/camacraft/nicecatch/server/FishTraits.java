@@ -192,6 +192,18 @@ public final class FishTraits
         CACHE.clear();
     }
 
+    /** Every registered trait, in registration order (for commands and listings). */
+    public static java.util.Collection<FishTrait> all()
+    {
+        return java.util.Collections.unmodifiableCollection(REGISTRY.values());
+    }
+
+    /** The lottery result for an arbitrary UUID, uncached — command UUID searches use this. */
+    public static Modifiers computeFor(UUID id)
+    {
+        return NiceCatchConfig.SERVER_SPEC.isLoaded() ? build(id) : NONE;
+    }
+
     /** A caught-fish item carrying at least one trait — these show the enchantment glint. */
     public static boolean stackHasTraits(net.minecraft.world.item.ItemStack stack)
     {

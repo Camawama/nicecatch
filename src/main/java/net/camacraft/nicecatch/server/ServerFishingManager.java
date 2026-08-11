@@ -370,6 +370,10 @@ public class ServerFishingManager
                 FishBehavior.LIGHT_SCARE_COOLDOWN);
         beginFight(player, session, fight, fish, maxLine);
         NiceCatchNet.sendTo(player, new ArrowFightMessage(fish.getId()));
+        // Spectators get the line too — a rod fight's bobber is synced to everyone, but an
+        // arrow fight has no entity to carry that information.
+        NiceCatchNet.sendToTracking(fish, new net.camacraft.nicecatch.network.ArrowLineMessage(
+                player.getId(), fish.getId(), true));
         return true;
     }
 
@@ -625,8 +629,8 @@ public class ServerFishingManager
         double dist = to.length();
         if (dist <= cfg.reelCompleteDistance.get() || dist <= step) return true;
 
-        // Clipped: the bobber climbs over terrain instead of being dragged through it.
-        Vec3 next = RodUtil.clipBobberStep(hook, pos, pos.add(to.scale(step / dist)), step);
+        // Clipped: the bobber works its way around terrain instead of through (or over) it.
+        Vec3 next = RodUtil.clipBobberStep(hook, pos, pos.add(to.scale(step / dist)), step, aim);
         hook.setPos(next.x, next.y, next.z);
         // The position is authoritative while reeling; without this, the bobber's own
         // gravity keeps accumulating and eats every upward step (reeling uphill "fails").
@@ -1478,10 +1482,20 @@ public class ServerFishingManager
 
     private static void endFight(ServerPlayer player, Session session, byte result)
     {
+        FishFight fight = session.fight;
         session.fight = null;
         session.prevBite = false;
         session.suppressBiteTicks = 5;
         NiceCatchNet.sendTo(player, new FightEndMessage(result));
+        // Tell spectators the arrow line is gone (best-effort — clients also self-prune
+        // when either end of the line stops existing).
+        if (fight != null && fight.arrow) {
+            PathfinderMob fish = resolveFish(player.serverLevel(), fight.fishId);
+            if (fish != null) {
+                NiceCatchNet.sendToTracking(fish, new net.camacraft.nicecatch.network.ArrowLineMessage(
+                        player.getId(), fish.getId(), false));
+            }
+        }
     }
 
     /**

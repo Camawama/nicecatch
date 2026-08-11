@@ -3,7 +3,6 @@ package net.camacraft.nicecatch.client;
 import com.mojang.blaze3d.vertex.PoseStack;
 import com.mojang.blaze3d.vertex.VertexConsumer;
 import net.minecraft.client.Minecraft;
-import net.minecraft.client.player.LocalPlayer;
 import net.minecraft.client.renderer.MultiBufferSource;
 import net.minecraft.client.renderer.RenderType;
 import net.minecraft.world.entity.Entity;
@@ -11,32 +10,76 @@ import net.minecraft.world.phys.Vec3;
 import org.joml.Matrix3f;
 import org.joml.Matrix4f;
 
+import java.util.HashMap;
+import java.util.Iterator;
+import java.util.Map;
+
 /**
- * Draws the fishing line from the player to the fish during a line-arrow fight (a rod fight uses
- * vanilla's own bobber line instead). A short, lightly sagging strand of line segments — enough
- * for the player to see they're tethered to the fish they shot.
+ * Draws the fishing line from an angler to the fish during a line-arrow fight (a rod fight
+ * uses vanilla's own bobber line instead). A short, lightly sagging strand of line segments.
+ *
+ * The local player's fight comes from the client fishing state; everyone ELSE'S arrow
+ * fights arrive via {@code ArrowLineMessage} broadcasts and are tracked here, so spectators
+ * see the line too. Entries prune themselves the moment either end stops existing.
  */
 public final class FishingLineRenderer
 {
+    /** Other players' active arrow lines: angler entity id -> fish entity id. */
+    private static final Map<Integer, Integer> REMOTE_LINES = new HashMap<>();
+
     private FishingLineRenderer() {}
+
+    public static void handleLine(int playerId, int fishId, boolean active)
+    {
+        if (active) {
+            REMOTE_LINES.put(playerId, fishId);
+        } else {
+            REMOTE_LINES.remove(playerId);
+        }
+    }
+
+    public static void clear()
+    {
+        REMOTE_LINES.clear();
+    }
 
     public static void render(PoseStack pose, Vec3 camera, float partialTick)
     {
-        if (ClientFishing.phase() != ClientFishing.Phase.FIGHT) return;
-        int anchorId = ClientFishing.fightAnchorId();
-        if (anchorId < 0) return;
-
         Minecraft mc = Minecraft.getInstance();
         if (mc.level == null || mc.player == null) return;
-        Entity fish = mc.level.getEntity(anchorId);
-        if (fish == null) return;
 
-        LocalPlayer player = mc.player;
-        Vec3 look = player.getViewVector(partialTick);
-        Vec3 flat = new Vec3(look.x, 0.0D, look.z).normalize();
-        // From roughly the player's hands, out to the middle of the fish.
-        Vec3 start = player.getPosition(partialTick)
-                .add(0.0D, player.getBbHeight() * 0.65D, 0.0D)
+        // The local fight, driven by the client fishing state.
+        if (ClientFishing.phase() == ClientFishing.Phase.FIGHT && ClientFishing.fightAnchorId() >= 0) {
+            Entity fish = mc.level.getEntity(ClientFishing.fightAnchorId());
+            if (fish != null) {
+                drawLine(mc, pose, camera, mc.player, fish, partialTick);
+            }
+        }
+
+        // Everyone else's arrow fights, from the broadcasts.
+        Iterator<Map.Entry<Integer, Integer>> it = REMOTE_LINES.entrySet().iterator();
+        while (it.hasNext()) {
+            Map.Entry<Integer, Integer> line = it.next();
+            if (line.getKey() == mc.player.getId()) continue; // local path above owns this one
+            Entity angler = mc.level.getEntity(line.getKey());
+            Entity fish = mc.level.getEntity(line.getValue());
+            if (angler == null || fish == null || !angler.isAlive() || !fish.isAlive()) {
+                it.remove();
+                continue;
+            }
+            drawLine(mc, pose, camera, angler, fish, partialTick);
+        }
+    }
+
+    private static void drawLine(Minecraft mc, PoseStack pose, Vec3 camera,
+                                 Entity angler, Entity fish, float partialTick)
+    {
+        Vec3 look = angler.getViewVector(partialTick);
+        Vec3 flat = new Vec3(look.x, 0.0D, look.z);
+        flat = flat.lengthSqr() < 1.0E-6D ? Vec3.ZERO : flat.normalize();
+        // From roughly the angler's hands, out to the middle of the fish.
+        Vec3 start = angler.getPosition(partialTick)
+                .add(0.0D, angler.getBbHeight() * 0.65D, 0.0D)
                 .add(flat.scale(0.35D));
         Vec3 end = fish.getPosition(partialTick).add(0.0D, fish.getBbHeight() * 0.5D, 0.0D);
 

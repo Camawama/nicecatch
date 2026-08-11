@@ -38,12 +38,19 @@ public final class FishSizing
      */
     public static float scaleOf(Entity fish)
     {
+        return scaleFor(fish.getType(), fish.getUUID(), FishTraits.of(fish));
+    }
+
+    /** The pure function behind scaleOf, usable for hypothetical UUIDs (command searches). */
+    public static float scaleFor(net.minecraft.world.entity.EntityType<?> type, java.util.UUID id,
+                                 FishTraits.Modifiers traits)
+    {
         if (!NiceCatchConfig.SERVER_SPEC.isLoaded()) return 1.0F;
         // Fixed-dimension types refuse EntityDimensions.scale(), so their hitbox could never
         // follow — report 1 so the rendered model stays honest about the real hitbox.
-        if (fish.getType().getDimensions().fixed) return 1.0F;
+        if (type.getDimensions().fixed) return 1.0F;
         NiceCatchConfig.Server cfg = NiceCatchConfig.SERVER;
-        FishProfiles.FishProfile profile = FishProfiles.of(fish.getType());
+        FishProfiles.FishProfile profile = FishProfiles.of(type);
         boolean hasOverride = !Float.isNaN(profile.sizeMin) || !Float.isNaN(profile.sizeMax);
         float base = 1.0F;
         if (cfg.sizeVarianceEnabled.get() || hasOverride) {
@@ -53,12 +60,12 @@ public final class FishSizing
                     : cfg.sizeVarianceMax.get().floatValue());
             // Two independent rolls averaged: sizes cluster around the middle of the band,
             // with the extremes rare enough to be worth mentioning to a friend.
-            long h = FishTraits.mix(fish.getUUID(), SIZE_SALT);
+            long h = FishTraits.mix(id, SIZE_SALT);
             float a = ((h >>> 16) & 0xFFFF) / 65535.0F;
             float b = ((h >>> 40) & 0xFFFF) / 65535.0F;
             base = Mth.lerp((a + b) * 0.5F, min, max);
         }
-        return base * FishTraits.of(fish).scale();
+        return base * traits.scale();
     }
 
     /** Weight in kilograms: scaled hitbox volume x density config x trait density. */
@@ -75,7 +82,7 @@ public final class FishSizing
         return weightKg(fish) * KG_TO_LBS;
     }
 
-    private static final float KG_TO_LBS = 2.20462F;
+    public static final float KG_TO_LBS = 2.20462F;
 
     /** The stored (metric) weight converted to the configured display unit. */
     public static float displayWeight(float kg)

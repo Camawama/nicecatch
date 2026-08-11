@@ -27,6 +27,7 @@ public class NiceCatchNet
         CHANNEL.registerMessage(id++, FightTickMessage.class, FightTickMessage::encode, FightTickMessage::decode, FightTickMessage::handle);
         CHANNEL.registerMessage(id++, FightEndMessage.class, FightEndMessage::encode, FightEndMessage::decode, FightEndMessage::handle);
         CHANNEL.registerMessage(id++, ArrowFightMessage.class, ArrowFightMessage::encode, ArrowFightMessage::decode, ArrowFightMessage::handle);
+        CHANNEL.registerMessage(id++, ArrowLineMessage.class, ArrowLineMessage::encode, ArrowLineMessage::decode, ArrowLineMessage::handle);
     }
 
     public static void sendToServer(Object message)
@@ -37,5 +38,11 @@ public class NiceCatchNet
     public static void sendTo(ServerPlayer player, Object message)
     {
         CHANNEL.send(PacketDistributor.PLAYER.with(() -> player), message);
+    }
+
+    /** To every player tracking this entity (and the entity itself, if it's a player). */
+    public static void sendToTracking(net.minecraft.world.entity.Entity entity, Object message)
+    {
+        CHANNEL.send(PacketDistributor.TRACKING_ENTITY_AND_SELF.with(() -> entity), message);
     }
 }

@@ -175,5 +175,6 @@ public class ClientEvents
     public static void onLoggingOut(ClientPlayerNetworkEvent.LoggingOut event)
     {
         ClientFishing.reset();
+        FishingLineRenderer.clear();
     }
 }

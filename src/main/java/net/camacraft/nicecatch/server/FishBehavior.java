@@ -183,6 +183,7 @@ public final class FishBehavior
                 SCHOOL_SPAWN_CACHE.clear();
                 FishProfiles.clearCache();
                 FishTraits.clearCache();
+                NiceCatchCommands.clearCache();
             }
         }
     }
