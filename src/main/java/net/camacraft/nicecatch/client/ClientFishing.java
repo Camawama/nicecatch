@@ -592,7 +592,8 @@ public class ClientFishing
         Vec3 to = aim.subtract(pos);
         double dist = to.length();
         if (dist <= cfg.reelCompleteDistance.get() + 0.1D) return; // let the server land and remove it
-        Vec3 next = pos.add(to.scale(step / dist));
+        // Same wall behavior as the server: climb over terrain, never phase through it.
+        Vec3 next = RodUtil.clipBobberStep(hook, pos, pos.add(to.scale(step / dist)), step);
         hook.setPos(next.x, next.y, next.z);
     }
 }

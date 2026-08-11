@@ -613,7 +613,8 @@ public class ServerFishingManager
         double dist = to.length();
         if (dist <= cfg.reelCompleteDistance.get() || dist <= step) return true;
 
-        Vec3 next = pos.add(to.scale(step / dist));
+        // Clipped: the bobber climbs over terrain instead of being dragged through it.
+        Vec3 next = RodUtil.clipBobberStep(hook, pos, pos.add(to.scale(step / dist)), step);
         hook.setPos(next.x, next.y, next.z);
         return false;
     }

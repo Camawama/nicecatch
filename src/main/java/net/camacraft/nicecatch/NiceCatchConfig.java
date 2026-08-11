@@ -161,6 +161,7 @@ public class NiceCatchConfig
         // Aquaculture
         public final ForgeConfigSpec.DoubleValue baitInterestPerLureLevel;
         public final ForgeConfigSpec.DoubleValue baitBitePerLureLevel;
+        public final ForgeConfigSpec.DoubleValue doubleHookChanceMultiplier;
         public final ForgeConfigSpec.DoubleValue lineTensionScale;
         public final ForgeConfigSpec.DoubleValue rodTierTensionBonus;
         public final ForgeConfigSpec.DoubleValue rodTierReelBonus;
@@ -292,7 +293,9 @@ public class NiceCatchConfig
                                     "unusualfishmod:snowflaketail", "unusualfishmod:spindlefish",
                                     "unusualfishmod:spoon_shark", "unusualfishmod:stout_bichir",
                                     "unusualfishmod:tiger_puffer", "unusualfishmod:triple_twirl_pleco",
-                                    "unusualfishmod:volt_angler", "unusualfishmod:zebra_cornetfish"),
+                                    "unusualfishmod:volt_angler", "unusualfishmod:zebra_cornetfish",
+                                    "upgrade_aquatic:pike", "upgrade_aquatic:lionfish",
+                                    "upgrade_aquatic:thrasher", "upgrade_aquatic:great_thrasher"),
                             o -> o instanceof String s && s.contains(":"));
             interestRadius = b.comment("Horizontal radius in which fish notice a bobber and swim over. Depth is ignored: a fish on the ocean floor can see a bobber floating any distance above it.")
                     .defineInRange("interestRadius", 12.0D, 2.0D, 32.0D);
@@ -350,7 +353,9 @@ public class NiceCatchConfig
                                     "unusualfishmod:ripper", "unusualfishmod:roughback_guitarfish",
                                     "unusualfishmod:sea_pancake", "unusualfishmod:shockcat",
                                     "unusualfishmod:spoon_shark", "unusualfishmod:stout_bichir",
-                                    "unusualfishmod:tiger_puffer", "unusualfishmod:volt_angler"),
+                                    "unusualfishmod:tiger_puffer", "unusualfishmod:volt_angler",
+                                    "upgrade_aquatic:pike", "upgrade_aquatic:lionfish",
+                                    "upgrade_aquatic:thrasher", "upgrade_aquatic:great_thrasher"),
                             o -> o instanceof String s && s.contains(":"));
             boidNeighborRadius = b.comment("Radius in which same-species fish count as schoolmates for boids steering.")
                     .defineInRange("boidNeighborRadius", 5.0D, 1.0D, 16.0D);
@@ -369,6 +374,10 @@ public class NiceCatchConfig
                                     "minecraft:tropical_fish=boldness:0.75,curiosity:1.3,strength:0.8,stamina:0.75,depth:surface,cover:0.5",
                                     "minecraft:pufferfish=boldness:0.3,curiosity:0.7,food:0.6,cover:0.4",
                                     "aquaculture:tuna=size_min:0.9,size_max:2.6,strength:1.25,stamina:1.35,boldness:0.4,depth:open",
+                                    "upgrade_aquatic:pike=predator:true,prey_ratio:2.2,strength:1.15,cover:0.7,depth:bottom",
+                                    "upgrade_aquatic:lionfish=boldness:0.55,curiosity:0.9,cover:0.5",
+                                    "upgrade_aquatic:thrasher=predator:true,strength:1.3,stamina:1.35,boldness:0.5",
+                                    "upgrade_aquatic:great_thrasher=predator:true,strength:1.45,stamina:1.5,boldness:0.6",
                                     "unusualfishmod:clownthorn_shark=predator:true,strength:1.35,stamina:1.4,boldness:0.35",
                                     "unusualfishmod:jungleshark=predator:true,strength:1.35,stamina:1.4,boldness:0.35",
                                     "unusualfishmod:spoon_shark=predator:true,strength:1.25,stamina:1.3,boldness:0.35",
@@ -494,6 +503,8 @@ public class NiceCatchConfig
                     .defineInRange("baitInterestPerLureLevel", 0.35D, 0.0D, 3.0D);
             baitBitePerLureLevel = b.comment("Extra bite chance per lure-speed level of the equipped Aquaculture bait (bite multiplier = 1 + this * level).")
                     .defineInRange("baitBitePerLureLevel", 0.25D, 0.0D, 3.0D);
+            doubleHookChanceMultiplier = b.comment("Multiplier on Aquaculture hooks' double-catch chance. Their double hook reports only 10% — tuned for doubling whole loot hauls, invisible when each fight lands one fish — so 3.5 gives it a meaningful ~35% chance to double a caught fish (announced with 'x2!' on the catch line).")
+                    .defineInRange("doubleHookChanceMultiplier", 3.5D, 1.0D, 10.0D);
             lineTensionScale = b.comment("Tension is divided by this while a fishing line is equipped on the Aquaculture rod (the line snaps much later).")
                     .defineInRange("lineTensionScale", 1.5D, 1.0D, 5.0D);
             rodTierTensionBonus = b.comment("Additional snap protection per rod material tier level (scale += this * tier).")

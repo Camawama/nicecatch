@@ -78,9 +78,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   instead of once per asking fish. These were the paths that scaled with fish population.
 
 ### Added
-- **First-person fish carrying** (`client.fishCarryEnabled`): a light fish dangles by the
-  tail from one outstretched hand with a gentle sway; an 8+ lbs catch is hefted low and
-  centered in a two-handed carry. Works with any mod's fish items.
+- **Fish carrying, done properly** (`client.fishCarryEnabled`): a held fish item now renders
+  as the actual fish ENTITY in the holder's hands — first AND third person, players, armor
+  stands, even cod-carrying zombies — replacing the earlier first-person sprite pose. A
+  light fish dangles head-down from the hand with a gentle sway; an 8+ lbs catch is laid
+  across the arms; the model is scaled from the caught item's stamped weight, so a trophy
+  looks like a trophy in someone else's hands. Fish items with no matching entity fall back
+  to the normal item render.
+- **Upgrade Aquatic support out of the box**: pike, lionfish, thrasher, and great thrasher
+  join the default fishAiWhitelist (and the loner/boid blacklist); pike and the thrashers
+  are profiled as predators, lionfish as a bold cover-lurker.
+- **Aquaculture's double hook actually matters now**: its API reports a 10% double-catch —
+  tuned for doubling whole loot hauls, invisible when each fight lands one fish — so it is
+  scaled by `aquaculture.doubleHookChanceMultiplier` (default 3.5 → ~35%) and a proc is
+  announced with a gold "x2!" on the catch line plus a pickup chime.
+- **The reeled bobber respects terrain**: a retrieve that would drag the bobber into a
+  block now climbs it up and over the lip instead (server and client agree), never phasing
+  through solid ground.
 
 ### Changed
 - **Weight-class endurance** (`fight.weightEndurance`): fights no longer end with big fish

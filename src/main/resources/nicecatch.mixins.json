@@ -9,6 +9,7 @@
   ],
   "client": [
     "FishingHookRendererMixin",
+    "ItemInHandRendererMixin",
     "MouseHandlerMixin"
   ],
   "injectors": {

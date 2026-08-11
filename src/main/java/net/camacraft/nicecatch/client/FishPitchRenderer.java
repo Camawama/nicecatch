@@ -41,6 +41,8 @@ public final class FishPitchRenderer
     {
         LivingEntity entity = event.getEntity();
         if (!FishBehavior.isFishKind(entity)) return;
+        // In-hand display dummies size themselves; our world-fish scale must not compound.
+        if (FishCarryRenderer.isDisplayEntity(entity)) return;
 
         PoseStack pose = event.getPoseStack();
         // The pitch tilt goes on the stack FIRST (outermost — world units, so its pivot is

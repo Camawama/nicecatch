@@ -188,8 +188,11 @@ public final class FishConversion
                 SoundEvents.ITEM_PICKUP, SoundSource.PLAYERS, 0.6F, 1.4F + level.random.nextFloat() * 0.4F);
         fish.discard();
 
-        if (doubleCatchChance > 0.0F && level.random.nextFloat() < doubleCatchChance) {
+        boolean doubled = doubleCatchChance > 0.0F && level.random.nextFloat() < doubleCatchChance;
+        if (doubled) {
             stack.grow(1);
+            level.playSound(null, player.getX(), player.getY(), player.getZ(),
+                    SoundEvents.ITEM_PICKUP, SoundSource.PLAYERS, 0.6F, 1.9F);
         }
 
         // Line-arrow catches skip catch-and-release: the item can't be tossed back to revive the fish.
@@ -202,6 +205,10 @@ public final class FishConversion
                 stack.getHoverName(), FishSizing.formatWeight(weightKg), FishSizing.unitLabel());
         for (FishTraits.FishTrait trait : traits.traits()) {
             caughtMsg.append(" ").append(Component.translatable(trait.nameKey()).withStyle(trait.color));
+        }
+        if (doubled) {
+            caughtMsg.append(" ").append(Component.translatable("nicecatch.catch.double")
+                    .withStyle(net.minecraft.ChatFormatting.GOLD));
         }
         player.displayClientMessage(caughtMsg, true);
 

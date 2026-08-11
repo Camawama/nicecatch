@@ -152,7 +152,11 @@ public final class AquacultureCompat
         static float doubleCatchChance(ItemStack rod)
         {
             com.teammetallurgy.aquaculture.api.fishing.Hook hook = hook(rod);
-            return hook != null ? (float) hook.getDoubleCatchChance() : 0.0F;
+            if (hook == null) return 0.0F;
+            // Aquaculture's double hook reports 0.1 — sized for doubling whole loot hauls.
+            // Per single caught fish that is invisible, so it gets scaled up to matter.
+            return (float) (hook.getDoubleCatchChance()
+                    * NiceCatchConfig.SERVER.doubleHookChanceMultiplier.get());
         }
 
         static int bonusLuck(ItemStack rod)
