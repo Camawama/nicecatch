@@ -51,10 +51,15 @@ public class FoodInterestGoal extends Goal
         setFlags(EnumSet.of(Flag.MOVE, Flag.LOOK));
     }
 
-    /** Anything a player could eat, plus raw fish (chum) — the classic bait foods. */
+    /**
+     * Anything a player could eat, raw fish (chum), and Aquaculture's dedicated bait items
+     * (worms, minnows, leeches...) — all of it works thrown in the water AND in the trap's
+     * bait slot.
+     */
     public static boolean isFishFood(ItemStack stack)
     {
-        return !stack.isEmpty() && (stack.getItem().isEdible() || stack.is(ItemTags.FISHES));
+        return !stack.isEmpty() && (stack.getItem().isEdible() || stack.is(ItemTags.FISHES)
+                || net.camacraft.nicecatch.compat.AquacultureCompat.isBaitItem(stack));
     }
 
     @Override

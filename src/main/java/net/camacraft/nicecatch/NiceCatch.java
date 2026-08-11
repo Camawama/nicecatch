@@ -5,6 +5,7 @@ import net.camacraft.nicecatch.registry.ModBlockEntities;
 import net.camacraft.nicecatch.registry.ModBlocks;
 import net.camacraft.nicecatch.registry.ModEntities;
 import net.camacraft.nicecatch.registry.ModItems;
+import net.camacraft.nicecatch.registry.ModMenus;
 import net.minecraftforge.eventbus.api.IEventBus;
 import net.minecraftforge.fml.common.Mod;
 import net.minecraftforge.fml.config.ModConfig;
@@ -23,6 +24,7 @@ public class NiceCatch
         ModItems.register(modBus);
         ModEntities.register(modBus);
         ModBlockEntities.register(modBus);
+        ModMenus.register(modBus);
 
         context.registerConfig(ModConfig.Type.SERVER, NiceCatchConfig.SERVER_SPEC);
         context.registerConfig(ModConfig.Type.CLIENT, NiceCatchConfig.CLIENT_SPEC);

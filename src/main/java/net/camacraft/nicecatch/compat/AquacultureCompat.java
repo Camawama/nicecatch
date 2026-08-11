@@ -82,6 +82,12 @@ public final class AquacultureCompat
         return LOADED && Impl.skipRodDamage(rod, random);
     }
 
+    /** Aquaculture bait (worms, minnows, leeches...) counts as fish food for traps and chum. */
+    public static boolean isBaitItem(ItemStack stack)
+    {
+        return LOADED && !stack.isEmpty() && Impl.isBaitItem(stack);
+    }
+
     /** True when this entity is one of Aquaculture's wall fish mounts. */
     public static boolean isFishMount(net.minecraft.world.entity.Entity entity)
     {
@@ -176,6 +182,11 @@ public final class AquacultureCompat
             com.teammetallurgy.aquaculture.api.fishing.Hook hook = hook(rod);
             return hook != null && hook.getDurabilityChance() > 0.0D
                     && random.nextDouble() < hook.getDurabilityChance();
+        }
+
+        static boolean isBaitItem(ItemStack stack)
+        {
+            return stack.getItem() instanceof com.teammetallurgy.aquaculture.api.bait.IBaitItem;
         }
 
         static boolean isFishMount(net.minecraft.world.entity.Entity entity)

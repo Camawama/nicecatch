@@ -51,6 +51,32 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   grow to trophy size (default entry: 0.9-2.6x), and setting both to 1 opts a species out of
   size variance entirely.
 
+### Fixed (fish carry, third pass)
+- Small fish now hang **vertically** (a rotation-order bug turned the nose-down pitch into
+  a roll, leaving the fish horizontal), the third-person dangle renders at the hand instead
+  of behind the player (its frame correction had a flipped sign), and the holding arm now
+  extends forward to show the dangle off. The two-hand carry spreads the arms wider and
+  levels the fish out of its downward slope (third person).
+- **Aquaculture bait is trap bait**: worms, minnows, leeches and co. now work in the fish
+  trap's bait slot — and as chum thrown straight into the water.
+
+### Fixed (fish carry & trap, second pass)
+- **Fish carry orientation**: the dangling fish now spins to face flank-out so its sway
+  finally lines up with how a hanging fish flexes; in third person the entity gets a base
+  frame correction (the third-person item socket is rotated and model-flipped — that was
+  the "floating, detached" look).
+- **True two-handed carry**: an 8+ lbs fish now poses BOTH arms forward (visible to other
+  players — humanoid mobs and armor stands too), and the fish lays horizontally across the
+  outstretched hands instead of reusing the dangle.
+- **Fish shadows stay flat**: the swim-pitch/size render transform is now scoped to the
+  model only, so the blob shadow no longer tilts with the fish.
+- **Net cooldown means something**: it now applies only when the net comes up FULL
+  (untangling the catch is the delay) — a miss costs nothing but the scattered spot it
+  leaves — and it is enforced on the click-a-fish path, which previously bypassed it.
+- **The fish trap has a real inventory**: right-click opens a hopper-style GUI — bait slot
+  on the left (any food, shift-click to load), the four catch slots to its right. Old traps
+  migrate their stored bait and haul automatically.
+
 ### Fixed (fairness & feel)
 - **Far bites are winnable.** A fish hooked with almost no spool left used to open with a
   line-tearing run and escape near-instantly. It now opens thrashing in place and the

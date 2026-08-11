@@ -33,10 +33,15 @@ public final class FishPitchRenderer
 
     /** Smoothed pitch per fish; weak keys evaporate with the entities. */
     private static final Map<LivingEntity, Float> SMOOTHED = new WeakHashMap<>();
+    /** Entities whose render we pushed a matrix for; popped in Post so the SHADOW (drawn by
+     * the dispatcher after the model) stays flat and unscaled instead of tilting with the fish. */
+    private static final java.util.Set<LivingEntity> PUSHED =
+            java.util.Collections.newSetFromMap(new java.util.IdentityHashMap<>());
 
     private FishPitchRenderer() {}
 
-    @SubscribeEvent
+    /** LOWEST: runs after any canceller, so a cancelled render can never leak our push. */
+    @SubscribeEvent(priority = net.minecraftforge.eventbus.api.EventPriority.LOWEST)
     public static void onRenderLiving(RenderLivingEvent.Pre<?, ?> event)
     {
         LivingEntity entity = event.getEntity();
@@ -44,12 +49,19 @@ public final class FishPitchRenderer
         // In-hand display dummies size themselves; our world-fish scale must not compound.
         if (FishCarryRenderer.isDisplayEntity(entity)) return;
 
+        float pitch = smoothedPitch(entity);
+        float scale = net.camacraft.nicecatch.server.FishSizing.scaleOf(entity);
+        boolean tilt = Math.abs(pitch) >= 0.5F;
+        boolean resize = Math.abs(scale - 1.0F) >= 0.001F;
+        if (!tilt && !resize) return;
+
         PoseStack pose = event.getPoseStack();
+        pose.pushPose(); // scoped to the model render only; popped in Post (shadows stay flat)
+        PUSHED.add(entity);
         // The pitch tilt goes on the stack FIRST (outermost — world units, so its pivot is
         // the scaled hitbox center), the body scale LAST (innermost, about the feet origin,
         // so the model grows to match its individually-scaled hitbox — see FishSizing).
-        float pitch = smoothedPitch(entity);
-        if (Math.abs(pitch) >= 0.5F) {
+        if (tilt) {
             float yaw = Mth.lerp(event.getPartialTick(), entity.yBodyRotO, entity.yBodyRot);
             double pivotY = entity.getBbHeight() * 0.5D;
             pose.translate(0.0D, pivotY, 0.0D);
@@ -58,9 +70,17 @@ public final class FishPitchRenderer
             pose.mulPose(Axis.YP.rotationDegrees(yaw));
             pose.translate(0.0D, -pivotY, 0.0D);
         }
-        float scale = net.camacraft.nicecatch.server.FishSizing.scaleOf(entity);
-        if (Math.abs(scale - 1.0F) >= 0.001F) {
+        if (resize) {
             pose.scale(scale, scale, scale);
+        }
+    }
+
+    /** HIGHEST: pops our push before anyone else reads the stack in Post. */
+    @SubscribeEvent(priority = net.minecraftforge.eventbus.api.EventPriority.HIGHEST)
+    public static void onRenderLivingPost(RenderLivingEvent.Post<?, ?> event)
+    {
+        if (PUSHED.remove(event.getEntity())) {
+            event.getPoseStack().popPose();
         }
     }
 

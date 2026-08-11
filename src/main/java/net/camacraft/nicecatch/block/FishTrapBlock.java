@@ -92,8 +92,10 @@ public class FishTrapBlock extends BaseEntityBlock implements SimpleWaterloggedB
                                  InteractionHand hand, BlockHitResult hit)
     {
         if (level.isClientSide) return InteractionResult.SUCCESS;
-        if (level.getBlockEntity(pos) instanceof FishTrapBlockEntity trap) {
-            return trap.interact(player, hand);
+        if (level.getBlockEntity(pos) instanceof FishTrapBlockEntity trap
+                && player instanceof net.minecraft.server.level.ServerPlayer serverPlayer) {
+            net.minecraftforge.network.NetworkHooks.openScreen(serverPlayer, trap);
+            return InteractionResult.CONSUME;
         }
         return InteractionResult.PASS;
     }

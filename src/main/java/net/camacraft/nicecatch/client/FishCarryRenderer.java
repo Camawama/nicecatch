@@ -45,18 +45,31 @@ import java.util.Set;
  */
 public final class FishCarryRenderer
 {
-    /** At and past this weight (lbs) the fish is laid across the arms instead of dangled. */
-    private static final float TWO_HAND_LBS = 8.0F;
+    /** At and past this weight (lbs) the fish is a two-handed carry instead of a dangle. */
+    public static final float TWO_HAND_LBS = 8.0F;
     private static final float KG_TO_LBS = 2.20462F;
     // --- Tuning knobs for the in-hand pose (blind-calibrated; flip signs if it looks off) ---
     /** Dangle: rotation standing the fish on its nose (degrees around X). */
     private static final float DANGLE_PITCH = 90.0F;
+    /** Dangle: spin about the hanging spine so the flank faces outward (degrees around Y). */
+    private static final float DANGLE_YAW = 90.0F;
     /** Dangle: drop below the grip, in blocks (scaled). */
     private static final float DANGLE_DROP = 0.55F;
-    /** Carry: roll laying the fish flat across the arms (degrees around Z). */
-    private static final float CARRY_ROLL = 90.0F;
-    /** Carry: shift toward the body center, in blocks. */
-    private static final float CARRY_CENTER = 0.18F;
+    /** Dangle, first person: lift so the hanging fish sits on screen instead of below it. */
+    private static final float DANGLE_RAISE_FP = 0.45F;
+    /**
+     * Dangle, third person: the item socket tilts with the outstretched arm (xRot -0.75 rad
+     * = -43 degrees — see HumanoidModelMixin.holdOut), so counter-rotate by exactly that to
+     * make the fish hang plumb from the fist instead of angling with the arm. Negate if it
+     * ever tips the opposite way.
+     */
+    private static final float DANGLE_ARM_COUNTER = 43.0F;
+    /** Carry: shift from the hand toward the body's center line, in blocks. */
+    private static final float CARRY_CENTER = 0.22F;
+    /** Carry: how far below hand level the cradled fish rests, as a fraction of its height. */
+    private static final float CARRY_SINK = 0.45F;
+    /** Carry (third person): degrees leveling the fish out of its downward slope. */
+    private static final float CARRY_LEVEL = 15.0F;
 
     private static final Map<Item, EntityType<?>> TYPE_BY_ITEM = new HashMap<>();
     private static final Map<EntityType<?>, Entity> DUMMIES = new HashMap<>();
@@ -92,16 +105,53 @@ public final class FishCarryRenderer
         float scale = displayScale(display, stack);
         float t = holder.tickCount + mc.getPartialTick();
 
+        boolean thirdPerson = context == ItemDisplayContext.THIRD_PERSON_LEFT_HAND
+                || context == ItemDisplayContext.THIRD_PERSON_RIGHT_HAND;
+
         if (lbs < TWO_HAND_LBS) {
-            // Dangling by the tail: nose-down under the grip, swaying gently.
+            // The third-person item socket sits in a rotated, model-flipped frame
+            // (translateToHand then X-90/Y180): this correction brings the frame upright at
+            // the hand (mulPose appends, so it must complete the rotation — YP180·XP90 lands
+            // back at model space, ZP180 flips it y-up).
+            if (thirdPerson) {
+                pose.mulPose(Axis.YP.rotationDegrees(180.0F));
+                pose.mulPose(Axis.XP.rotationDegrees(90.0F));
+                pose.mulPose(Axis.ZP.rotationDegrees(180.0F));
+                // Gravity doesn't care how the arm is angled: undo the outstretched arm's
+                // tilt so the fish hangs straight down from the fist.
+                pose.mulPose(Axis.XP.rotationDegrees(DANGLE_ARM_COUNTER));
+            } else {
+                // First person: the raw socket sits low — lift the hang into view.
+                pose.translate(0.0D, DANGLE_RAISE_FP, 0.0D);
+            }
+            // Dangling by the tail. ORDER MATTERS (later mulPose applies to the model first):
+            // pendulum sway about the grip is OUTERMOST, then the drop below the grip, and
+            // the fish itself is yawed flank-out and pitched nose-down INNERMOST — pitching
+            // after the yaw in model order is what actually stands the fish vertical.
             pose.mulPose(Axis.ZP.rotationDegrees(Mth.sin(t * 0.25F) * 6.0F));
-            pose.mulPose(Axis.XP.rotationDegrees(DANGLE_PITCH));
             pose.translate(0.0D, -DANGLE_DROP * scale, 0.0D);
+            pose.mulPose(Axis.YP.rotationDegrees(DANGLE_YAW));
+            pose.mulPose(Axis.XP.rotationDegrees(DANGLE_PITCH));
         } else {
-            // The two-armed heft: laid flat across the hands, shifted toward the middle.
-            pose.translate((leftHand ? 1.0D : -1.0D) * CARRY_CENTER, -0.1D, 0.0D);
-            pose.mulPose(Axis.ZP.rotationDegrees(leftHand ? -CARRY_ROLL : CARRY_ROLL));
-            pose.translate(0.0D, -display.getBbHeight() * scale * 0.5D, 0.0D);
+            // The two-armed carry (this frame is calibrated as-is — do not share with the
+            // dangle): shifted from the hand toward the chest's center line and laid
+            // horizontally across the outstretched arms (HumanoidModelMixin poses both arms
+            // forward in third person, so the socket itself already sits out front).
+            if (thirdPerson) {
+                pose.mulPose(Axis.YP.rotationDegrees(180.0F));
+                pose.mulPose(Axis.XP.rotationDegrees(-90.0F));
+            }
+            // Toward the chest's center line (this sign centers it; flipped, it doubles the
+            // offset the user saw).
+            pose.translate((leftHand ? -1.0D : 1.0D) * CARRY_CENTER, 0.0D, 0.0D);
+            pose.mulPose(Axis.YP.rotationDegrees(leftHand ? 90.0F : -90.0F));
+            pose.translate(0.0D, -display.getBbHeight() * scale * CARRY_SINK, 0.0D);
+            if (thirdPerson) {
+                // Levels the carried fish out of its slight downward slope; negative if it
+                // ever tips the other way.
+                pose.mulPose(Axis.ZP.rotationDegrees(CARRY_LEVEL));
+            }
+            pose.mulPose(Axis.XP.rotationDegrees(Mth.sin(t * 0.2F) * 2.0F)); // faint heft-bob
         }
         pose.scale(scale, scale, scale);
 
@@ -110,6 +160,28 @@ public final class FishCarryRenderer
         dispatcher.render(display, 0.0D, 0.0D, 0.0D, 0.0F, 1.0F, pose, buffer, light);
         dispatcher.setRenderShadow(true);
         return true;
+    }
+
+    /**
+     * True when this entity is visibly hauling a heavy fish — drives the two-handed arm
+     * pose in third person (see HumanoidModelMixin).
+     */
+    public static boolean usesTwoHandCarry(LivingEntity holder)
+    {
+        if (!NiceCatchConfig.CLIENT.fishCarryEnabled.get()) return false;
+        return isHeavyFish(holder.getMainHandItem()) || isHeavyFish(holder.getOffhandItem());
+    }
+
+    /** A light fish this hand dangles — the arm holds out for the display (mixin). */
+    public static boolean isLightFishStack(ItemStack stack)
+    {
+        return NiceCatchConfig.CLIENT.fishCarryEnabled.get()
+                && !stack.isEmpty() && isFishStack(stack) && heldWeightLbs(stack) < TWO_HAND_LBS;
+    }
+
+    private static boolean isHeavyFish(ItemStack stack)
+    {
+        return !stack.isEmpty() && isFishStack(stack) && heldWeightLbs(stack) >= TWO_HAND_LBS;
     }
 
     /** A fish in hand: anything the catch system stamped, or any item in the fishes tag. */

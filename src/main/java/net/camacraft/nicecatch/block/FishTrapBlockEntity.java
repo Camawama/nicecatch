@@ -1,6 +1,7 @@
 package net.camacraft.nicecatch.block;
 
 import net.camacraft.nicecatch.NiceCatchConfig;
+import net.camacraft.nicecatch.menu.FishTrapMenu;
 import net.camacraft.nicecatch.registry.ModBlockEntities;
 import net.camacraft.nicecatch.server.FishBehavior;
 import net.camacraft.nicecatch.server.FishConversion;
@@ -15,12 +16,15 @@ import net.minecraft.server.level.ServerLevel;
 import net.minecraft.sounds.SoundEvents;
 import net.minecraft.sounds.SoundSource;
 import net.minecraft.util.RandomSource;
+import net.minecraft.world.Container;
+import net.minecraft.world.ContainerHelper;
 import net.minecraft.world.Containers;
-import net.minecraft.world.InteractionHand;
-import net.minecraft.world.InteractionResult;
+import net.minecraft.world.MenuProvider;
 import net.minecraft.world.entity.MobCategory;
 import net.minecraft.world.entity.PathfinderMob;
+import net.minecraft.world.entity.player.Inventory;
 import net.minecraft.world.entity.player.Player;
+import net.minecraft.world.inventory.AbstractContainerMenu;
 import net.minecraft.world.item.Item;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.level.Level;
@@ -38,26 +42,28 @@ import java.util.WeakHashMap;
 import java.util.concurrent.ConcurrentHashMap;
 
 /**
- * The trap's working parts. Every so often it rolls a catch attempt: a real fish loitering
- * inside the catch radius may be caught (converted to its item and stored), and a baited
- * trap in empty water occasionally produces a biome-appropriate fish on its own. Bait —
- * any food item — multiplies the odds, is consumed one per catch, and, via the fish AI's
- * food-interest goal, actively draws fish over to nose around the trap; that investigation
- * is exactly what puts them inside the catch radius.
+ * The trap's working parts, behind a real inventory now: right-click opens a hopper-style
+ * GUI — the bait slot on the left (any food item), the four catch slots to its right.
+ * Every so often the trap rolls a catch attempt: a real fish loitering inside the catch
+ * radius may be caught (converted to its item and stored), and a baited trap in empty water
+ * occasionally produces a biome-appropriate fish on its own. Bait multiplies the odds, is
+ * consumed one per catch, and, via the fish AI's food-interest goal, actively draws fish
+ * over to nose around the trap; that investigation is exactly what puts them inside the
+ * catch radius.
  *
  * Deliberately slow: it's the lazy fisher's method and must never outfish a rod.
  */
-public class FishTrapBlockEntity extends BlockEntity
+public class FishTrapBlockEntity extends BlockEntity implements Container, MenuProvider
 {
-    /** Storage stacks; a full trap stops catching until emptied. */
-    private static final int STORAGE_SLOTS = 4;
-    private static final int MAX_BAIT = 16;
+    public static final int BAIT_SLOT = 0;
+    public static final int STORAGE_START = 1;
+    public static final int SLOT_COUNT = 5;
 
     /** Baited traps by level, so fish AI can find them without scanning blocks. */
     private static final Map<Level, Set<BlockPos>> BAITED_TRAPS = new WeakHashMap<>();
 
-    private final NonNullList<ItemStack> storage = NonNullList.withSize(STORAGE_SLOTS, ItemStack.EMPTY);
-    private ItemStack bait = ItemStack.EMPTY;
+    /** Slot 0 = bait; 1..4 = the haul. */
+    private final NonNullList<ItemStack> items = NonNullList.withSize(SLOT_COUNT, ItemStack.EMPTY);
     private int checkIn = 100;
 
     public FishTrapBlockEntity(BlockPos pos, BlockState state)
@@ -92,14 +98,14 @@ public class FishTrapBlockEntity extends BlockEntity
         return traps != null && traps.contains(pos)
                 && level.isLoaded(pos)
                 && level.getBlockEntity(pos) instanceof FishTrapBlockEntity trap
-                && !trap.bait.isEmpty();
+                && !trap.getItem(BAIT_SLOT).isEmpty();
     }
 
     private void updateRegistry()
     {
         if (level == null || level.isClientSide) return;
         Set<BlockPos> traps = BAITED_TRAPS.computeIfAbsent(level, l -> ConcurrentHashMap.newKeySet());
-        if (bait.isEmpty() || isRemoved()) {
+        if (getItem(BAIT_SLOT).isEmpty() || isRemoved()) {
             traps.remove(worldPosition);
         } else {
             traps.add(worldPosition);
@@ -123,68 +129,93 @@ public class FishTrapBlockEntity extends BlockEntity
         }
     }
 
-    // ---- Player interaction ----
-
-    /** Food in hand baits the trap; an empty(ish) hand collects the haul. */
-    public InteractionResult interact(Player player, InteractionHand hand)
-    {
-        ItemStack held = player.getItemInHand(hand);
-        if (FoodInterestGoal.isFishFood(held)) {
-            int room = bait.isEmpty() ? MAX_BAIT
-                    : ItemStack.isSameItemSameTags(bait, held) ? MAX_BAIT - bait.getCount() : 0;
-            if (room <= 0) {
-                player.displayClientMessage(Component.translatable("nicecatch.trap.bait_full"), true);
-                return InteractionResult.CONSUME;
-            }
-            int moved = Math.min(room, held.getCount());
-            if (bait.isEmpty()) {
-                bait = held.copyWithCount(moved);
-            } else {
-                bait.grow(moved);
-            }
-            if (!player.getAbilities().instabuild) {
-                held.shrink(moved);
-            }
-            setChanged();
-            updateRegistry();
-            level.playSound(null, worldPosition, SoundEvents.GENERIC_SPLASH, SoundSource.BLOCKS, 0.5F, 1.4F);
-            player.displayClientMessage(Component.translatable("nicecatch.trap.baited", bait.getCount()), true);
-            return InteractionResult.CONSUME;
-        }
-
-        boolean any = false;
-        for (int i = 0; i < storage.size(); i++) {
-            ItemStack stack = storage.get(i);
-            if (stack.isEmpty()) continue;
-            any = true;
-            if (!player.getInventory().add(stack)) {
-                player.drop(stack, false);
-            }
-            storage.set(i, ItemStack.EMPTY);
-        }
-        if (any) {
-            setChanged();
-            level.playSound(null, worldPosition, SoundEvents.ITEM_PICKUP, SoundSource.BLOCKS, 0.6F, 1.1F);
-            player.displayClientMessage(Component.translatable("nicecatch.trap.collected"), true);
-        } else {
-            player.displayClientMessage(Component.translatable(
-                    bait.isEmpty() ? "nicecatch.trap.empty" : "nicecatch.trap.waiting"), true);
-        }
-        return InteractionResult.CONSUME;
-    }
-
     /** Spill everything (catches and remaining bait) when the block is broken. */
     public void dropContents()
     {
         if (level == null || level.isClientSide) return;
-        NonNullList<ItemStack> all = NonNullList.create();
-        all.addAll(storage);
-        all.add(bait);
-        Containers.dropContents(level, worldPosition, all);
-        for (int i = 0; i < storage.size(); i++) {
-            storage.set(i, ItemStack.EMPTY); // fixed-size list: no clear()
+        Containers.dropContents(level, worldPosition, items);
+        items.replaceAll(stack -> ItemStack.EMPTY);
+        updateRegistry();
+    }
+
+    // ---- Container (backing the menu) ----
+
+    @Override
+    public int getContainerSize()
+    {
+        return SLOT_COUNT;
+    }
+
+    @Override
+    public boolean isEmpty()
+    {
+        for (ItemStack stack : items) {
+            if (!stack.isEmpty()) return false;
         }
-        bait = ItemStack.EMPTY;
+        return true;
+    }
+
+    @Override
+    public ItemStack getItem(int slot)
+    {
+        return items.get(slot);
+    }
+
+    @Override
+    public ItemStack removeItem(int slot, int amount)
+    {
+        ItemStack taken = ContainerHelper.removeItem(items, slot, amount);
+        if (!taken.isEmpty()) setChanged();
+        return taken;
+    }
+
+    @Override
+    public ItemStack removeItemNoUpdate(int slot)
+    {
+        return ContainerHelper.takeItem(items, slot);
+    }
+
+    @Override
+    public void setItem(int slot, ItemStack stack)
+    {
+        items.set(slot, stack);
+        setChanged();
+    }
+
+    @Override
+    public boolean stillValid(Player player)
+    {
+        return Container.stillValidBlockEntity(this, player);
+    }
+
+    @Override
+    public void clearContent()
+    {
+        items.replaceAll(stack -> ItemStack.EMPTY);
+        setChanged();
+    }
+
+    /** Every inventory mutation lands here — the moment bait appears or runs out, the fish
+     * AI's trap registry follows. */
+    @Override
+    public void setChanged()
+    {
+        super.setChanged();
+        updateRegistry();
+    }
+
+    // ---- Menu ----
+
+    @Override
+    public Component getDisplayName()
+    {
+        return Component.translatable("block.nicecatch.fish_trap");
+    }
+
+    @Override
+    public AbstractContainerMenu createMenu(int windowId, Inventory playerInventory, Player player)
+    {
+        return new FishTrapMenu(windowId, playerInventory, this);
     }
 
     // ---- The trap doing its job ----
@@ -200,7 +231,7 @@ public class FishTrapBlockEntity extends BlockEntity
         int interval = cfg.trapCheckIntervalTicks.get();
         trap.checkIn = interval - interval / 4 + random.nextInt(Math.max(1, interval / 2));
 
-        boolean baited = !trap.bait.isEmpty();
+        boolean baited = !trap.getItem(BAIT_SLOT).isEmpty();
         float chance = cfg.trapCatchChance.get().floatValue()
                 * (baited ? cfg.trapBaitMultiplier.get().floatValue() : 1.0F);
 
@@ -244,14 +275,14 @@ public class FishTrapBlockEntity extends BlockEntity
         return item != null && item != net.minecraft.world.item.Items.AIR ? new ItemStack(item) : ItemStack.EMPTY;
     }
 
-    /** Merge a catch into storage; false (nothing taken) when the trap is stuffed full. */
+    /** Merge a catch into the haul slots; false (nothing taken) when the trap is stuffed full. */
     private boolean store(ItemStack stack)
     {
         if (stack.isEmpty()) return false;
-        for (int i = 0; i < storage.size(); i++) {
-            ItemStack slot = storage.get(i);
+        for (int i = STORAGE_START; i < SLOT_COUNT; i++) {
+            ItemStack slot = items.get(i);
             if (slot.isEmpty()) {
-                storage.set(i, stack);
+                items.set(i, stack);
                 setChanged();
                 return true;
             }
@@ -267,12 +298,16 @@ public class FishTrapBlockEntity extends BlockEntity
 
     private void consumeBait()
     {
+        ItemStack bait = items.get(BAIT_SLOT);
         if (bait.isEmpty()) return;
         bait.shrink(1);
         setChanged();
-        if (bait.isEmpty()) {
-            updateRegistry();
-        }
+    }
+
+    /** The bait slot takes what fish would eat. Used by the menu's slot filter too. */
+    public static boolean isBait(ItemStack stack)
+    {
+        return FoodInterestGoal.isFishFood(stack);
     }
 
     // ---- NBT ----
@@ -281,12 +316,7 @@ public class FishTrapBlockEntity extends BlockEntity
     protected void saveAdditional(CompoundTag tag)
     {
         super.saveAdditional(tag);
-        ListTag list = new ListTag();
-        for (ItemStack stack : storage) {
-            list.add(stack.save(new CompoundTag()));
-        }
-        tag.put("Storage", list);
-        tag.put("Bait", bait.save(new CompoundTag()));
+        ContainerHelper.saveAllItems(tag, items);
         tag.putInt("CheckIn", checkIn);
     }
 
@@ -294,11 +324,17 @@ public class FishTrapBlockEntity extends BlockEntity
     public void load(CompoundTag tag)
     {
         super.load(tag);
-        ListTag list = tag.getList("Storage", CompoundTag.TAG_COMPOUND);
-        for (int i = 0; i < storage.size(); i++) {
-            storage.set(i, i < list.size() ? ItemStack.of(list.getCompound(i)) : ItemStack.EMPTY);
+        items.replaceAll(stack -> ItemStack.EMPTY);
+        if (tag.contains("Items")) {
+            ContainerHelper.loadAllItems(tag, items);
+        } else {
+            // Pre-GUI traps saved a separate Storage list and Bait stack; migrate them.
+            ListTag legacy = tag.getList("Storage", CompoundTag.TAG_COMPOUND);
+            for (int i = 0; i < Math.min(legacy.size(), SLOT_COUNT - STORAGE_START); i++) {
+                items.set(STORAGE_START + i, ItemStack.of(legacy.getCompound(i)));
+            }
+            items.set(BAIT_SLOT, ItemStack.of(tag.getCompound("Bait")));
         }
-        bait = ItemStack.of(tag.getCompound("Bait"));
         checkIn = Math.max(20, tag.getInt("CheckIn"));
     }
 }

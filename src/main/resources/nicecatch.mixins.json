@@ -9,6 +9,7 @@
   ],
   "client": [
     "FishingHookRendererMixin",
+    "HumanoidModelMixin",
     "ItemInHandRendererMixin",
     "MouseHandlerMixin"
   ],

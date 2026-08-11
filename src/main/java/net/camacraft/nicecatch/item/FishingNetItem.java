@@ -85,6 +85,9 @@ public class FishingNetItem extends Item
 
     private void sweep(ServerLevel level, ServerPlayer player, ItemStack stack, Vec3 center, InteractionHand hand)
     {
+        // The entity-click path bypasses vanilla's cooldown gate, so enforce it here too.
+        if (player.getCooldowns().isOnCooldown(this)) return;
+
         NiceCatchConfig.Server cfg = NiceCatchConfig.SERVER;
         double radius = cfg.netCatchRadius.get();
 
@@ -92,7 +95,6 @@ public class FishingNetItem extends Item
                 SoundEvents.GENERIC_SPLASH, SoundSource.PLAYERS, 0.7F, 1.1F + level.random.nextFloat() * 0.3F);
         level.sendParticles(ParticleTypes.SPLASH, center.x, center.y, center.z, 12, radius * 0.4D, 0.15D, radius * 0.4D, 0.0D);
 
-        player.getCooldowns().addCooldown(this, cfg.netCooldownTicks.get());
         stack.hurtAndBreak(1, player, p -> p.broadcastBreakEvent(hand));
 
         AABB box = AABB.ofSize(center, radius * 2.0D, radius * 2.0D, radius * 2.0D);
@@ -103,6 +105,8 @@ public class FishingNetItem extends Item
         // Teamwork first: a fish someone is fighting on a line is landed for them outright.
         for (PathfinderMob fish : inRange) {
             if (FishBehavior.isHooked(fish) && ServerFishingManager.netLandHookedFish(player, fish)) {
+                // Only a full net costs time: untangling the catch is the cooldown.
+                player.getCooldowns().addCooldown(this, cfg.netCooldownTicks.get());
                 return;
             }
         }
@@ -147,6 +151,9 @@ public class FishingNetItem extends Item
                 * (FishBehavior.isScattering(best) ? 0.15D : 1.0D);
         if (level.random.nextFloat() < chance) {
             FishConversion.catchDirectly(player, best);
+            // Untangling a squirming fish out of the mesh is what takes time — a miss costs
+            // nothing but the scattered, un-nettable spot it leaves behind.
+            player.getCooldowns().addCooldown(this, cfg.netCooldownTicks.get());
         } else {
             // The swipe misses: the whole spot erupts.
             FishBehavior.scatter(best, center, cfg.scatterDurationTicks.get());
