@@ -444,11 +444,22 @@ public class ServerFishingManager
         // carries more line).
         fight.lineLength = (float) Math.min(maxLine, Math.max(cfg.lineLength.get(), dist + 4.0D));
         fight.progress = closeness(fight, effectiveFightDistance(player, fish));
-        // Hooking always triggers a panicked first run — even a close fish tears line off
-        // before you can start gaining any.
-        fight.phase = FightPhase.PULL;
-        fight.phaseTicks = 25 + random.nextInt(15);
-        fight.graceTicks = cfg.escapeGraceTicks.get();
+        double headroom = fight.lineLength - dist;
+        if (headroom < 8.0D) {
+            // Hooked far out with almost no spool left: opening with a line-tearing run
+            // would be an instant, unwinnable escape. The fish thrashes in place instead,
+            // and the grace window stretches so the angler can win some line back before
+            // escape is even on the table.
+            fight.phase = FightPhase.SWEEP;
+            fight.phaseTicks = 30 + random.nextInt(20);
+            fight.graceTicks = cfg.escapeGraceTicks.get() + 60;
+        } else {
+            // Hooking triggers a panicked first run — even a close fish tears line off
+            // before you can start gaining any.
+            fight.phase = FightPhase.PULL;
+            fight.phaseTicks = 25 + random.nextInt(15);
+            fight.graceTicks = cfg.escapeGraceTicks.get();
+        }
         session.fight = fight;
         session.prevBite = true;
 
@@ -549,10 +560,15 @@ public class ServerFishingManager
         if (dist <= Math.max(cfg.reelCompleteDistance.get(), 1.5D)) return true;
 
         double crankFrac = Mth.clamp(crank / cfg.maxRevolutionsPerTick.get(), 0.0D, 1.0D);
-        // Bulk resists the drag: a chicken skids right along, a cow barely budges per crank.
+        // Bulk resists the drag on a steep curve: a chicken skids right along, a pig takes
+        // real cranking, a cow is a chore, and a horse barely notices your best efforts.
         double bulk = snagged.getBbWidth() * snagged.getBbWidth() * snagged.getBbHeight();
-        double bulkFactor = Mth.clamp(0.35D / Math.max(0.05D, bulk), 0.25D, 1.0D);
+        double bulkFactor = Mth.clamp(0.32D / Math.pow(Math.max(0.05D, bulk), 1.2D), 0.12D, 1.0D);
         double target = cfg.entityReelSpeed.get() / 20.0D * crankFrac * r.reelScale * bulkFactor;
+        // A hooked player who digs in (sneaking) barely budges — and is working free besides.
+        if (snagged instanceof Player hookedPlayer && hookedPlayer.isShiftKeyDown()) {
+            target *= 0.2D;
+        }
 
         Vec3 dir = to.scale(1.0D / dist);
         Vec3 v = snagged.getDeltaMovement();

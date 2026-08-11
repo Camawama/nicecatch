@@ -121,10 +121,30 @@ public class FishingNetItem extends Item
         }
         if (best == null) return;
 
-        double area = best.getBbWidth() * best.getBbHeight();
-        double sizeFactor = Mth.clamp(Math.sqrt(cfg.sizeReferenceArea.get() / Math.max(0.01D, area)), 0.4D, 1.4D);
-        double chance = cfg.netCatchChance.get() * sizeFactor
-                * (FishBehavior.isScattering(best) ? 0.45D : 1.0D);
+        // Weight decides the odds — a hand net is a smallfry tool. Under ~2 lbs it's easy
+        // money; every band past that collapses toward "it burst straight out of the mesh",
+        // so trophy fish essentially cannot be netted free-swimming (hook one first and net
+        // it cooperatively — that path stays open).
+        float lbs = net.camacraft.nicecatch.server.FishSizing.weightLbs(best);
+        double weightFactor = lbs < 2.0F ? 1.0D
+                : lbs < 5.0F ? 0.6D
+                : lbs < 10.0F ? 0.25D
+                : lbs < 15.0F ? 0.08D : 0.03D;
+
+        // Fieldcraft matters: a fish that can see the sweep coming (approached head-on)
+        // mostly evades; come in from behind — sneaking keeps you unnoticed on the way —
+        // or catch it glued to someone's bobber, and the odds hold up. A fleeing fish is
+        // all but impossible to bag.
+        double yaw = Math.toRadians(best.yBodyRot);
+        Vec3 facing = new Vec3(-Math.sin(yaw), 0.0D, Math.cos(yaw));
+        Vec3 approach = new Vec3(best.getX() - player.getX(), 0.0D, best.getZ() - player.getZ());
+        double approachFactor = approach.lengthSqr() > 1.0E-4D
+                && facing.dot(approach.normalize()) > 0.2D ? 1.0D : 0.45D;
+        FishBehavior.FishState state = FishBehavior.state(best);
+        double distractedBonus = state.bobber != null || state.biteBobber != null ? 1.4D : 1.0D;
+
+        double chance = cfg.netCatchChance.get() * weightFactor * approachFactor * distractedBonus
+                * (FishBehavior.isScattering(best) ? 0.15D : 1.0D);
         if (level.random.nextFloat() < chance) {
             FishConversion.catchDirectly(player, best);
         } else {

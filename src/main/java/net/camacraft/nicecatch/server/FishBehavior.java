@@ -235,6 +235,28 @@ public final class FishBehavior
         });
     }
 
+    // ---- Live bobber registry ----
+
+    /**
+     * Every live bobber per level, weakly referenced. Fish used to hunt for bobbers with a
+     * full-world-height entity query each (that was the only way to keep the "deep fish sees
+     * a surface bobber" cylinder) — per fish, every half second, it was the most expensive
+     * thing large populations did. Iterating this handful of tracked hooks costs nearly
+     * nothing, and exactly nothing when no one is fishing.
+     */
+    private static final Map<net.minecraft.world.level.Level, java.util.Set<FishingHook>> BOBBERS
+            = new WeakHashMap<>();
+
+    @SubscribeEvent
+    public static void onBobberJoin(EntityJoinLevelEvent event)
+    {
+        if (event.getLevel().isClientSide) return;
+        if (event.getEntity() instanceof FishingHook hook) {
+            BOBBERS.computeIfAbsent(event.getLevel(),
+                    level -> java.util.Collections.newSetFromMap(new WeakHashMap<>())).add(hook);
+        }
+    }
+
     // ---- Goal injection ----
 
     @SubscribeEvent
@@ -332,6 +354,7 @@ public final class FishBehavior
     public static void onServerStopped(ServerStoppedEvent event)
     {
         STATES.clear();
+        BOBBERS.clear();
     }
 
     // ---- Queries ----
@@ -373,13 +396,24 @@ public final class FishBehavior
         return dx * dx + dz * dz;
     }
 
+    /** Per-tick cache for claim counts: many fish ask every tick, one STATES pass answers all. */
+    private static final Map<FishingHook, Integer> CLAIM_COUNTS = new WeakHashMap<>();
+    private static long claimCountsTime = Long.MIN_VALUE;
+
     public static int claimedCount(FishingHook hook)
     {
-        int count = 0;
-        for (Map.Entry<PathfinderMob, FishState> entry : STATES.entrySet()) {
-            if (entry.getValue().bobber == hook && entry.getKey().isAlive()) count++;
+        long now = hook.level().getGameTime();
+        if (now != claimCountsTime) {
+            claimCountsTime = now;
+            CLAIM_COUNTS.clear();
+            for (Map.Entry<PathfinderMob, FishState> entry : STATES.entrySet()) {
+                FishingHook claimed = entry.getValue().bobber;
+                if (claimed != null && entry.getKey().isAlive()) {
+                    CLAIM_COUNTS.merge(claimed, 1, Integer::sum);
+                }
+            }
         }
-        return count;
+        return CLAIM_COUNTS.getOrDefault(hook, 0);
     }
 
     /** Fish claimed by this bobber that are within the given range and allowed to bite. */
@@ -529,15 +563,19 @@ public final class FishBehavior
         }
     }
 
-    /** A scare source: where it is, and whether it's the always-flee kind (a swimmer). */
-    public record Threat(Vec3 pos, boolean certain) {}
+    /**
+     * A scare source: where it is, whether it's the always-flee kind (a swimmer), and whether
+     * it is urgent — bearing down close, which cuts through even a habituated fish's calm.
+     */
+    public record Threat(Vec3 pos, boolean certain, boolean urgent) {}
 
     /**
      * Something worth fleeing from: any non-fish entity splashing about in the water nearby
-     * (a certain scare — every fish bolts from a swimmer), a boat gliding past (also certain:
-     * a hull overhead is the biggest thing a fish will ever see), or a player closing to melee
-     * reach (in the water or not) who is moving or mid-swing (chance-based scare). A fisher
-     * standing still on the shore — or sitting still in a boat — never trips this.
+     * (a certain scare — every fish bolts from a swimmer, and one closing to half range is
+     * urgent), a boat gliding past (also certain), or a player closing to melee reach who is
+     * moving or mid-swing (chance-based scare). A fisher standing still on the shore — or
+     * sitting still in a boat — never trips this, and neither does a SNEAKING player on
+     * land: crouch and you are invisible to the fish, net in hand or not.
      *
      * Movement is measured by last-tick position delta, not getDeltaMovement(): server-side
      * velocity is stale for players and boats, whose motion arrives via packets.
@@ -559,17 +597,22 @@ public final class FishBehavior
             // Vertical motion counts too — a player diving straight down is very much moving.
             boolean moving = dx * dx + dy * dy + dz * dz > 4.0E-4D;
             if (e instanceof Boat) {
-                if (moving && onWater(e) && fish.distanceToSqr(e) <= boatRadius * boatRadius) {
-                    return new Threat(e.position(), true);
+                double distSqr = fish.distanceToSqr(e);
+                if (moving && onWater(e) && distSqr <= boatRadius * boatRadius) {
+                    return new Threat(e.position(), true, distSqr <= boatRadius * boatRadius * 0.25D);
                 }
                 continue;
             }
-            if (e.isInWater() && moving && fish.distanceToSqr(e) <= swimRadius * swimRadius) {
-                return new Threat(e.position(), true);
+            if (e.isInWater() && moving) {
+                double distSqr = fish.distanceToSqr(e);
+                if (distSqr <= swimRadius * swimRadius) {
+                    return new Threat(e.position(), true, distSqr <= swimRadius * swimRadius * 0.25D);
+                }
             }
-            if (e instanceof Player player && fish.distanceToSqr(player) <= meleeRadius * meleeRadius
+            if (e instanceof Player player && !player.isCrouching()
+                    && fish.distanceToSqr(player) <= meleeRadius * meleeRadius
                     && (moving || player.swinging)) {
-                return new Threat(player.position(), false);
+                return new Threat(player.position(), false, false);
             }
         }
         return null;
@@ -601,17 +644,25 @@ public final class FishBehavior
         return null;
     }
 
-    /** Nearest bobber this fish could take an interest in on its own. */
+    /**
+     * Nearest bobber this fish could take an interest in on its own. Sight is a cylinder:
+     * a fish on the ocean floor still notices a bobber floating far above it. Reads the
+     * per-level bobber registry instead of scanning entity sections — O(rods being fished).
+     */
     @Nullable
     public static FishingHook findNearbyBobber(PathfinderMob fish)
     {
-        double maxRadius = NiceCatchConfig.SERVER.interestRadius.get() + 8.0D; // upper bound incl. Lure bonus
-        // Sight is a cylinder, not a sphere: a fish on the ocean floor still notices a
-        // bobber floating far above it, so only the horizontal search is bounded.
-        AABB box = fish.getBoundingBox().inflate(maxRadius, fish.level().getHeight(), maxRadius);
+        java.util.Set<FishingHook> hooks = BOBBERS.get(fish.level());
+        if (hooks == null || hooks.isEmpty()) return null;
         FishingHook best = null;
         double bestDist = Double.MAX_VALUE;
-        for (FishingHook hook : fish.level().getEntitiesOfClass(FishingHook.class, box)) {
+        java.util.Iterator<FishingHook> it = hooks.iterator();
+        while (it.hasNext()) {
+            FishingHook hook = it.next();
+            if (!hook.isAlive()) {
+                it.remove();
+                continue;
+            }
             if (!isAttracting(hook)) continue;
             double dist = horizontalDistSqr(fish, hook);
             double radius = attractRadius(hook);

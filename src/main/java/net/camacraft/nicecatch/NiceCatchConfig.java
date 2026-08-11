@@ -56,6 +56,7 @@ public class NiceCatchConfig
         public final ForgeConfigSpec.DoubleValue emptyReelSpeed;
         public final ForgeConfigSpec.DoubleValue itemReelSpeed;
         public final ForgeConfigSpec.DoubleValue entityReelSpeed;
+        public final ForgeConfigSpec.IntValue playerEscapeCrouchTicks;
         public final ForgeConfigSpec.DoubleValue reelCompleteDistance;
         public final ForgeConfigSpec.IntValue reelIdleTimeoutTicks;
 
@@ -227,6 +228,8 @@ public class NiceCatchConfig
                     .defineInRange("itemReelSpeed", 4.5D, 1.0D, 20.0D);
             entityReelSpeed = b.comment("Top speed, in blocks per second, at which reeling drags a snagged non-fish entity (a mob, on land or in water) toward you. Heavier entities are dragged slower.")
                     .defineInRange("entityReelSpeed", 3.0D, 0.5D, 20.0D);
+            playerEscapeCrouchTicks = b.comment("A player hooked by someone's rod is told on screen how to escape and can hold sneak for this many ticks to break the line and get free (sneaking also mostly anchors them against the drag). 0 disables escaping (old behavior).")
+                    .defineInRange("playerEscapeCrouchTicks", 30, 0, 400);
             reelCompleteDistance = b.comment("Distance from you at which a reeled-in bobber is fully retrieved (collecting any snagged item).")
                     .defineInRange("reelCompleteDistance", 2.5D, 1.0D, 8.0D);
             reelIdleTimeoutTicks = b.comment("If you stop reeling (release right-click) for this many ticks, the reel-in is abandoned and the bobber is left sitting in the water again.")
@@ -416,10 +419,10 @@ public class NiceCatchConfig
             b.push("net");
             netCatchRadius = b.comment("Radius around the struck water (or targeted fish) in which the fishing net can scoop fish.")
                     .defineInRange("netCatchRadius", 2.5D, 1.0D, 6.0D);
-            netCatchChance = b.comment("Base chance the net catches a fish in range. Scaled down for big fish and for fleeing fish; a missed fish scatters. Netting a fish another player has hooked always lands it for them.")
+            netCatchChance = b.comment("Base net catch chance, for a small fish taken by surprise. The real odds scale hard with weight (under 2 lbs full, 2-5 lbs x0.6, 5-10 x0.25, 10-15 x0.08, 15+ x0.03 — trophies burst out of a hand net), drop when the fish sees the sweep coming (approach from behind, or sneak up), rise when it's distracted by someone's bobber, and all but vanish on a fleeing fish. Netting a fish another player has hooked always lands it for them.")
                     .defineInRange("netCatchChance", 0.55D, 0.0D, 1.0D);
             netCooldownTicks = b.comment("Cooldown between net sweeps.")
-                    .defineInRange("netCooldownTicks", 40, 0, 400);
+                    .defineInRange("netCooldownTicks", 60, 0, 400);
             b.pop();
 
             b.push("trap");
@@ -530,6 +533,7 @@ public class NiceCatchConfig
         public final ForgeConfigSpec.DoubleValue hookSetJoltDegrees;
         public final ForgeConfigSpec.BooleanValue fishPitchEnabled;
         public final ForgeConfigSpec.BooleanValue rodAnimationsEnabled;
+        public final ForgeConfigSpec.BooleanValue fishCarryEnabled;
 
         Client(ForgeConfigSpec.Builder b)
         {
@@ -565,6 +569,8 @@ public class NiceCatchConfig
                     .define("fishPitchEnabled", true);
             rodAnimationsEnabled = b.comment("First-person rod animations: draw-back while charging a cast, the cast whip, bite twitches, and strain/shake/lift/crank motion during the fight.")
                     .define("rodAnimationsEnabled", true);
+            fishCarryEnabled = b.comment("First-person fish carrying: a light fish held in one hand dangles by the tail; a heavy one (8+ lbs) is hefted low with both hands.")
+                    .define("fishCarryEnabled", true);
         }
     }
 }

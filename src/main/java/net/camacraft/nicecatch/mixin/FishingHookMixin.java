@@ -2,11 +2,16 @@ package net.camacraft.nicecatch.mixin;
 
 import net.camacraft.nicecatch.NiceCatchConfig;
 import net.camacraft.nicecatch.RodUtil;
+import net.minecraft.network.chat.Component;
+import net.minecraft.server.level.ServerPlayer;
+import net.minecraft.sounds.SoundEvents;
+import net.minecraft.sounds.SoundSource;
 import net.minecraft.world.entity.animal.WaterAnimal;
 import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.entity.projectile.FishingHook;
 import net.minecraft.world.phys.Vec3;
 import org.spongepowered.asm.mixin.Mixin;
+import org.spongepowered.asm.mixin.Unique;
 import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Inject;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
@@ -30,6 +35,68 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 @Mixin(FishingHook.class)
 public abstract class FishingHookMixin
 {
+    /** Player-to-player line distance last tick, to hear line being paid out; -1 = not tracking. */
+    @Unique private double nicecatch$lastLineOut = -1.0D;
+    /** Ticks a hooked player has held sneak toward breaking free. */
+    @Unique private int nicecatch$escapeTicks;
+    /** Re-show cadence for the "you've been hooked" actionbar warning. */
+    @Unique private int nicecatch$warnCooldown;
+
+    /**
+     * Server-side line feel: (1) A hooked PLAYER is told on screen how to escape, and holding
+     * sneak works the hook loose — breaking the line entirely — instead of being helplessly
+     * dragged forever. (2) As line pays out from a settled bobber (walking away, trolling
+     * behind a boat), the reel audibly clicks it out to everyone nearby.
+     */
+    @Inject(method = "tick", at = @At("HEAD"), cancellable = true)
+    private void nicecatch$lineFeel(CallbackInfo ci)
+    {
+        FishingHook self = (FishingHook) (Object) this;
+        if (self.level().isClientSide) return;
+
+        // Hooked-player escape.
+        if (self.hookedIn instanceof ServerPlayer hooked && self.getPlayerOwner() != hooked) {
+            int need = NiceCatchConfig.SERVER.playerEscapeCrouchTicks.get();
+            if (need > 0) {
+                if (--nicecatch$warnCooldown <= 0) {
+                    nicecatch$warnCooldown = 40;
+                    hooked.displayClientMessage(Component.translatable("nicecatch.hooked.warning"), true);
+                }
+                if (hooked.isShiftKeyDown()) {
+                    if (++nicecatch$escapeTicks >= need) {
+                        hooked.displayClientMessage(Component.translatable("nicecatch.hooked.freed"), true);
+                        self.level().playSound(null, hooked.getX(), hooked.getY(), hooked.getZ(),
+                                SoundEvents.LEASH_KNOT_BREAK, SoundSource.PLAYERS, 0.8F, 1.2F);
+                        self.discard();
+                        ci.cancel();
+                        return;
+                    }
+                } else {
+                    nicecatch$escapeTicks = Math.max(0, nicecatch$escapeTicks - 2);
+                }
+            }
+        } else {
+            nicecatch$escapeTicks = 0;
+        }
+
+        // Line pay-out clicks from a settled, fishless bobber.
+        if (self.currentState == FishingHook.FishHookState.BOBBING && self.hookedIn == null) {
+            Player owner = self.getPlayerOwner();
+            if (owner != null) {
+                double dist = self.distanceTo(owner);
+                if (nicecatch$lastLineOut >= 0.0D && dist > nicecatch$lastLineOut + 0.04D
+                        && dist > 6.0D && self.tickCount % 6 == 0) {
+                    self.level().playSound(null, owner.getX(), owner.getY(), owner.getZ(),
+                            SoundEvents.CROSSBOW_LOADING_MIDDLE, SoundSource.PLAYERS,
+                            0.3F, 1.5F + (float) Math.min(0.4D, dist / 60.0D));
+                }
+                nicecatch$lastLineOut = dist;
+                return;
+            }
+        }
+        nicecatch$lastLineOut = -1.0D;
+    }
+
     /**
      * Feature: the reel pays out line as you walk away from a cast bobber, and once you reach
      * the end of the spool it drags the bobber along behind you instead of the line snapping

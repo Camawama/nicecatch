@@ -51,6 +51,37 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   grow to trophy size (default entry: 0.9-2.6x), and setting both to 1 opts a species out of
   size variance entirely.
 
+### Fixed (fairness & feel)
+- **Far bites are winnable.** A fish hooked with almost no spool left used to open with a
+  line-tearing run and escape near-instantly. It now opens thrashing in place and the
+  escape-grace window stretches, so the angler can win line back before escape is possible.
+- **Hooked players can escape**: a player on someone's hook now sees "You've been hooked!
+  Hold sneak to break free!", sneaking mostly anchors them against the drag, and ~1.5 s of
+  held sneak snaps the line (`line.playerEscapeCrouchTicks`, 0 restores old behavior).
+- **Line pay-out is audible**: walking or boating away from a cast bobber clicks line off
+  the reel as it pays out.
+- **The net is a skill tool now**: odds collapse with weight (under 2 lbs full chance, 15+
+  lbs x0.03 — trophies burst out of a hand net; hook-then-net cooperation stays the way to
+  land them), a fish that sees the sweep coming mostly evades (approach from behind — sneak
+  up), a bobber-distracted fish is easier, a fleeing fish nearly impossible. Cooldown 60.
+- **Sneaking hides you from fish** on land entirely — the stealth approach for netting.
+  A swimmer closing to half scare-range is an URGENT threat that cuts through even a
+  habituated fish's calm: swim at fish and they bolt, always.
+- **Bigger land animals resist the reel harder**: drag now falls on a steep bulk curve
+  (chicken skids along, pig takes cranking, cow is a chore, horse barely notices).
+
+### Performance
+- Bobber searches no longer scan entity sections across the full world height per fish —
+  live bobbers are tracked in a per-level registry, so the search is O(rods being fished)
+  and free when no one is fishing. Threat scans run every 4th tick instead of every 2nd
+  (reaction still under 0.2 s), and per-bobber claim counts are computed once per tick
+  instead of once per asking fish. These were the paths that scaled with fish population.
+
+### Added
+- **First-person fish carrying** (`client.fishCarryEnabled`): a light fish dangles by the
+  tail from one outstretched hand with a gentle sway; an 8+ lbs catch is hefted low and
+  centered in a two-handed carry. Works with any mod's fish items.
+
 ### Changed
 - **Weight-class endurance** (`fight.weightEndurance`): fights no longer end with big fish
   "giving up" early. A fish's weight now deepens its stamina reserves on a curve anchored in

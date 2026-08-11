@@ -27,6 +27,8 @@
   "nicecatch.catch.info": "Caught %s — %s %s",
   "nicecatch.unit.lbs": "lbs",
   "nicecatch.unit.kg": "kg",
+  "nicecatch.hooked.warning": "You've been hooked! Hold sneak to break free!",
+  "nicecatch.hooked.freed": "You broke free of the line!",
   "nicecatch.trait.feisty": "Feisty",
   "nicecatch.trait.feisty.desc": "Thrashes wildly when hooked",
   "nicecatch.trait.tough": "Tough",

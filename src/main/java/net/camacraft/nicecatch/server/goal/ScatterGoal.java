@@ -38,16 +38,20 @@ public class ScatterGoal extends Goal
         if (FishBehavior.isHooked(fish)) return false;
         if (FishBehavior.isScattering(fish)) return true;
 
-        // No extra stagger here: the goal selector only polls idle goals every other tick
-        // per fish anyway, and any thinner than that reads as "fish didn't notice me".
+        // The threat scan is the priciest per-fish query in the mod, so it runs every 4th
+        // tick (the selector already polls at every 2nd): reaction stays under a fifth of a
+        // second while big fish populations cost half as much.
+        if ((fish.tickCount + fish.getId()) % 4 != 0) return false;
+
         FishBehavior.Threat threat = FishBehavior.findThreat(fish);
         if (threat == null) return false;
         // Habituation: a fish that has been spooked over and over stops taking the bait —
         // even a swimmer barely registers once its flight response is worn out. This is what
-        // lets a crowded pond settle down instead of churning itself frantic forever.
+        // lets a crowded pond settle down instead of churning itself frantic forever. The
+        // exception is a swimmer bearing right down on the fish: that always lands.
         float panicFatigue = FishBehavior.panicFatigue(fish);
         if (threat.certain()) {
-            if (fish.getRandom().nextFloat() < panicFatigue * 0.8F) return false;
+            if (!threat.urgent() && fish.getRandom().nextFloat() < panicFatigue * 0.8F) return false;
         } else {
             // Bold species — and fish born bold or ghostly — hold their nerve near a looming
             // figure a little longer; the timid bolt at shadows.
