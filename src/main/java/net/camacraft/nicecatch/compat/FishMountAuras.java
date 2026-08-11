@@ -33,18 +33,27 @@ public final class FishMountAuras
     private static final int PULSE_INTERVAL = 8;
 
     private static final Map<Level, Set<Entity>> MOUNTS = new WeakHashMap<>();
+    /** Client-side mount tracking, so renderers can match a mount's display fish to its item. */
+    private static final Map<Level, Set<Entity>> CLIENT_MOUNTS = new WeakHashMap<>();
 
     private FishMountAuras() {}
+
+    /** The known fish mounts in this client level (empty without Aquaculture). */
+    public static Iterable<Entity> clientMounts(Level level)
+    {
+        Set<Entity> mounts = CLIENT_MOUNTS.get(level);
+        return mounts != null ? mounts : Collections.emptySet();
+    }
 
     @SubscribeEvent
     public static void onEntityJoin(EntityJoinLevelEvent event)
     {
-        if (event.getLevel().isClientSide || !AquacultureCompat.loaded()) return;
+        if (!AquacultureCompat.loaded()) return;
         Entity entity = event.getEntity();
-        if (AquacultureCompat.isFishMount(entity)) {
-            MOUNTS.computeIfAbsent(event.getLevel(),
-                    level -> Collections.newSetFromMap(new WeakHashMap<>())).add(entity);
-        }
+        if (!AquacultureCompat.isFishMount(entity)) return;
+        Map<Level, Set<Entity>> registry = event.getLevel().isClientSide ? CLIENT_MOUNTS : MOUNTS;
+        registry.computeIfAbsent(event.getLevel(),
+                level -> Collections.newSetFromMap(new WeakHashMap<>())).add(entity);
     }
 
     @SubscribeEvent

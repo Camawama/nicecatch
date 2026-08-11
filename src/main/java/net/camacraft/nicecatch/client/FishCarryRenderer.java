@@ -210,8 +210,9 @@ public final class FishCarryRenderer
         return 1.5F; // an un-stamped fish item: light, one hand
     }
 
-    /** Model scale recovering the caught individual's body size from its stamped weight. */
-    private static float displayScale(Entity display, ItemStack stack)
+    /** Model scale recovering the caught individual's body size from its stamped weight.
+     * Also used for Aquaculture mount fish, so the wall trophy matches the fish caught. */
+    public static float displayScale(Entity display, ItemStack stack)
     {
         CompoundTag info = stack.getTagElement("NiceCatch");
         if (info == null || !info.contains("Weight", Tag.TAG_FLOAT)) return 1.0F;

@@ -46,11 +46,24 @@ public final class FishPitchRenderer
     {
         LivingEntity entity = event.getEntity();
         if (!FishBehavior.isFishKind(entity)) return;
-        // In-hand display dummies size themselves; our world-fish scale must not compound.
-        if (FishCarryRenderer.isDisplayEntity(entity)) return;
 
-        float pitch = smoothedPitch(entity);
-        float scale = net.camacraft.nicecatch.server.FishSizing.scaleOf(entity);
+        float pitch;
+        float scale;
+        if (entity.isAddedToWorld()) {
+            pitch = smoothedPitch(entity);
+            scale = net.camacraft.nicecatch.server.FishSizing.scaleOf(entity);
+        } else {
+            // A display dummy, not a world fish — its UUID is a fresh roll every creation,
+            // so the world-size variance must NEVER touch it (an Aquaculture mount's fish
+            // was changing size on every placement). In-hand carry dummies size themselves;
+            // a mount's fish is sized from its item's stamped weight — the actual caught
+            // individual; anything else (some mod's preview) is left entirely alone.
+            if (FishCarryRenderer.isDisplayEntity(entity)) return;
+            var mounted = net.camacraft.nicecatch.compat.AquacultureCompat.mountItemForDisplayEntity(entity);
+            if (mounted == null) return;
+            pitch = 0.0F;
+            scale = FishCarryRenderer.displayScale(entity, mounted);
+        }
         boolean tilt = Math.abs(pitch) >= 0.5F;
         boolean resize = Math.abs(scale - 1.0F) >= 0.001F;
         if (!tilt && !resize) return;

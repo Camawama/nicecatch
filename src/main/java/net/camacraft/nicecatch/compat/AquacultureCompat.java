@@ -100,6 +100,17 @@ public final class AquacultureCompat
         return LOADED ? Impl.mountedItem(entity) : ItemStack.EMPTY;
     }
 
+    /**
+     * The item behind a mount's client-side display fish, matched through the tracked mounts
+     * in that level — null when this entity belongs to no mount. Lets renderers size the
+     * displayed fish from its stamped weight instead of a fresh random roll.
+     */
+    @javax.annotation.Nullable
+    public static ItemStack mountItemForDisplayEntity(net.minecraft.world.entity.Entity display)
+    {
+        return LOADED ? Impl.mountItemForDisplayEntity(display) : null;
+    }
+
     private static Map<String, Float> hookNibbleScales()
     {
         return parseScales(NiceCatchConfig.SERVER.hookNibbleScales.get());
@@ -198,6 +209,18 @@ public final class AquacultureCompat
         {
             return entity instanceof com.teammetallurgy.aquaculture.entity.FishMountEntity mount
                     ? mount.getDisplayedItem() : ItemStack.EMPTY;
+        }
+
+        @javax.annotation.Nullable
+        static ItemStack mountItemForDisplayEntity(net.minecraft.world.entity.Entity display)
+        {
+            for (net.minecraft.world.entity.Entity candidate : FishMountAuras.clientMounts(display.level())) {
+                if (candidate instanceof com.teammetallurgy.aquaculture.entity.FishMountEntity mount
+                        && mount.entity == display) {
+                    return mount.getDisplayedItem();
+                }
+            }
+            return null;
         }
 
         @javax.annotation.Nullable
