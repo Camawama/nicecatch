@@ -47,6 +47,7 @@ public class NiceCatchConfig
         public final ForgeConfigSpec.DoubleValue reelInSpeed;
         public final ForgeConfigSpec.IntValue escapeGraceTicks;
         public final ForgeConfigSpec.DoubleValue arrowFatigueMultiplier;
+        public final ForgeConfigSpec.DoubleValue weightEndurance;
 
         // Line & reel-in (no fish on the line)
         public final ForgeConfigSpec.BooleanValue spoolDragEnabled;
@@ -209,6 +210,8 @@ public class NiceCatchConfig
                     .defineInRange("escapeGraceTicks", 50, 0, 200);
             arrowFatigueMultiplier = b.comment("How much faster a fish speared by a fishing-line arrow tires compared to a mouth-hooked fish. It still fights at first, but gives up much sooner — and it never recovers stamina on slack.")
                     .defineInRange("arrowFatigueMultiplier", 3.0D, 1.0D, 10.0D);
+            weightEndurance = b.comment("How strongly a fish's WEIGHT deepens its fight. At 1.0: under 5 lbs tires quickly (easy), 5-10 lbs fights roughly up to twice as long, 10-15 lbs up to three times (very difficult), and past 15 lbs it keeps climbing toward the cap — an extreme, drawn-out battle. Heavier fish also get a strength floor. 0 disables weight-based endurance; higher values exaggerate it.")
+                    .defineInRange("weightEndurance", 1.0D, 0.0D, 3.0D);
             b.pop();
 
             b.push("line");

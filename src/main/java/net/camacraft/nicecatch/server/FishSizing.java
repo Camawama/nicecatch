@@ -69,6 +69,12 @@ public final class FishSizing
                 * FishTraits.of(fish).weight();
     }
 
+    /** Weight in pounds — the unit the fight-difficulty bands are defined in. */
+    public static float weightLbs(PathfinderMob fish)
+    {
+        return weightKg(fish) * KG_TO_LBS;
+    }
+
     private static final float KG_TO_LBS = 2.20462F;
 
     /** The stored (metric) weight converted to the configured display unit. */

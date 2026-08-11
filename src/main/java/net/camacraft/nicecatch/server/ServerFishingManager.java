@@ -392,15 +392,46 @@ public class ServerFishingManager
         return Mth.clamp((float) factor, min, max);
     }
 
-    /** Stamps the fish's species stamina and born-trait fighting quirks onto the fight. */
+    /**
+     * Stamps the fish's species stamina, born-trait quirks, and weight-class endurance onto
+     * the fight. Weight is the great equalizer: a fish under 5 lbs tires fast and comes in
+     * easy, and every pound past that deepens its reserves — a 15-plus-pounder has several
+     * times the stamina and a raised strength floor, so landing it is a genuinely long war.
+     */
     private static void applyFishCharacter(FishFight fight, PathfinderMob fish)
     {
         FishTraits.Modifiers traits = FishTraits.of(fish);
-        fight.stamina = FishProfiles.of(fish).stamina * traits.stamina();
+        float lbs = FishSizing.weightLbs(fish);
+        fight.stamina = FishProfiles.of(fish).stamina * traits.stamina() * weightEndurance(lbs);
+        if (lbs >= 5.0F) {
+            // Heavyweights fight above the size curve: strength floor rises with the pounds.
+            float floor = Math.min(NiceCatchConfig.SERVER.fishStrengthMax.get().floatValue(),
+                    0.55F + lbs * 0.02F);
+            fight.strength = Math.max(fight.strength, floor);
+        }
         fight.sweepAmp = traits.sweep();
         fight.runForce = traits.runForce();
         fight.chargeBias = traits.chargeBias();
         fight.bonusXp = traits.xpBonus();
+    }
+
+    /**
+     * The weight-class endurance curve, anchored in pounds: under 5 lbs stays at or below
+     * 1x (quick, forgiving fights), then climbs continuously — about 1.9x at 10 lbs, 3x at
+     * 15, and onward toward the cap for the true monsters. The config value scales the
+     * whole effect around 1.
+     */
+    private static float weightEndurance(float lbs)
+    {
+        float effect = NiceCatchConfig.SERVER.weightEndurance.get().floatValue();
+        if (effect <= 0.0F) return 1.0F;
+        float endurance;
+        if (lbs < 5.0F) {
+            endurance = 0.7F + 0.06F * lbs;
+        } else {
+            endurance = 1.0F + (float) Math.pow((lbs - 5.0F) / 5.0F, 1.15D) * 0.9F;
+        }
+        return Mth.clamp(1.0F + (endurance - 1.0F) * effect, 0.5F, 6.0F);
     }
 
     private static void beginFight(ServerPlayer player, Session session, FishFight fight, PathfinderMob fish, double maxLine)

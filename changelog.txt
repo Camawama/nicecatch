@@ -52,6 +52,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   size variance entirely.
 
 ### Changed
+- **Weight-class endurance** (`fight.weightEndurance`): fights no longer end with big fish
+  "giving up" early. A fish's weight now deepens its stamina reserves on a curve anchored in
+  pounds — under 5 lbs tires quickly (the easy catch), 5-10 lbs fights up to ~2x as long,
+  10-15 lbs up to ~3x (very difficult), and past 15 lbs it keeps climbing toward a 6x cap:
+  an extreme, drawn-out battle where slack discipline and tension management actually
+  matter. Heavyweights also get a strength floor that rises with the pounds, so a trophy
+  fish never fights like a minnow regardless of the size curve.
 - Fish weights display in **lbs by default** (`weight.weightUnit`, LBS or KG) — tooltips and
   the catch line both. Stored data stays metric, so flipping the unit never changes a fish.
 - First-person rod animation directions corrected: the rod now rises with the charge bar
