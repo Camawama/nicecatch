@@ -53,17 +53,21 @@ public final class FishCarryRenderer
     private static final float DANGLE_PITCH = 90.0F;
     /** Dangle: spin about the hanging spine so the flank faces outward (degrees around Y). */
     private static final float DANGLE_YAW = 90.0F;
-    /** Dangle: drop below the grip, in blocks (scaled). */
+    /** Dangle, first person: drop below the grip, in blocks (scaled). */
     private static final float DANGLE_DROP = 0.55F;
+    /** Dangle, third person: a shorter drop so the fish rides right at the fist. */
+    private static final float DANGLE_DROP_TP = 0.25F;
     /** Dangle, first person: lift so the hanging fish sits on screen instead of below it. */
     private static final float DANGLE_RAISE_FP = 0.45F;
     /**
      * Dangle, third person: the item socket tilts with the outstretched arm (xRot -0.75 rad
      * = -43 degrees — see HumanoidModelMixin.holdOut), so counter-rotate by exactly that to
-     * make the fish hang plumb from the fist instead of angling with the arm. Negate if it
-     * ever tips the opposite way.
+     * make the fish hang plumb from the fist instead of angling with the arm. Sign settled
+     * by playtest: +43 rotated the hang the wrong way, all the way to horizontal
+     * nose-forward (43 + 47 = 90 from vertical) — negative brings it to plumb. Tracks
+     * holdOut's arm angle; change them together.
      */
-    private static final float DANGLE_ARM_COUNTER = 43.0F;
+    private static final float DANGLE_ARM_COUNTER = -43.0F;
     /** Carry: shift from the hand toward the body's center line, in blocks. */
     private static final float CARRY_CENTER = 0.22F;
     /** Carry: how far below hand level the cradled fish rests, as a fraction of its height. */
@@ -129,7 +133,7 @@ public final class FishCarryRenderer
             // the fish itself is yawed flank-out and pitched nose-down INNERMOST — pitching
             // after the yaw in model order is what actually stands the fish vertical.
             pose.mulPose(Axis.ZP.rotationDegrees(Mth.sin(t * 0.25F) * 6.0F));
-            pose.translate(0.0D, -DANGLE_DROP * scale, 0.0D);
+            pose.translate(0.0D, -(thirdPerson ? DANGLE_DROP_TP : DANGLE_DROP) * scale, 0.0D);
             pose.mulPose(Axis.YP.rotationDegrees(DANGLE_YAW));
             pose.mulPose(Axis.XP.rotationDegrees(DANGLE_PITCH));
         } else {

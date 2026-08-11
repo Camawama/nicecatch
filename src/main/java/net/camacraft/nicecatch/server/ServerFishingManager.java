@@ -569,15 +569,27 @@ public class ServerFishingManager
         if (snagged instanceof Player hookedPlayer && hookedPlayer.isShiftKeyDown()) {
             target *= 0.2D;
         }
+        // No crank, no winch: holding the button alone must never move (or levitate) anything.
+        if (target < 1.0E-4D) return false;
 
         Vec3 dir = to.scale(1.0D / dist);
         Vec3 v = snagged.getDeltaMovement();
         boolean grounded = snagged.onGround();
-        Vec3 add = dir.scale(target * (grounded ? 0.9D : 0.45D));
+        Vec3 add = dir.scale(target * (grounded ? 0.9D : 0.5D));
         if (grounded && to.horizontalDistanceSqr() > 1.0D) {
             add = new Vec3(add.x, Math.max(add.y, 0.18D), add.z);
         }
+        // Grinding against a ledge: hop it like a mob jumping a block, or the drag stalls
+        // there forever with the bobber pinned against the edge.
+        if (grounded && snagged.horizontalCollision) {
+            add = new Vec3(add.x, Math.max(add.y, 0.45D), add.z);
+        }
         v = v.add(add);
+        // Reeling from above (an elevated or flying angler): the winch must actually beat
+        // gravity, or "up" simply never happens — hold the climb at gravity-plus-reel-speed.
+        if (dir.y > 0.2D) {
+            v = new Vec3(v.x, Math.max(v.y, 0.085D + target * dir.y), v.z);
+        }
         double cap = Math.max(target * 1.5D, 0.25D);
         double horiz = v.horizontalDistance();
         if (horiz > cap) {
@@ -616,6 +628,9 @@ public class ServerFishingManager
         // Clipped: the bobber climbs over terrain instead of being dragged through it.
         Vec3 next = RodUtil.clipBobberStep(hook, pos, pos.add(to.scale(step / dist)), step);
         hook.setPos(next.x, next.y, next.z);
+        // The position is authoritative while reeling; without this, the bobber's own
+        // gravity keeps accumulating and eats every upward step (reeling uphill "fails").
+        hook.setDeltaMovement(Vec3.ZERO);
         return false;
     }
 
