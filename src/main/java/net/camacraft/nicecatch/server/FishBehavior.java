@@ -88,6 +88,10 @@ public final class FishBehavior
          */
         public float panicFatigue;
         public long lastPanicTime;
+        /** Where the last sculk-style vibration this fish heard came from (see FishVibrations). */
+        @Nullable public Vec3 vibrationPos;
+        public long vibrationTime;
+        public boolean vibrationUrgent;
     }
 
     public static FishState state(PathfinderMob fish)
@@ -570,6 +574,36 @@ public final class FishBehavior
      */
     public record Threat(Vec3 pos, boolean certain, boolean urgent) {}
 
+    // ---- Vibration hearing (sculk-style; see FishVibrations) ----
+
+    /** How long a heard vibration stays actionable. Ongoing noise re-stamps it continuously. */
+    private static final int VIBRATION_MEMORY_TICKS = 30;
+
+    /** FishVibrations heard something near this fish: latch it as a scare signal. */
+    public static void hearVibration(PathfinderMob fish, Vec3 pos, boolean urgent)
+    {
+        FishState state = state(fish);
+        state.vibrationPos = pos;
+        state.vibrationTime = fish.level().getGameTime();
+        state.vibrationUrgent = urgent;
+    }
+
+    /**
+     * The latched vibration as a threat, if it is still fresh — always a certain scare (the
+     * fish HEARD it, no chance roll; habituation alone can dull it, and urgent ones cut even
+     * through that). Unlike the entity scan this is a plain field read, so ScatterGoal can
+     * afford to consult it on every single poll: that per-poll certainty is exactly the
+     * reliability the event-driven sculk ears were added for.
+     */
+    @Nullable
+    public static Threat vibrationThreat(PathfinderMob fish)
+    {
+        FishState state = STATES.get(fish);
+        if (state == null || state.vibrationPos == null) return null;
+        if (fish.level().getGameTime() - state.vibrationTime > VIBRATION_MEMORY_TICKS) return null;
+        return new Threat(state.vibrationPos, true, state.vibrationUrgent);
+    }
+
     /**
      * Something worth fleeing from: any non-fish entity splashing about in the water nearby
      * (a certain scare — every fish bolts from a swimmer, and one closing to half range is
@@ -584,6 +618,12 @@ public final class FishBehavior
     @Nullable
     public static Threat findThreat(PathfinderMob fish)
     {
+        // Anything the fish's sculk-style ears picked up wins outright: it is event-driven
+        // (never missed the way a stale position-delta snapshot can be) and keeps fleeing
+        // fish updated on a noisy pursuer without an entity scan.
+        Threat heard = vibrationThreat(fish);
+        if (heard != null) return heard;
+
         double swimRadius = NiceCatchConfig.SERVER.swimScareRadius.get();
         double meleeRadius = NiceCatchConfig.SERVER.meleeThreatRadius.get();
         double boatRadius = NiceCatchConfig.SERVER.boatScareRadius.get();

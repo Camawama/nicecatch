@@ -5,6 +5,25 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added (sculk ears)
+- **Fish hear the world like sculk sensors** (`vibration` config section): fish now listen to the
+  same vibration events sculk sensors and wardens do — footsteps, swimming, splashes,
+  landing thumps, block breaking, bow shots, explosions — event-driven, so walking or
+  swimming near a fish ALWAYS registers instead of sometimes slipping past the old
+  positional checks. The sculk rulebook applies: sneaking is silent (crouched anglers stay
+  invisible, in or out of the water), wool blocks the signal, and loud events (explosions,
+  lightning, goat horns) carry 1.5x as far and cut through habituated calm. No sculk click,
+  particle, or shriek is ever played — the fish just listen. Your own casting/reeling makes
+  no noise, thrown FOOD keeps its gentler splash-then-attract chum behavior, fish don't
+  hear each other, and land animals other than players are ambient noise. The old
+  proximity checks still run underneath as a fallback for silent threats (drifting boats).
+
+### Fixed
+- **A land-snagged fish slips the hook the moment it touches water.** Rescue-snagging a
+  flopping fish and dragging it into water no longer keeps it on the line: it was never
+  mouth-hooked (no bite), so at first water contact it comes free and bolts. Real
+  bite-hooked fights are unaffected.
+
 ### Added
 - **Individual fish sizes & the weight system**: every fish (modded included) rolls its own
   body scale — hitbox and model — from its UUID, so it needs no network sync, survives

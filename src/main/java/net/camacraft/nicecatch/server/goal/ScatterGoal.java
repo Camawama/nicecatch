@@ -38,13 +38,17 @@ public class ScatterGoal extends Goal
         if (FishBehavior.isHooked(fish)) return false;
         if (FishBehavior.isScattering(fish)) return true;
 
-        // The threat scan is the priciest per-fish query in the mod, so it runs every 4th
-        // tick (the selector already polls at every 2nd): reaction stays under a fifth of a
-        // second while big fish populations cost half as much.
-        if ((fish.tickCount + fish.getId()) % 4 != 0) return false;
-
-        FishBehavior.Threat threat = FishBehavior.findThreat(fish);
-        if (threat == null) return false;
+        // A heard vibration is a latched flag, free to read — check it on EVERY poll so an
+        // event-driven scare is never missed. The entity scan stays the priciest per-fish
+        // query in the mod, so it still runs only every 4th tick (the selector already polls
+        // at every 2nd): reaction stays under a fifth of a second while big fish populations
+        // cost half as much.
+        FishBehavior.Threat threat = FishBehavior.vibrationThreat(fish);
+        if (threat == null) {
+            if ((fish.tickCount + fish.getId()) % 4 != 0) return false;
+            threat = FishBehavior.findThreat(fish);
+            if (threat == null) return false;
+        }
         // Habituation: a fish that has been spooked over and over stops taking the bait —
         // even a swimmer barely registers once its flight response is worn out. This is what
         // lets a crowded pond settle down instead of churning itself frantic forever. The

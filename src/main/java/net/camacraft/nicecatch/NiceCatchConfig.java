@@ -137,6 +137,8 @@ public class NiceCatchConfig
         public final ForgeConfigSpec.DoubleValue boidNeighborRadius;
         public final ForgeConfigSpec.DoubleValue boidSpeed;
         public final ForgeConfigSpec.DoubleValue fishSwimSoundVolume;
+        public final ForgeConfigSpec.BooleanValue vibrationScareEnabled;
+        public final ForgeConfigSpec.DoubleValue vibrationScareRadius;
 
         // Spawning
         public final ForgeConfigSpec.BooleanValue schoolSpawnBoostEnabled;
@@ -378,6 +380,13 @@ public class NiceCatchConfig
                     .defineInRange("boidSpeed", 1.0D, 0.25D, 3.0D);
             fishSwimSoundVolume = b.comment("Volume multiplier for fish swimming sounds — vanilla plays them at full blast and our fish swim fast. 0 silences them entirely.")
                     .defineInRange("fishSwimSoundVolume", 0.1D, 0.0D, 1.0D);
+            b.pop();
+
+            b.push("vibration");
+            vibrationScareEnabled = b.comment("Fish hear the world the way sculk sensors do: footsteps, swimming, splashes, landing thumps, block breaking — every vanilla vibration in earshot spooks them reliably, event-driven so nothing slips past. Sneaking is silent exactly like with sculk, and wool blocks the signal; no sculk sound or particle is ever played, the fish just listen. Your own casting and reeling are exempt, thrown FOOD keeps its gentler splash-then-attract chum behavior, and land animals other than players are ambient noise fish ignore. Disable to fall back to the old proximity-only scare checks (which still run either way, covering things that make no vibration, like a drifting boat).")
+                    .define("vibrationScareEnabled", true);
+            vibrationScareRadius = b.comment("How far fish hear vibrations, in blocks (a sculk sensor hears 8). Loud events — explosions, lightning, goat horns, a mob dying — carry half again as far and always cut through even a habituated fish's calm.")
+                    .defineInRange("vibrationScareRadius", 8.0D, 2.0D, 24.0D);
             b.pop();
 
             b.push("species");

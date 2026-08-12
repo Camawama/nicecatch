@@ -2,6 +2,7 @@ package net.camacraft.nicecatch.mixin;
 
 import net.camacraft.nicecatch.NiceCatchConfig;
 import net.camacraft.nicecatch.RodUtil;
+import net.camacraft.nicecatch.server.FishBehavior;
 import net.minecraft.network.chat.Component;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.sounds.SoundEvents;
@@ -160,6 +161,29 @@ public abstract class FishingHookMixin
                 && mob.isInWater()
                 && net.camacraft.nicecatch.server.FishBehavior.isFishLike(mob)) {
             cir.setReturnValue(false);
+        }
+    }
+
+    /**
+     * A fish snagged out of water (the flopping-on-land rescue-snag canHitEntity allows) was
+     * never hooked in the mouth — the barb is just caught on its body. The moment it touches
+     * water it slips free and bolts: a real hold on a swimming fish only ever comes from a
+     * bite it chose (which sets the FishBehavior hooked flag, exempting genuine fights —
+     * those drag fish through water constantly). Server-side; hookedIn syncs to the client.
+     */
+    @Inject(method = "tick", at = @At("HEAD"))
+    private void nicecatch$snagSlipsInWater(CallbackInfo ci)
+    {
+        FishingHook self = (FishingHook) (Object) this;
+        if (self.level().isClientSide) return;
+        if (self.hookedIn instanceof net.minecraft.world.entity.PathfinderMob fish
+                && fish.isInWater()
+                && FishBehavior.isFishLike(fish)
+                && !FishBehavior.isHooked(fish)) {
+            self.setHookedEntity(null);
+            Player owner = self.getPlayerOwner();
+            Vec3 from = owner != null ? owner.position() : self.position();
+            FishBehavior.scatter(fish, from, NiceCatchConfig.SERVER.scatterDurationTicks.get());
         }
     }
 
