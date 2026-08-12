@@ -19,6 +19,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   proximity checks still run underneath as a fallback for silent threats (drifting boats).
 
 ### Fixed
+- **Darts can no longer be answered by the crank — at all.** Fast circling could still
+  ratchet a PULL LEFT/RIGHT prompt complete before it was even readable (a circle sweeps
+  through every direction, and the client-side gate leaked on fast spins). A dart is now a
+  true interrupt, enforced server-side: the reel gains nothing while a dart is up, and the
+  answering yank only counts once the crank has been still for a beat (~0.2 s) — stop
+  reeling, read it, yank. The HUD prompt now says so ("STOP REELING - PULL LEFT!"), and
+  hold-to-reel accessibility mode pauses its automatic crank during darts so those players
+  can answer too.
 - **A land-snagged fish slips the hook the moment it touches water.** Rescue-snagging a
   flopping fish and dragging it into water no longer keeps it on the line: it was never
   mouth-hooked (no bite), so at first water contact it comes free and bolts. Real

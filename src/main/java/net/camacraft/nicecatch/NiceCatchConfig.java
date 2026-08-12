@@ -221,7 +221,7 @@ public class NiceCatchConfig
                     .defineInRange("arrowFatigueMultiplier", 3.0D, 1.0D, 10.0D);
             weightEndurance = b.comment("How strongly a fish's WEIGHT deepens its fight. At 1.0: under 5 lbs tires quickly (easy), 5-10 lbs fights roughly up to twice as long, 10-15 lbs up to three times (very difficult), and past 15 lbs it keeps climbing toward the cap — an extreme, drawn-out battle. Heavier fish also get a strength floor. 0 disables weight-based endurance; higher values exaggerate it.")
                     .defineInRange("weightEndurance", 1.0D, 0.0D, 3.0D);
-            dartEventsEnabled = b.comment("Dart events: mid-fight the fish suddenly darts sideways and the HUD demands a quick PULL LEFT / PULL RIGHT — swing the mouse that way (while holding right-click) to muscle it back for a burst of fatigue and a yank toward you; too slow and it steals line and strains the rod.")
+            dartEventsEnabled = b.comment("Dart events: mid-fight the fish suddenly darts sideways and the HUD demands a quick PULL LEFT / PULL RIGHT — STOP cranking (the reel gains nothing during a dart anyway), then swing the mouse that way (while still holding right-click) to muscle it back for a burst of fatigue and a yank toward you; too slow and it steals line and strains the rod. The yank only registers once the reel has been still for a beat, so circling can never answer the prompt by accident.")
                     .define("dartEventsEnabled", true);
             dartWindowTicks = b.comment("Reaction window for a dart event, in ticks. Long enough to read the prompt and swing; shorten it once the motion is muscle memory.")
                     .defineInRange("dartWindowTicks", 35, 10, 80);

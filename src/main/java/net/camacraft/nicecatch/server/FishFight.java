@@ -84,6 +84,8 @@ public class FishFight
     public float dartProgress;
     /** Ticks until the next dart may begin; opens at 60 so the fight settles in first. */
     public int dartCooldown = 60;
+    /** Ticks since the player last cranked; the answering yank only counts from a stopped reel. */
+    public int crankQuietTicks;
 
     /** A chain bite already happened this fight (a bigger fish ate the hooked one). */
     public boolean chainHappened;

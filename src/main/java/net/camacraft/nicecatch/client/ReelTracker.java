@@ -80,8 +80,13 @@ public class ReelTracker
         scrollCrank += amount;
     }
 
-    /** Consumes and returns this tick's input. */
-    public Result consume(boolean holding)
+    /**
+     * Consumes and returns this tick's input. While a dart prompt is up the accessibility
+     * hold-to-reel floor is suspended: the server only accepts the answering yank from a
+     * stopped reel, and for hold-to-reel users merely gripping the rod IS reeling — without
+     * this pause they could never answer a dart at all.
+     */
+    public Result consume(boolean holding, boolean dartActive)
     {
         // Scroll and circling are ALTERNATIVE cranks, not additive — the faster of the two
         // wins, so working both at once buys nothing.
@@ -92,7 +97,7 @@ public class ReelTracker
         lift = 0.0F;
         side = 0.0F;
         scrollCrank = 0.0F;
-        if (holding && !NiceCatchConfig.CLIENT.requireCircularMotion.get()) {
+        if (holding && !dartActive && !NiceCatchConfig.CLIENT.requireCircularMotion.get()) {
             outCrank = Math.max(outCrank, 0.12F);
         }
         if (!holding) {

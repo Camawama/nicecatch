@@ -1045,6 +1045,13 @@ public class ServerFishingManager
         fight.pendingLift = 0.0F;
         fight.pendingSide = 0.0F;
         fight.pendingFeed = 0.0F;
+        // How long the reel has actually been stopped — the gate that keeps a crank's own
+        // sweeping motion from answering a dart prompt (scroll-cranking counts as cranking).
+        if (crank > 0.01F) {
+            fight.crankQuietTicks = 0;
+        } else {
+            fight.crankQuietTicks++;
+        }
 
         // Deliberately feeding line (scroll down): a big breath for the line — tension bleeds
         // off fast — paid for in ground: the fish gets a shove away (applied after the move).
@@ -1253,11 +1260,15 @@ public class ServerFishingManager
         return taker;
     }
 
+    /** Ticks the reel must have been stopped before a sideways yank counts toward a dart. */
+    private static final int DART_CRANK_QUIET_TICKS = 4;
+
     /**
      * The dart quick-time event: mid-calm, the fish suddenly bolts sideways and the HUD
-     * demands the opposite pull. Swing the mouse that way in time and the fish is muscled
-     * back — a yank toward the angler and a burst of fatigue; dither and it steals line
-     * and strains the rod. Runs cancel any dart (the fish has bigger plans).
+     * demands the opposite pull. Stop the reel and swing the mouse that way in time and
+     * the fish is muscled back — a yank toward the angler and a burst of fatigue; dither
+     * and it steals line and strains the rod. Runs cancel any dart (the fish has bigger
+     * plans).
      */
     private static void tickDartEvent(ServerPlayer player, FishFight fight, PathfinderMob fish,
                                       ServerLevel level, RandomSource random, float side)
@@ -1268,7 +1279,14 @@ public class ServerFishingManager
 
         if (fight.dartTicksLeft > 0) {
             // Progress from swinging the required way: dartDir 1 = PULL LEFT (negative side).
-            fight.dartProgress += fight.dartDir == 1 ? Math.max(0.0F, -side) : Math.max(0.0F, side);
+            // Only a STOPPED reel can answer — a crank sweeps through every direction, and
+            // client-side gating alone still let fast circling ratchet the prompt complete
+            // before it could even be read. A few grip-only quiet ticks, then the yank
+            // counts; the prompt interrupts reeling by design (the crank gains nothing
+            // while a dart is up, so stopping costs no ground).
+            if (fight.crankQuietTicks >= DART_CRANK_QUIET_TICKS) {
+                fight.dartProgress += fight.dartDir == 1 ? Math.max(0.0F, -side) : Math.max(0.0F, side);
+            }
             if (fight.dartProgress >= cfg.dartSwingRequired.get().floatValue()) {
                 // Muscled it back: a yank toward the angler and a real bite out of its stamina.
                 Vec3 toward = new Vec3(player.getX() - fish.getX(),
@@ -1477,8 +1495,11 @@ public class ServerFishingManager
                 case CHARGE -> 1.3D;                                // take up its slack fast
             };
             target = cfg.reelInSpeed.get() / 20.0D * crankFrac * (1.0D - resist) * eff * fight.reelScale;
-            // A darting fish is pulling broadside: the crank barely gains until it's answered.
-            if (fight.dartTicksLeft > 0) target *= 0.5D;
+            // A darting fish is pulling broadside: the crank gains NOTHING until the prompt
+            // is answered — the dart is an interrupt, and answering it demands a stopped
+            // reel, so keeping on cranking through one is pure waste (it still builds
+            // tension and burns your quiet ticks).
+            if (fight.dartTicksLeft > 0) target = 0.0D;
         }
 
         // The fish's own drive this tick: which way it wants to go, and how hard. Swift fish

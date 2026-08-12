@@ -381,7 +381,7 @@ public class ClientFishing
                     phase = Phase.IDLE;
                     break;
                 }
-                ReelTracker.Result input = TRACKER.consume(true);
+                ReelTracker.Result input = TRACKER.consume(true, false);
                 NiceCatchNet.sendToServer(new ReelMessage(input.crank(), input.lift(), input.side(), consumeFeed(), true));
                 feedAnimation(input);
 
@@ -408,7 +408,7 @@ public class ClientFishing
                     break;
                 }
                 reelHeld = mc.screen == null && mc.options.keyUse.isDown();
-                ReelTracker.Result input = TRACKER.consume(reelHeld);
+                ReelTracker.Result input = TRACKER.consume(reelHeld, dartDir != 0);
                 NiceCatchNet.sendToServer(new ReelMessage(input.crank(), input.lift(), input.side(), consumeFeed(), reelHeld));
                 feedAnimation(input);
 
