@@ -13,6 +13,7 @@ import net.camacraft.nicecatch.network.NiceCatchNet;
 import net.camacraft.nicecatch.server.goal.FishSteering;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.particles.ParticleTypes;
+import net.minecraft.network.chat.Component;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.tags.FluidTags;
 import net.minecraft.world.level.material.FluidState;
@@ -1017,6 +1018,17 @@ public class ServerFishingManager
         fight.ticks++;
         if (fight.graceTicks > 0) fight.graceTicks--;
 
+        // The chain bite: a hooked fish flailing on a line is the best bait in the pond, and
+        // once in a while something much bigger takes it — the small fish is eaten, and the
+        // eater finds itself hooked. Continue the fight against the monster.
+        if (hook != null && !fight.chainHappened) {
+            PathfinderMob taker = tryChainBite(player, fight, fish, level, random);
+            if (taker != null) {
+                fish = taker;
+                hook.setHookedEntity(fish);
+            }
+        }
+
         // The fish cycles between its tactics — holding, thrashing side to side, boring
         // straight away, sounding for the deep, or charging back at you. Each phase changes
         // what the angler must do; a tiring fish favors the calm ones so it can be landed.
@@ -1172,6 +1184,73 @@ public class ServerFishingManager
 
         NiceCatchNet.sendTo(player, new FightTickMessage(fight.progress, fight.tension, fight.fatigue,
                 run, fight.phase.id(), fight.dartTicksLeft > 0 ? fight.dartDir : (byte) 0));
+    }
+
+    /**
+     * A much larger fish strikes the hooked one: the catch becomes the bait. The small fish
+     * is devoured (no item — it's gone), the big one takes the hook, and the fight restarts
+     * fresh against it: new strength, stamina and traits, an opening run, and a warning on
+     * the angler's screen. Once per fight, rod fights only. Returns the new fish, or null.
+     */
+    @Nullable
+    private static PathfinderMob tryChainBite(ServerPlayer player, FishFight fight,
+                                              PathfinderMob fish, ServerLevel level, RandomSource random)
+    {
+        NiceCatchConfig.Server cfg = NiceCatchConfig.SERVER;
+        float chance = cfg.chainBiteChancePerSecond.get().floatValue() / 20.0F;
+        if (chance <= 0.0F || fight.arrow) return null;
+        if (random.nextFloat() >= chance) return null;
+
+        double myArea = fish.getBbWidth() * fish.getBbHeight();
+        double minArea = myArea * cfg.chainBiteSizeRatio.get();
+        PathfinderMob taker = null;
+        double takerArea = 0.0D;
+        for (PathfinderMob candidate : level.getEntitiesOfClass(PathfinderMob.class,
+                fish.getBoundingBox().inflate(6.0D),
+                c -> c != fish && c.isAlive() && c.isInWater()
+                        && FishBehavior.isFishLike(c) && !FishBehavior.isHooked(c))) {
+            double area = candidate.getBbWidth() * candidate.getBbHeight();
+            if (area >= minArea && area > takerArea) {
+                takerArea = area;
+                taker = candidate;
+            }
+        }
+        if (taker == null) return null;
+
+        // The strike: the hooked fish is eaten off the hook, whole.
+        level.sendParticles(ParticleTypes.SPLASH, fish.getX(), fish.getY() + 0.2D, fish.getZ(),
+                12, 0.3D, 0.15D, 0.3D, 0.0D);
+        level.sendParticles(ParticleTypes.BUBBLE_POP, fish.getX(), fish.getY() + 0.2D, fish.getZ(),
+                8, 0.25D, 0.15D, 0.25D, 0.04D);
+        level.playSound(null, fish.getX(), fish.getY(), fish.getZ(),
+                SoundEvents.GENERIC_EAT, SoundSource.NEUTRAL, 0.9F, 0.6F);
+        level.playSound(null, fish.getX(), fish.getY(), fish.getZ(),
+                SoundEvents.GENERIC_SPLASH, SoundSource.NEUTRAL, 0.8F, 0.7F);
+        FishBehavior.setHooked(fish, false);
+        fish.discard();
+
+        // The eater takes the hook. The fight re-arms around the new animal: its strength,
+        // stamina and traits, the rod's gear re-applied, full stamina, and an opening run.
+        FishBehavior.setHooked(taker, true);
+        fight.fishId = taker.getUUID();
+        fight.strength = sizeStrength(taker, random);
+        applyFishCharacter(fight, taker);
+        ItemStack rod = player.getItemInHand(fight.hand);
+        fight.tensionScale = Math.max(1.0F, AquacultureCompat.tensionScale(rod))
+                / FishTraits.of(taker).tension();
+        fight.doubleCatchChance = AquacultureCompat.doubleCatchChance(rod)
+                + FishTraits.of(taker).doubleCatch();
+        fight.fatigue = 0.0F;
+        fight.lineLength = (float) Math.min(31.0D,
+                Math.max(fight.lineLength, player.distanceTo(taker) + 4.0D));
+        fight.graceTicks = Math.max(fight.graceTicks, 30);
+        fight.phase = FightPhase.PULL;
+        fight.phaseTicks = 30 + random.nextInt(15);
+        endDart(fight, random);
+        fight.chainHappened = true;
+
+        player.displayClientMessage(Component.translatable("nicecatch.chain"), true);
+        return taker;
     }
 
     /**

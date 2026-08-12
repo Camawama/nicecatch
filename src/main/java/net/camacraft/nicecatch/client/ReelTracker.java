@@ -31,8 +31,10 @@ public class ReelTracker
         smoothY = smoothY * 0.55D + dy * 0.45D;
 
         // Sideways swing (signed, right-positive) with mostly-horizontal motion: the input
-        // for answering a darting fish's PULL LEFT / PULL RIGHT prompt.
-        if (Math.abs(dx) > Math.abs(dy) * 1.2D) {
+        // for answering a darting fish's PULL LEFT / PULL RIGHT prompt. Gated off while a
+        // circle is in progress — a crank sweeps through every direction, and it must never
+        // answer a dart by accident. Break the circle, then yank.
+        if (circlingFrames == 0 && Math.abs(dx) > Math.abs(dy) * 1.2D) {
             side += (float) (dx * 0.01D * sens);
         }
 

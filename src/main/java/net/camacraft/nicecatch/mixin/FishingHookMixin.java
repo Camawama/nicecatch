@@ -15,6 +15,7 @@ import org.spongepowered.asm.mixin.Unique;
 import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Inject;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
+import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
 
 /**
  * Lets the bobber ride a hooked fish with zero desync. FishingHook.lerpTo is empty — the
@@ -142,6 +143,23 @@ public abstract class FishingHookMixin
         if (dist > maxOut) {
             double f = maxOut * inv;
             self.setPos(owner.getX() - dx * f, (owner.getY() + 0.3D) - dy * f, owner.getZ() - dz * f);
+        }
+    }
+
+    /**
+     * A swimming fish cannot be snagged by a thrown bobber — vanilla lets a cast stick to
+     * ANY entity it strikes, which trivializes the entire bite-and-hook game. The one honest
+     * way onto a swimming fish's mouth is a bite it chose. A fish flopping on LAND is fair
+     * game for a rescue-snag, and non-fish entities keep vanilla behavior.
+     */
+    @Inject(method = "canHitEntity", at = @At("HEAD"), cancellable = true)
+    private void nicecatch$noSnaggingSwimmers(net.minecraft.world.entity.Entity target,
+                                              CallbackInfoReturnable<Boolean> cir)
+    {
+        if (target instanceof net.minecraft.world.entity.PathfinderMob mob
+                && mob.isInWater()
+                && net.camacraft.nicecatch.server.FishBehavior.isFishLike(mob)) {
+            cir.setReturnValue(false);
         }
     }
 

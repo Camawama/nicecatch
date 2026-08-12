@@ -51,6 +51,8 @@ public class NiceCatchConfig
         public final ForgeConfigSpec.BooleanValue dartEventsEnabled;
         public final ForgeConfigSpec.IntValue dartWindowTicks;
         public final ForgeConfigSpec.DoubleValue dartSwingRequired;
+        public final ForgeConfigSpec.DoubleValue chainBiteChancePerSecond;
+        public final ForgeConfigSpec.DoubleValue chainBiteSizeRatio;
 
         // Line & reel-in (no fish on the line)
         public final ForgeConfigSpec.BooleanValue spoolDragEnabled;
@@ -223,6 +225,10 @@ public class NiceCatchConfig
                     .defineInRange("dartWindowTicks", 35, 10, 80);
             dartSwingRequired = b.comment("How much sideways mouse-swing answers a dart (roughly comparable to the rod-lift scale). Lower = easier.")
                     .defineInRange("dartSwingRequired", 1.2D, 0.2D, 5.0D);
+            chainBiteChancePerSecond = b.comment("Chance per second, while reeling a hooked fish, that a much larger fish nearby strikes it — eating your catch off the hook and taking its place on the line. The small fish becomes the bait; the fight restarts fresh against the monster. Once per fight, rod fights only. 0 disables.")
+                    .defineInRange("chainBiteChancePerSecond", 0.03D, 0.0D, 1.0D);
+            chainBiteSizeRatio = b.comment("How much larger (hitbox area) the striking fish must be than the hooked one for a chain bite.")
+                    .defineInRange("chainBiteSizeRatio", 2.2D, 1.2D, 10.0D);
             b.pop();
 
             b.push("line");

@@ -15,6 +15,7 @@
   "nicecatch.hint.phase.sweep": "It's thrashing — keep on it and reel",
   "nicecatch.hint.phase.sound": "It's sounding — pull the rod up to lift it!",
   "nicecatch.hint.phase.charge": "It's charging — reel fast, take up the slack!",
+  "nicecatch.chain": "Something bigger took your catch!",
   "nicecatch.hint.dart_left": "<<< PULL LEFT!",
   "nicecatch.hint.dart_right": "PULL RIGHT! >>>",
   "nicecatch.hint.tension": "Line about to snap — stop cranking!",
