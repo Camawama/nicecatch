@@ -65,8 +65,17 @@ public class FishingBarOverlay
                 }
                 drawFill(graphics, x, y, ClientFishing.shownProgress(), color);
 
+                // Lift-reactive coaching: the moment the lift registers, hints that asked
+                // for it turn green — instant confirmation the input is landing. (The rod
+                // visibly rising and a soft whoosh carry the same signal.)
+                boolean lifting = ClientFishing.liftAnim() > 0.35F;
+
                 if (ClientFishing.tension() > 0.8F) {
                     drawHint(graphics, window, y, "nicecatch.hint.tension", 0xFFFF4040, true);
+                } else if (ClientFishing.dartDirection() != 0) {
+                    // A dart demands its counter-pull NOW; it outranks every calm hint.
+                    drawHint(graphics, window, y, ClientFishing.dartDirection() == 1
+                            ? "nicecatch.hint.dart_left" : "nicecatch.hint.dart_right", 0xFFF08A3A, true);
                 } else if (ClientFishing.fatigue() > 0.85F) {
                     drawHint(graphics, window, y, "nicecatch.hint.tired", 0xFF7EE0C8, false);
                 } else {
@@ -74,8 +83,10 @@ public class FishingBarOverlay
                     switch (ClientFishing.fightPhase()) {
                         case HOLD -> drawHint(graphics, window, y, "nicecatch.hint.phase.hold", 0xFFB6E8A0, false);
                         case SWEEP -> drawHint(graphics, window, y, "nicecatch.hint.phase.sweep", 0xFFB6E8A0, false);
-                        case PULL -> drawHint(graphics, window, y, "nicecatch.hint.run", 0xFFE8C33A, false);
-                        case SOUND -> drawHint(graphics, window, y, "nicecatch.hint.phase.sound", 0xFFE8C33A, false);
+                        case PULL -> drawHint(graphics, window, y, "nicecatch.hint.run",
+                                lifting ? 0xFF7EE044 : 0xFFE8C33A, false);
+                        case SOUND -> drawHint(graphics, window, y, "nicecatch.hint.phase.sound",
+                                lifting ? 0xFF7EE044 : 0xFFE8C33A, false);
                         case CHARGE -> drawHint(graphics, window, y, "nicecatch.hint.phase.charge", 0xFFF08A3A, true);
                     }
                 }

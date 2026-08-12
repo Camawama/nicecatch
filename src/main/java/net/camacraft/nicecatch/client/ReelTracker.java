@@ -13,15 +13,28 @@ public class ReelTracker
     private double smoothY;
     private float lastAngle = Float.NaN;
     private int stillFrames;
+    /** Consecutive same-direction rotation samples; crank needs a real, coherent circle. */
+    private int coherentSpin;
+    private float spinSign;
+    /** Frames since rotation was last in progress; lift is only read when this hits zero. */
+    private int circlingFrames;
 
     private float crank;
     private float lift;
+    private float side;
+    private float scrollCrank;
 
     public void addDelta(double dx, double dy)
     {
         double sens = NiceCatchConfig.CLIENT.reelSensitivity.get();
         smoothX = smoothX * 0.55D + dx * 0.45D;
         smoothY = smoothY * 0.55D + dy * 0.45D;
+
+        // Sideways swing (signed, right-positive) with mostly-horizontal motion: the input
+        // for answering a darting fish's PULL LEFT / PULL RIGHT prompt.
+        if (Math.abs(dx) > Math.abs(dy) * 1.2D) {
+            side += (float) (dx * 0.01D * sens);
+        }
 
         double mag = Math.hypot(smoothX, smoothY);
         if (mag > 1.2D) {
@@ -31,35 +44,61 @@ public class ReelTracker
                 float d = wrapRadians(angle - lastAngle);
                 float abs = Math.abs(d);
                 if (abs > 0.015F && abs < (float) (Math.PI / 2.0D)) {
-                    crank += (float) (abs / (2.0D * Math.PI) * sens);
+                    // Crank demands COHERENT rotation: several samples spinning the same
+                    // way. The incidental angle-jitter of a hard straight pull flips signs
+                    // and never cranks — lifting the rod must not secretly reel.
+                    float sign = Math.signum(d);
+                    coherentSpin = sign == spinSign ? coherentSpin + 1 : 1;
+                    spinSign = sign;
+                    if (coherentSpin >= 3) {
+                        crank += (float) (abs / (2.0D * Math.PI) * sens);
+                        circlingFrames = 6;
+                    }
+                } else if (abs >= (float) (Math.PI / 2.0D)) {
+                    coherentSpin = 0;
                 }
             }
             lastAngle = angle;
         } else if (++stillFrames > 8) {
             lastAngle = Float.NaN;
+            coherentSpin = 0;
         }
 
-        // Pulling the mouse up (negative dy) with mostly-vertical motion counts as lifting the rod.
-        if (dy < 0.0D && -smoothY > Math.abs(smoothX) * 1.2D) {
+        if (circlingFrames > 0) circlingFrames--;
+        // Lift only from a deliberate straight pull — never the upstroke of a circle
+        // (which used to register phantom lift and spam its cue while cranking).
+        if (circlingFrames == 0 && dy < 0.0D && -smoothY > Math.abs(smoothX) * 1.2D) {
             lift += (float) (-dy * 0.01D * sens);
         }
+    }
+
+    /** Extra crank from the scroll wheel (an alternative to circling). */
+    public void addScrollCrank(float amount)
+    {
+        scrollCrank += amount;
     }
 
     /** Consumes and returns this tick's input. */
     public Result consume(boolean holding)
     {
-        float outCrank = Math.min(crank, 0.35F);
+        // Scroll and circling are ALTERNATIVE cranks, not additive — the faster of the two
+        // wins, so working both at once buys nothing.
+        float outCrank = Math.min(Math.max(crank, scrollCrank), 0.35F);
         float outLift = Math.min(lift, 0.8F);
+        float outSide = net.minecraft.util.Mth.clamp(side, -1.2F, 1.2F);
         crank = 0.0F;
         lift = 0.0F;
+        side = 0.0F;
+        scrollCrank = 0.0F;
         if (holding && !NiceCatchConfig.CLIENT.requireCircularMotion.get()) {
             outCrank = Math.max(outCrank, 0.12F);
         }
         if (!holding) {
             outCrank = 0.0F;
             outLift = 0.0F;
+            outSide = 0.0F;
         }
-        return new Result(outCrank, outLift);
+        return new Result(outCrank, outLift, outSide);
     }
 
     public void reset()
@@ -67,8 +106,13 @@ public class ReelTracker
         smoothX = smoothY = 0.0D;
         lastAngle = Float.NaN;
         stillFrames = 0;
+        coherentSpin = 0;
+        spinSign = 0.0F;
+        circlingFrames = 0;
         crank = 0.0F;
         lift = 0.0F;
+        side = 0.0F;
+        scrollCrank = 0.0F;
     }
 
     private static float wrapRadians(float angle)
@@ -78,5 +122,5 @@ public class ReelTracker
         return angle;
     }
 
-    public record Result(float crank, float lift) {}
+    public record Result(float crank, float lift, float side) {}
 }

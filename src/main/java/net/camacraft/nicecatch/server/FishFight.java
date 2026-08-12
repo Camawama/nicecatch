@@ -26,6 +26,8 @@ public class FishFight
     public int bonusXp;
     /** Distance to the player last tick; watched to hear line being stripped off the reel. */
     public double lastDist = -1.0D;
+    /** Line stripped since the last drag click; every ~third of a block clicks the drag. */
+    public float dragClickAccum;
     /**
      * 0..1, line retrieved — derived from the fish's distance each tick, this is what the
      * HUD bar shows. Full means the fish is at landing range; empty means it took all the line.
@@ -69,5 +71,17 @@ public class FishFight
     // Input accumulated from ReelMessages since the last fight tick.
     public float pendingCrank;
     public float pendingLift;
+    /** Signed sideways swing, right-positive: the answer to dart events. */
+    public float pendingSide;
+    /** Line the player deliberately paid out with the scroll wheel. */
+    public float pendingFeed;
     public boolean holding;
+
+    // Dart quick-time event: the fish bolts sideways and demands a counter-pull.
+    /** 0 none; 1 = PULL LEFT required (fish darting to the player's right); 2 = PULL RIGHT. */
+    public byte dartDir;
+    public int dartTicksLeft;
+    public float dartProgress;
+    /** Ticks until the next dart may begin; opens at 60 so the fight settles in first. */
+    public int dartCooldown = 60;
 }

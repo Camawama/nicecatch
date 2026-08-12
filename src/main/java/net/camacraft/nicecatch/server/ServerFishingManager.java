@@ -474,16 +474,19 @@ public class ServerFishingManager
         level.playSound(null, player.getX(), player.getY(), player.getZ(),
                 SoundEvents.FISHING_BOBBER_RETRIEVE, SoundSource.PLAYERS, 0.6F, 1.15F);
         NiceCatchNet.sendTo(player, new FightTickMessage(fight.progress, fight.tension, fight.fatigue,
-                fight.phase.isRun(), fight.phase.id()));
+                fight.phase.isRun(), fight.phase.id(), (byte) 0));
     }
 
-    public static void onReelInput(ServerPlayer player, float crank, float lift, boolean holding)
+    public static void onReelInput(ServerPlayer player, float crank, float lift, float side,
+                                   float feed, boolean holding)
     {
         Session session = SESSIONS.get(player.getUUID());
         if (session != null && session.fight != null) {
             FishFight fight = session.fight;
             fight.pendingCrank += Mth.clamp(crank, 0.0F, 0.5F);
             fight.pendingLift += Mth.clamp(lift, 0.0F, 2.0F);
+            fight.pendingSide = Mth.clamp(fight.pendingSide + Mth.clamp(side, -1.5F, 1.5F), -3.0F, 3.0F);
+            fight.pendingFeed = Math.min(fight.pendingFeed + Mth.clamp(feed, 0.0F, 6.0F), 6.0F);
             fight.holding = holding;
             return;
         }
@@ -508,6 +511,10 @@ public class ServerFishingManager
 
         ServerLevel level = player.serverLevel();
         if (session.retrieve == null) {
+            // Gripping isn't reeling: a retrieve only begins with actual crank input, so a
+            // player holding right-click in anticipation of a bite doesn't silently flag the
+            // bobber busy and cancel the very bite they're waiting for.
+            if (crank <= 0.005F) return;
             InteractionHand hand = RodUtil.findRodHand(player);
             if (hand == null) {
                 NiceCatchNet.sendTo(player, new FightEndMessage(FightEndMessage.ESCAPED));
@@ -817,9 +824,8 @@ public class ServerFishingManager
             if (fish.distanceToSqr(hook) < 1.4D || session.approachTicks <= 0) {
                 session.approachFish = null;
                 beginBite(session, level, hook, fish);
-                return;
             }
-            sendWakeParticles(level, hook, fish);
+            // (Its wake rides the surface above the real fish — see FollowBobberGoal.)
             return;
         }
 
@@ -948,19 +954,6 @@ public class ServerFishingManager
                 4, 0.12D, 0.05D, 0.12D, 0.0D);
     }
 
-    /** The vanilla V-shaped surface wake, trailing the approaching fish toward the bobber. */
-    private static void sendWakeParticles(ServerLevel level, FishingHook hook, PathfinderMob fish)
-    {
-        Vec3 to = hook.position().subtract(fish.position());
-        if (to.horizontalDistanceSqr() < 1.0E-4D) return;
-        to = new Vec3(to.x, 0.0D, to.z).normalize();
-        double f3 = to.x * 0.04D;
-        double f4 = to.z * 0.04D;
-        double y = hook.getY() + 0.1D;
-        level.sendParticles(ParticleTypes.FISHING, fish.getX(), y, fish.getZ(), 0, f4, 0.01D, -f3, 1.0D);
-        level.sendParticles(ParticleTypes.FISHING, fish.getX(), y, fish.getZ(), 0, -f4, 0.01D, f3, 1.0D);
-    }
-
     /** Clears any in-flight bite (approach, nibble, or bite window) and frees the fish involved. */
     private static void clearBiteFlow(ServerLevel level, Session session)
     {
@@ -1034,8 +1027,20 @@ public class ServerFishingManager
 
         float crank = Math.min(fight.pendingCrank, cfg.maxRevolutionsPerTick.get().floatValue());
         float lift = Math.min(fight.pendingLift, 0.6F);
+        float side = fight.pendingSide;
+        float feed = fight.pendingFeed;
         fight.pendingCrank = 0.0F;
         fight.pendingLift = 0.0F;
+        fight.pendingSide = 0.0F;
+        fight.pendingFeed = 0.0F;
+
+        // Deliberately feeding line (scroll down): a big breath for the line — tension bleeds
+        // off fast — paid for in ground: the fish gets a shove away (applied after the move).
+        if (feed > 0.01F && fight.holding) {
+            fight.tension = Math.max(0.0F, fight.tension - 0.06F * feed);
+        }
+
+        tickDartEvent(player, fight, fish, level, random, side);
 
         // Fatigue is the fish's stamina: fighting the crank drains it, runs are exhausting,
         // slack lets it recover. Big fish and high-stamina species have deeper reserves. A
@@ -1050,8 +1055,14 @@ public class ServerFishingManager
                 float chargeDrain = charging ? crank * cfg.fatiguePerRevolution.get().floatValue() : 0.0F;
                 fight.fatigue += (cfg.fatiguePerRunTick.get().floatValue()
                         + crank * cfg.fatiguePerRevolution.get().floatValue() * 0.5F + chargeDrain) * wear;
-                fight.tension += (crank * cfg.tensionPerRevolutionRun.get().floatValue()
-                        + 0.004F * (0.5F + fight.strength)) / fight.tensionScale;
+                if (crank > 0.01F) {
+                    fight.tension += (crank * cfg.tensionPerRevolutionRun.get().floatValue()
+                            + 0.004F * (0.5F + fight.strength)) / fight.tensionScale;
+                } else {
+                    // Bracing without cranking: the drag does its job and the line breathes.
+                    // "Stop cranking!" must visibly work without letting go of the rod.
+                    fight.tension -= cfg.tensionRecoveryPerTick.get().floatValue();
+                }
             } else {
                 fight.fatigue += crank * cfg.fatiguePerRevolution.get().floatValue() * wear;
                 fight.tension += crank * cfg.tensionPerRevolutionCalm.get().floatValue()
@@ -1094,6 +1105,14 @@ public class ServerFishingManager
 
         moveHookedFish(player, fight, fish, level, random, run, crank, lift);
 
+        // The paid-out line's cost, applied over the winch: the fish gains ground.
+        if (feed > 0.01F && fight.holding) {
+            Vec3 away = new Vec3(fish.getX() - player.getX(), 0.0D, fish.getZ() - player.getZ());
+            if (away.lengthSqr() > 1.0E-4D) {
+                fish.setDeltaMovement(fish.getDeltaMovement().add(away.normalize().scale(0.1D * feed)));
+            }
+        }
+
         // The bar IS the line: distance decides everything from here. The line itself is
         // physical, so escape-by-spooling uses the true 3D distance; landing and the HUD bar
         // use the effective distance, which forgives the height an elevated angler stands
@@ -1102,13 +1121,21 @@ public class ServerFishingManager
         double effDist = effectiveFightDistance(player, fish);
         fight.progress = closeness(fight, effDist);
 
-        // The reel's voice, at the angler's ear: line being stripped off the spool during a
-        // run, and the rod creaking as tension nears the snapping point.
-        if (run && fight.lastDist >= 0.0D && dist > fight.lastDist + 0.03D && fight.ticks % 6 == 0) {
-            level.playSound(null, player.getX(), player.getY(), player.getZ(),
-                    SoundEvents.CROSSBOW_LOADING_MIDDLE, SoundSource.PLAYERS,
-                    0.4F, 1.7F + random.nextFloat() * 0.25F);
+        // The drag clicker, at the angler's ear: a locked reel still gives line grudgingly,
+        // and every third of a block the fish strips off clicks the drag — the faster it
+        // takes line, the faster the clicking, exactly like the real sound.
+        if (fight.holding && fight.lastDist >= 0.0D && dist > fight.lastDist + 0.005D) {
+            fight.dragClickAccum += (float) (dist - fight.lastDist);
+            while (fight.dragClickAccum >= 0.35F) {
+                fight.dragClickAccum -= 0.35F;
+                level.playSound(null, player.getX(), player.getY(), player.getZ(),
+                        SoundEvents.CROSSBOW_LOADING_MIDDLE, SoundSource.PLAYERS,
+                        0.45F, 1.8F + random.nextFloat() * 0.25F);
+            }
+        } else if (dist <= fight.lastDist) {
+            fight.dragClickAccum = 0.0F;
         }
+        // And the rod creaking as tension nears the snapping point.
         if (fight.tension > 0.75F && fight.ticks % 10 == 0) {
             level.playSound(null, player.getX(), player.getY(), player.getZ(),
                     SoundEvents.LEASH_KNOT_PLACE, SoundSource.PLAYERS,
@@ -1144,7 +1171,71 @@ public class ServerFishingManager
         }
 
         NiceCatchNet.sendTo(player, new FightTickMessage(fight.progress, fight.tension, fight.fatigue,
-                run, fight.phase.id()));
+                run, fight.phase.id(), fight.dartTicksLeft > 0 ? fight.dartDir : (byte) 0));
+    }
+
+    /**
+     * The dart quick-time event: mid-calm, the fish suddenly bolts sideways and the HUD
+     * demands the opposite pull. Swing the mouse that way in time and the fish is muscled
+     * back — a yank toward the angler and a burst of fatigue; dither and it steals line
+     * and strains the rod. Runs cancel any dart (the fish has bigger plans).
+     */
+    private static void tickDartEvent(ServerPlayer player, FishFight fight, PathfinderMob fish,
+                                      ServerLevel level, RandomSource random, float side)
+    {
+        NiceCatchConfig.Server cfg = NiceCatchConfig.SERVER;
+        if (!cfg.dartEventsEnabled.get()) return;
+        boolean calm = !fight.phase.isRun();
+
+        if (fight.dartTicksLeft > 0) {
+            // Progress from swinging the required way: dartDir 1 = PULL LEFT (negative side).
+            fight.dartProgress += fight.dartDir == 1 ? Math.max(0.0F, -side) : Math.max(0.0F, side);
+            if (fight.dartProgress >= cfg.dartSwingRequired.get().floatValue()) {
+                // Muscled it back: a yank toward the angler and a real bite out of its stamina.
+                Vec3 toward = new Vec3(player.getX() - fish.getX(),
+                        (player.getY() + 0.5D) - fish.getY(), player.getZ() - fish.getZ());
+                if (toward.lengthSqr() > 1.0E-4D) {
+                    fish.setDeltaMovement(fish.getDeltaMovement().add(toward.normalize().scale(0.35D)));
+                }
+                float wear = 1.0F / ((0.5F + 1.5F * fight.strength) * Math.max(0.25F, fight.stamina));
+                fight.fatigue = Mth.clamp(fight.fatigue
+                        + cfg.fatiguePerRevolution.get().floatValue() * 2.5F * wear, 0.0F, 1.0F);
+                level.playSound(null, player.getX(), player.getY(), player.getZ(),
+                        SoundEvents.EXPERIENCE_ORB_PICKUP, SoundSource.PLAYERS, 0.5F, 1.4F);
+                endDart(fight, random);
+            } else if (--fight.dartTicksLeft <= 0) {
+                // Too slow: it rips sideways-and-out with the advantage, straining the line.
+                Vec3 away = new Vec3(fish.getX() - player.getX(), 0.0D, fish.getZ() - player.getZ());
+                if (away.lengthSqr() > 1.0E-4D) {
+                    fish.setDeltaMovement(fish.getDeltaMovement()
+                            .add(away.normalize().scale(0.25D * (0.5D + fight.strength))));
+                }
+                fight.tension = Mth.clamp(fight.tension + 0.08F, 0.0F, 1.0F);
+                level.playSound(null, player.getX(), player.getY(), player.getZ(),
+                        SoundEvents.LEASH_KNOT_PLACE, SoundSource.PLAYERS, 0.5F, 0.45F);
+                endDart(fight, random);
+            }
+            return;
+        }
+
+        if (!calm || fight.dartCooldown-- > 0) return;
+        // Sweeping fish dart often; even a holding fish springs one now and then.
+        float chance = fight.phase == FightPhase.SWEEP ? 0.035F : 0.005F;
+        if (random.nextFloat() < chance) {
+            fight.dartDir = (byte) (1 + random.nextInt(2));
+            fight.dartTicksLeft = cfg.dartWindowTicks.get();
+            fight.dartProgress = 0.0F;
+            level.playSound(null, fish.getX(), fish.getY(), fish.getZ(),
+                    SoundEvents.FISHING_BOBBER_SPLASH, SoundSource.NEUTRAL, 0.5F, 1.5F);
+        }
+    }
+
+    private static void endDart(FishFight fight, RandomSource random)
+    {
+        fight.dartDir = 0;
+        fight.dartTicksLeft = 0;
+        fight.dartProgress = 0.0F;
+        fight.dartCooldown = 120 + random.nextInt(160);
     }
 
     /**
@@ -1160,17 +1251,23 @@ public class ServerFishingManager
         fight.phase = next;
         fight.veerTicks = 0; // pick a fresh heading on the very next movement tick
 
+        // Durations breathe: long enough to read the hint, decide, and act — the fight
+        // should demand the right response, not a twitch reflex.
         switch (next) {
-            case HOLD -> fight.phaseTicks = 20 + random.nextInt(30);
-            case SWEEP -> fight.phaseTicks = 30 + random.nextInt(35);
-            case PULL, SOUND -> fight.phaseTicks = Math.max(10, (int) ((20 + random.nextInt(20))
+            case HOLD -> fight.phaseTicks = 30 + random.nextInt(35);
+            case SWEEP -> fight.phaseTicks = 40 + random.nextInt(40);
+            case PULL, SOUND -> fight.phaseTicks = Math.max(14, (int) ((26 + random.nextInt(26))
                     * (0.7F + 0.6F * fight.strength) * (1.0F - 0.55F * fight.fatigue)));
-            case CHARGE -> fight.phaseTicks = 14 + random.nextInt(14);
+            case CHARGE -> fight.phaseTicks = 18 + random.nextInt(16);
         }
 
         if (next.isRun() && !prev.isRun()) {
             level.playSound(null, fish.getX(), fish.getY(), fish.getZ(),
                     SoundEvents.FISHING_BOBBER_SPLASH, SoundSource.NEUTRAL, 0.4F, 0.7F);
+            // A run supersedes any dart in progress — the fish has bigger plans.
+            if (fight.dartTicksLeft > 0) {
+                endDart(fight, random);
+            }
         }
     }
 
@@ -1301,6 +1398,8 @@ public class ServerFishingManager
                 case CHARGE -> 1.3D;                                // take up its slack fast
             };
             target = cfg.reelInSpeed.get() / 20.0D * crankFrac * (1.0D - resist) * eff * fight.reelScale;
+            // A darting fish is pulling broadside: the crank barely gains until it's answered.
+            if (fight.dartTicksLeft > 0) target *= 0.5D;
         }
 
         // The fish's own drive this tick: which way it wants to go, and how hard. Swift fish
@@ -1350,6 +1449,18 @@ public class ServerFishingManager
             default -> {
                 heading = Vec3.ZERO;
                 damping = 0.7D;
+            }
+        }
+
+        // An active dart overrides the phase's drive: the fish bolts hard toward the side the
+        // prompt names (dartDir 1 = PULL LEFT = the fish is tearing to the player's RIGHT).
+        if (fight.dartTicksLeft > 0 && dist >= 0.01D) {
+            Vec3 toFish = new Vec3(fish.getX() - player.getX(), 0.0D, fish.getZ() - player.getZ());
+            if (toFish.lengthSqr() > 1.0E-4D) {
+                Vec3 playersRight = new Vec3(-toFish.z, 0.0D, toFish.x).normalize();
+                heading = fight.dartDir == 1 ? playersRight : playersRight.scale(-1.0D);
+                damping = 0.68D;
+                baseForce = (0.055D + 0.07D * fight.strength) * (1.0D - 0.5D * fight.fatigue) * 1.25D;
             }
         }
 

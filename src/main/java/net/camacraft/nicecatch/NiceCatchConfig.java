@@ -48,6 +48,9 @@ public class NiceCatchConfig
         public final ForgeConfigSpec.IntValue escapeGraceTicks;
         public final ForgeConfigSpec.DoubleValue arrowFatigueMultiplier;
         public final ForgeConfigSpec.DoubleValue weightEndurance;
+        public final ForgeConfigSpec.BooleanValue dartEventsEnabled;
+        public final ForgeConfigSpec.IntValue dartWindowTicks;
+        public final ForgeConfigSpec.DoubleValue dartSwingRequired;
 
         // Line & reel-in (no fish on the line)
         public final ForgeConfigSpec.BooleanValue spoolDragEnabled;
@@ -214,6 +217,12 @@ public class NiceCatchConfig
                     .defineInRange("arrowFatigueMultiplier", 3.0D, 1.0D, 10.0D);
             weightEndurance = b.comment("How strongly a fish's WEIGHT deepens its fight. At 1.0: under 5 lbs tires quickly (easy), 5-10 lbs fights roughly up to twice as long, 10-15 lbs up to three times (very difficult), and past 15 lbs it keeps climbing toward the cap — an extreme, drawn-out battle. Heavier fish also get a strength floor. 0 disables weight-based endurance; higher values exaggerate it.")
                     .defineInRange("weightEndurance", 1.0D, 0.0D, 3.0D);
+            dartEventsEnabled = b.comment("Dart events: mid-fight the fish suddenly darts sideways and the HUD demands a quick PULL LEFT / PULL RIGHT — swing the mouse that way (while holding right-click) to muscle it back for a burst of fatigue and a yank toward you; too slow and it steals line and strains the rod.")
+                    .define("dartEventsEnabled", true);
+            dartWindowTicks = b.comment("Reaction window for a dart event, in ticks. Long enough to read the prompt and swing; shorten it once the motion is muscle memory.")
+                    .defineInRange("dartWindowTicks", 35, 10, 80);
+            dartSwingRequired = b.comment("How much sideways mouse-swing answers a dart (roughly comparable to the rod-lift scale). Lower = easier.")
+                    .defineInRange("dartSwingRequired", 1.2D, 0.2D, 5.0D);
             b.pop();
 
             b.push("line");
@@ -545,6 +554,7 @@ public class NiceCatchConfig
         public final ForgeConfigSpec.BooleanValue fishPitchEnabled;
         public final ForgeConfigSpec.BooleanValue rodAnimationsEnabled;
         public final ForgeConfigSpec.BooleanValue fishCarryEnabled;
+        public final ForgeConfigSpec.DoubleValue scrollReelPerNotch;
 
         Client(ForgeConfigSpec.Builder b)
         {
@@ -582,6 +592,8 @@ public class NiceCatchConfig
                     .define("rodAnimationsEnabled", true);
             fishCarryEnabled = b.comment("First-person fish carrying: a light fish held in one hand dangles by the tail; a heavy one (8+ lbs) is hefted low with both hands.")
                     .define("fishCarryEnabled", true);
+            scrollReelPerNotch = b.comment("Crank revolutions added per scroll-wheel notch while working the reel (scroll DOWN = wind line in, scroll UP = deliberately pay line out, easing tension at the cost of ground — matching a real reel handle's motion). 0 disables scroll controls entirely.")
+                    .defineInRange("scrollReelPerNotch", 0.12D, 0.0D, 1.0D);
         }
     }
 }

@@ -67,6 +67,17 @@ triggers a panicked first run, so expect the bar to drop before you can gain an 
 
 (Straight back-and-forth shaking is rejected; only real circular motion cranks.)
 
+**The scroll wheel works the reel too**, matching a real reel handle: scroll DOWN to wind
+line in, scroll UP to deliberately pay line out — tension bleeds off fast, but the fish
+gains ground. Each notch clicks so you can hear the reel work.
+
+**Watch for darts.** Mid-fight the fish may suddenly bolt sideways and the hint bar barks
+"<<< PULL LEFT!" (or right): swing the mouse hard that way, while holding right-click,
+inside the window. Answer it and the fish is muscled back toward you and tires; miss it and
+it steals line and strains the rod. A small gauge at the right end of the bar fills as your
+rod-lift registers, and lift-hungry hints (sounding, running) turn green the moment your
+lift is landing — no more guessing whether the pull-up counted.
+
 **The fish cycles through five tactics** — the hint text names the one it's using, so you
 always know the right response:
 

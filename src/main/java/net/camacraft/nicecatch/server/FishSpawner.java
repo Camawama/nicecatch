@@ -33,10 +33,14 @@ import net.minecraftforge.fml.common.Mod;
 @Mod.EventBusSubscriber(modid = NiceCatch.MODID)
 public final class FishSpawner
 {
-    /** Surface sample attempts per spawn cycle; misses (land, shallow water) just skip the cycle. */
+    /** Surface sample attempts per spawn cycle; misses (land, dry spots) just skip the cycle. */
     private static final int PLACEMENT_TRIES = 6;
-    /** Minimum water depth for a school to appear. */
-    private static final int MIN_DEPTH = 2;
+    /** Even a one-block-deep river can hold little fish. */
+    private static final int MIN_DEPTH = 1;
+    /** Water this deep or more can hold any species; shallower is small-fish-only. */
+    private static final int BIG_FISH_DEPTH = 2;
+    /** Species taller than this need BIG_FISH_DEPTH of water. */
+    private static final float SHALLOW_MAX_HEIGHT = 0.55F;
     /** Deepest below the surface a school will be placed. */
     private static final int MAX_SPAWN_DEPTH = 12;
 
@@ -87,13 +91,13 @@ public final class FishSpawner
             }
             if (depth < MIN_DEPTH) continue;
 
-            BlockPos spawnPos = surface.below(1 + random.nextInt(depth));
-            if (spawnSchoolAt(level, spawnPos, room, random)) return;
+            BlockPos spawnPos = depth == 1 ? surface : surface.below(1 + random.nextInt(depth));
+            if (spawnSchoolAt(level, spawnPos, depth, room, random)) return;
         }
     }
 
     /** Picks a species from the biome's own water-ambient list and spawns one school of it. */
-    private static boolean spawnSchoolAt(ServerLevel level, BlockPos pos, int room, RandomSource random)
+    private static boolean spawnSchoolAt(ServerLevel level, BlockPos pos, int depth, int room, RandomSource random)
     {
         var mobs = level.getBiome(pos).value().getMobSettings().getMobs(MobCategory.WATER_AMBIENT);
         var picked = mobs.getRandom(random);
@@ -101,6 +105,9 @@ public final class FishSpawner
 
         // The same school-size boost the natural spawner sees, so group sizes match config.
         MobSpawnSettings.SpawnerData data = FishBehavior.boostedSpawn(picked.get());
+        // A shallow river only fits the little species; the biome may offer a big one — skip
+        // this cycle rather than beach a salmon in ankle-deep water.
+        if (depth < BIG_FISH_DEPTH && data.type.getHeight() > SHALLOW_MAX_HEIGHT) return false;
         if (!SpawnPlacements.checkSpawnRules(data.type, level, MobSpawnType.NATURAL, pos, random)) {
             return false;
         }

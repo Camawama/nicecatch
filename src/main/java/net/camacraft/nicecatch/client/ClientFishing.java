@@ -49,6 +49,12 @@ public class ClientFishing
     private static float fatigue;
     private static boolean fishRunning;
     private static FightPhase fightPhase = FightPhase.PULL;
+    /** Active dart event: 0 none, 1 = PULL LEFT to answer, 2 = PULL RIGHT. */
+    private static byte dartDir;
+    /** Line queued to pay out from scroll-up, consumed into the next reel packet. */
+    private static float pendingFeed;
+    /** Last fight tick a lift whoosh played, so the cue never machine-guns. */
+    private static int lastLiftCueTick;
     // >=0 means the current fight is a line-arrow fight anchored to this entity (the fish) rather
     // than to a rod bobber: the follow camera tracks it and the fishing line renders to it.
     private static int fightAnchorId = -1;
@@ -129,6 +135,37 @@ public class ClientFishing
     public static FightPhase fightPhase()
     {
         return fightPhase;
+    }
+
+    /** The active dart event's required counter-pull: 0 none, 1 left, 2 right. */
+    public static byte dartDirection()
+    {
+        return dartDir;
+    }
+
+    /**
+     * Scroll wheel while reeling — matching the motion of a real reel handle: scroll DOWN
+     * winds line in, scroll UP pays it out. Each notch clicks so the input is audible.
+     */
+    public static void onScroll(double delta)
+    {
+        float perNotch = NiceCatchConfig.CLIENT.scrollReelPerNotch.get().floatValue();
+        if (perNotch <= 0.0F) return;
+        Minecraft mc = Minecraft.getInstance();
+        if (delta < 0.0D) {
+            TRACKER.addScrollCrank((float) -delta * perNotch);
+            mc.getSoundManager().play(SimpleSoundInstance.forUI(SoundEvents.LEVER_CLICK, 1.8F, 0.2F));
+        } else if (delta > 0.0D) {
+            pendingFeed = Math.min(6.0F, pendingFeed + (float) delta);
+            mc.getSoundManager().play(SimpleSoundInstance.forUI(SoundEvents.CROSSBOW_LOADING_MIDDLE, 1.2F, 0.35F));
+        }
+    }
+
+    private static float consumeFeed()
+    {
+        float feed = pendingFeed;
+        pendingFeed = 0.0F;
+        return feed;
     }
 
     /** True while reeling in a snagged loot item (vs an empty line), for the reel HUD. */
@@ -340,12 +377,12 @@ public class ClientFishing
                 boolean held = mc.screen == null && mc.options.keyUse.isDown();
                 if (!held) {
                     // Let go: pause the reel-in; the camera pans back to the player.
-                    NiceCatchNet.sendToServer(new ReelMessage(0.0F, 0.0F, false));
+                    NiceCatchNet.sendToServer(new ReelMessage(0.0F, 0.0F, 0.0F, 0.0F, false));
                     phase = Phase.IDLE;
                     break;
                 }
                 ReelTracker.Result input = TRACKER.consume(true);
-                NiceCatchNet.sendToServer(new ReelMessage(input.crank(), input.lift(), true));
+                NiceCatchNet.sendToServer(new ReelMessage(input.crank(), input.lift(), input.side(), consumeFeed(), true));
                 feedAnimation(input);
 
                 if (NiceCatchConfig.CLIENT.reelClickSounds.get()) {
@@ -372,8 +409,16 @@ public class ClientFishing
                 }
                 reelHeld = mc.screen == null && mc.options.keyUse.isDown();
                 ReelTracker.Result input = TRACKER.consume(reelHeld);
-                NiceCatchNet.sendToServer(new ReelMessage(input.crank(), input.lift(), reelHeld));
+                NiceCatchNet.sendToServer(new ReelMessage(input.crank(), input.lift(), input.side(), consumeFeed(), reelHeld));
                 feedAnimation(input);
+
+                // A soft rustle the moment a real lift registers: hear the pull-up land.
+                // (Deliberately NOT a rod/cast sound — those mean other things here.)
+                if (reelHeld && input.lift() > 0.25F && fightTicks - lastLiftCueTick >= 8) {
+                    lastLiftCueTick = fightTicks;
+                    mc.getSoundManager().play(SimpleSoundInstance.forUI(
+                            SoundEvents.ARMOR_EQUIP_LEATHER, 1.1F, 0.35F));
+                }
 
                 if (reelHeld && NiceCatchConfig.CLIENT.reelClickSounds.get()) {
                     revFeedback += input.crank();
@@ -459,7 +504,9 @@ public class ClientFishing
         if (biting) {
             biteIsEntity = entity;
             biteDir = direction;
-            if (phase == Phase.IDLE) {
+            // A gripping (or even gently reeling) player can still receive the bite — the
+            // REEL phase must yield to it or holding right-click eats every bite silently.
+            if (phase == Phase.IDLE || phase == Phase.REEL) {
                 phase = Phase.BITE;
                 biteTicks = 0;
                 joltAccum = 0.0F;
@@ -474,7 +521,8 @@ public class ClientFishing
         }
     }
 
-    public static void handleFightTick(float newProgress, float newTension, float newFatigue, boolean running, byte phaseId)
+    public static void handleFightTick(float newProgress, float newTension, float newFatigue,
+                                       boolean running, byte phaseId, byte newDartDir)
     {
         if (phase != Phase.FIGHT) return;
         progress = newProgress;
@@ -482,6 +530,12 @@ public class ClientFishing
         fatigue = newFatigue;
         fishRunning = running;
         fightPhase = FightPhase.byId(phaseId);
+        if (newDartDir != 0 && dartDir == 0) {
+            // A dart just began: an audible jolt so the prompt is never missed.
+            Minecraft.getInstance().getSoundManager().play(
+                    SimpleSoundInstance.forUI(SoundEvents.ARROW_HIT_PLAYER, 0.9F, 0.7F));
+        }
+        dartDir = newDartDir;
     }
 
     public static void handleFightEnd(byte result)
@@ -509,6 +563,8 @@ public class ClientFishing
         fishRunning = false;
         fightPhase = FightPhase.PULL;
         fightAnchorId = -1;
+        dartDir = 0;
+        pendingFeed = 0.0F;
         reelItem = false;
         progress = shownProgress = 0.0F;
         tension = 0.0F;
@@ -521,7 +577,9 @@ public class ClientFishing
     {
         phase = Phase.FIGHT;
         fightAnchorId = -1; // a rod fight; the bobber is the anchor
+        dartDir = 0;
         fightTicks = 0;
+        lastLiftCueTick = -100;
         // The bar shows line retrieved; the server's first fight tick fills in the real value.
         progress = shownProgress = 0.0F;
         tension = 0.0F;
@@ -581,6 +639,8 @@ public class ClientFishing
     {
         FishingHook hook = player.fishing;
         if (hook == null) return;
+        // Merely gripping moves (and freezes) nothing — mirror the server's crank gate.
+        if (crank <= 0.005F) return;
         NiceCatchConfig.Server cfg = NiceCatchConfig.SERVER;
         double speedBps = reelItem ? cfg.itemReelSpeed.get() : cfg.emptyReelSpeed.get();
         double crankFrac = Mth.clamp(crank / cfg.maxRevolutionsPerTick.get(), 0.0D, 1.0D);

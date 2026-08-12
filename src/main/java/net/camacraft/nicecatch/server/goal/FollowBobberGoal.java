@@ -148,6 +148,14 @@ public class FollowBobberGoal extends Goal
         FishingHook hook = state.biteBobber != null ? state.biteBobber : state.bobber;
         if (hook == null) return;
 
+        // The vanilla V-wake, honestly attached: it rides the surface directly above THIS
+        // fish and trails its real motion — so every wake near a bobber is a genuine fish
+        // that is interested, closing in, or nibbling. (The old invisible-loot-fish wake is
+        // suppressed whenever real fish are around.)
+        if ((fish.tickCount + fish.getId()) % 3 == 0) {
+            emitSurfaceWake();
+        }
+
         // A bobber can drift — water current, a boat towing the line, a player reeling it in.
         // Aim where it's heading and put on enough extra speed to keep pace, or a moving bobber
         // is impossible for the fish to catch up to and it never gets close enough to bite.
@@ -209,5 +217,33 @@ public class FollowBobberGoal extends Goal
         orbitRadius = 0.6D + random.nextDouble() * 0.9D;
         orbitDepth = 0.35D + random.nextDouble() * 0.7D;
         if (random.nextFloat() < 0.3F) orbitDir = -orbitDir;
+    }
+
+    /**
+     * The surface wake above this fish, angled along its real swimming direction. Only a
+     * moving fish near the surface (within ~4 blocks of it) leaves one — a deep or hovering
+     * fish shows nothing, exactly like watching real water.
+     */
+    private void emitSurfaceWake()
+    {
+        Vec3 v = fish.getDeltaMovement();
+        double speed = v.horizontalDistance();
+        if (speed < 0.03D || !fish.isInWater()) return;
+        var level = (net.minecraft.server.level.ServerLevel) fish.level();
+        net.minecraft.core.BlockPos pos = fish.blockPosition();
+        if (!level.getFluidState(pos).is(net.minecraft.tags.FluidTags.WATER)) return;
+        int climbed = 0;
+        while (climbed < 4 && level.getFluidState(pos.above()).is(net.minecraft.tags.FluidTags.WATER)) {
+            pos = pos.above();
+            climbed++;
+        }
+        if (level.getFluidState(pos.above()).is(net.minecraft.tags.FluidTags.WATER)) return; // too deep to read
+        double surfaceY = pos.getY() + level.getFluidState(pos).getHeight(level, pos);
+        double fx = v.x / speed * 0.04D;
+        double fz = v.z / speed * 0.04D;
+        level.sendParticles(net.minecraft.core.particles.ParticleTypes.FISHING,
+                fish.getX(), surfaceY, fish.getZ(), 0, fz, 0.01D, -fx, 1.0D);
+        level.sendParticles(net.minecraft.core.particles.ParticleTypes.FISHING,
+                fish.getX(), surfaceY, fish.getZ(), 0, -fz, 0.01D, fx, 1.0D);
     }
 }

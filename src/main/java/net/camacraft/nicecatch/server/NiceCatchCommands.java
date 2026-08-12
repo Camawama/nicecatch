@@ -111,8 +111,11 @@ public final class NiceCatchCommands
 
     private static final SuggestionProvider<CommandSourceStack> TRAIT_IDS =
             (ctx, builder) -> SharedSuggestionProvider.suggest(
-                    Stream.concat(Stream.of("none"),
+                    Stream.concat(Stream.of("random", "none"),
                             FishTraits.all().stream().map(t -> t.id)), builder);
+
+    /** Sentinel for a traits argument that failed to parse (error already sent). */
+    private static final Set<String> INVALID_TRAITS = Set.of("__invalid__");
 
     private NiceCatchCommands() {}
 
@@ -174,7 +177,7 @@ public final class NiceCatchCommands
         EntityType<?> type = resolveFishType(source, ResourceLocationArgument.getId(ctx, "type"));
         if (type == null) return 0;
         Set<String> wantTraits = parseTraits(source, traitsArg);
-        if (traitsArg != null && wantTraits == null) return 0;
+        if (wantTraits == INVALID_TRAITS) return 0;
 
         Vec3 pos = spawnPos(source);
         RandomSource random = level.random;
@@ -280,7 +283,7 @@ public final class NiceCatchCommands
         EntityType<?> type = resolveFishType(source, typeId);
         if (type == null) return 0;
         Set<String> wantTraits = parseTraits(source, traitsArg);
-        if (traitsArg != null && wantTraits == null) return 0;
+        if (wantTraits == INVALID_TRAITS) return 0;
 
         if (!ForgeRegistries.ITEMS.containsKey(typeId)) {
             source.sendFailure(Component.literal("No item shares the id " + typeId
@@ -470,11 +473,14 @@ public final class NiceCatchCommands
         return type;
     }
 
-    /** "feisty,cosmic" -> ids; "none" -> empty set; null stays null; unknown id -> error+null. */
+    /**
+     * "feisty,cosmic" -> ids; "none" -> empty set (a trait-free fish); "random" or absent ->
+     * null (whatever the lottery gives); unknown id -> INVALID_TRAITS with the error sent.
+     */
     @Nullable
     private static Set<String> parseTraits(CommandSourceStack source, @Nullable String arg)
     {
-        if (arg == null) return null;
+        if (arg == null || arg.equalsIgnoreCase("random")) return null;
         Set<String> out = new HashSet<>();
         if (arg.equalsIgnoreCase("none")) return out;
         for (String id : arg.split(",")) {
@@ -483,7 +489,7 @@ public final class NiceCatchCommands
             if (FishTraits.byId(trimmed) == null) {
                 source.sendFailure(Component.literal("Unknown trait '" + trimmed
                         + "' — see /nicecatch traits"));
-                return null;
+                return INVALID_TRAITS;
             }
             out.add(trimmed);
         }

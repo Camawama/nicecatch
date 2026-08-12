@@ -51,6 +51,28 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   grow to trophy size (default entry: 0.9-2.6x), and setting both to 1 opts a species out of
   size variance entirely.
 
+### Added (reel immersion wave)
+- **Dart events** (`fight.dartEventsEnabled`): mid-fight the fish suddenly bolts sideways
+  and the HUD demands "<<< PULL LEFT!" / "PULL RIGHT! >>>" — swing the mouse that way while
+  holding right-click, inside the window (`dartWindowTicks`, `dartSwingRequired`). Answered:
+  the fish is yanked back toward you and burns real stamina. Missed: it steals line and
+  strains the rod. Darts strike often while it thrashes, occasionally from a dead hold, and
+  a run cancels them.
+- **Scroll-wheel reel control** (`client.scrollReelPerNotch`, 0 disables): scroll up adds
+  crank, scroll down deliberately pays out line — big tension relief at the cost of the
+  fish gaining ground. Hotbar switching is suppressed while working the reel.
+- **Lift feedback**: a small gauge at the right end of the fight bar fills as rod-lift input
+  registers, and the sounding/running hints turn green the moment your lift is landing — no
+  more guessing whether the pull-up counted.
+- **14 more traits** (39 total): Wild, Stubborn, Muscular, Sickly, Twitchy, Docile,
+  Skittish, Voracious, Juvenile, Leviathan (very rare monster), and new auras — Iridescent
+  (end rod), Stormborn (sparks, violent runs), Gilded (golden, pays), Cursed (smoke, brittle
+  line, fearless).
+- **Shallow-water spawning**: one-block-deep rivers now hold fish — small species only; big
+  ones still need proper depth.
+- `/nicecatch summon` accepts `random` for traits explicitly (weight 0 = random size), and
+  `none` still forces a trait-free fish.
+
 ### Added (commands & multiplayer polish)
 - **/nicecatch command suite** (op level 2). Type suggestions list ONLY the fish Nice
   Catch manages (no creepers or arrows in a fishing command), and non-fish types are

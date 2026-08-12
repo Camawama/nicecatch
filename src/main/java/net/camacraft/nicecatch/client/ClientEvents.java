@@ -84,6 +84,19 @@ public class ClientEvents
     }
 
     /**
+     * Scroll wheel while working the reel: up cranks, down pays out line. Cancelled so the
+     * hotbar never switches away from the rod mid-fight.
+     */
+    @SubscribeEvent
+    public static void onMouseScroll(InputEvent.MouseScrollingEvent event)
+    {
+        if (!ClientFishing.isCapturingMouse()) return;
+        if (NiceCatchConfig.CLIENT.scrollReelPerNotch.get() <= 0.0D) return;
+        ClientFishing.onScroll(event.getScrollDelta());
+        event.setCanceled(true);
+    }
+
+    /**
      * Second interception point: catches rod uses that fell through a block interaction
      * (e.g. right-clicking while aiming at plain stone), which skip the path above.
      */

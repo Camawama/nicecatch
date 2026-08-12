@@ -171,6 +171,28 @@ public final class FishTraits
                 .aura(ParticleTypes.PORTAL).strength(1.15F).stamina(1.2F).weight(1.2F));
         register(new FishTrait("ancient", 1, ChatFormatting.GOLD)
                 .aura(ParticleTypes.ENCHANT).strength(1.3F).stamina(1.4F).weight(1.3F).xpBonus(10));
+        // Second batch: more fight character
+        register(new FishTrait("wild", 7, ChatFormatting.GOLD).sweep(1.4F).runForce(1.2F));
+        register(new FishTrait("stubborn", 7, ChatFormatting.DARK_RED).stamina(1.35F).chargeBias(0.3F));
+        register(new FishTrait("muscular", 6, ChatFormatting.DARK_RED).strength(1.2F).weight(1.2F));
+        register(new FishTrait("sickly", 6, ChatFormatting.GRAY).strength(0.65F).stamina(0.7F).weight(0.8F));
+        register(new FishTrait("twitchy", 6, ChatFormatting.YELLOW).sweep(1.3F).biteWindow(0.75F));
+        register(new FishTrait("docile", 6, ChatFormatting.AQUA).runForce(0.7F).chargeBias(0.2F).fear(1.2F));
+        // ...temperament...
+        register(new FishTrait("skittish", 7, ChatFormatting.WHITE).fear(1.8F).biteWindow(0.8F));
+        register(new FishTrait("voracious", 6, ChatFormatting.GOLD).bite(2.2F));
+        // ...body...
+        register(new FishTrait("juvenile", 6, ChatFormatting.GREEN).scale(0.65F).stamina(0.75F).bite(1.3F));
+        register(new FishTrait("leviathan", 1, ChatFormatting.DARK_PURPLE)
+                .scale(1.6F).strength(1.4F).stamina(1.6F).weight(1.4F));
+        // ...and more aura rarities.
+        register(new FishTrait("iridescent", 3, ChatFormatting.LIGHT_PURPLE).aura(ParticleTypes.END_ROD));
+        register(new FishTrait("stormborn", 2, ChatFormatting.AQUA)
+                .aura(ParticleTypes.ELECTRIC_SPARK).runForce(1.35F).sweep(1.2F));
+        register(new FishTrait("gilded", 2, ChatFormatting.GOLD)
+                .aura(ParticleTypes.WAX_ON).xpBonus(8).doubleCatch(0.1F).weight(1.15F));
+        register(new FishTrait("cursed", 2, ChatFormatting.DARK_GRAY)
+                .aura(ParticleTypes.SMOKE).tension(1.3F).fear(0.6F));
     }
 
     // ---- Assignment & lookup ----

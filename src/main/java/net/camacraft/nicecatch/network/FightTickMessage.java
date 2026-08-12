@@ -10,8 +10,9 @@ import java.util.function.Supplier;
 
 /**
  * Server -> client, once per tick during a fight: line retrieved (the HUD bar), line tension,
- * how played-out the fish is, whether it is running, and which tactic (fight phase) it's using
- * right now so the HUD can coach the player through it.
+ * how played-out the fish is, whether it is running, which tactic (fight phase) it's using
+ * right now so the HUD can coach the player through it, and the active dart event's required
+ * counter-pull (0 none, 1 left, 2 right).
  */
 public class FightTickMessage
 {
@@ -20,14 +21,17 @@ public class FightTickMessage
     private final float fatigue;
     private final boolean fishRunning;
     private final byte phase;
+    private final byte dartDir;
 
-    public FightTickMessage(float progress, float tension, float fatigue, boolean fishRunning, byte phase)
+    public FightTickMessage(float progress, float tension, float fatigue, boolean fishRunning,
+                            byte phase, byte dartDir)
     {
         this.progress = progress;
         this.tension = tension;
         this.fatigue = fatigue;
         this.fishRunning = fishRunning;
         this.phase = phase;
+        this.dartDir = dartDir;
     }
 
     public static void encode(FightTickMessage msg, FriendlyByteBuf buf)
@@ -37,19 +41,21 @@ public class FightTickMessage
         buf.writeFloat(msg.fatigue);
         buf.writeBoolean(msg.fishRunning);
         buf.writeByte(msg.phase);
+        buf.writeByte(msg.dartDir);
     }
 
     public static FightTickMessage decode(FriendlyByteBuf buf)
     {
         return new FightTickMessage(buf.readFloat(), buf.readFloat(), buf.readFloat(),
-                buf.readBoolean(), buf.readByte());
+                buf.readBoolean(), buf.readByte(), buf.readByte());
     }
 
     public static void handle(FightTickMessage msg, Supplier<NetworkEvent.Context> ctx)
     {
         ctx.get().enqueueWork(() ->
                 DistExecutor.unsafeRunWhenOn(Dist.CLIENT, () -> () ->
-                        ClientFishing.handleFightTick(msg.progress, msg.tension, msg.fatigue, msg.fishRunning, msg.phase)));
+                        ClientFishing.handleFightTick(msg.progress, msg.tension, msg.fatigue,
+                                msg.fishRunning, msg.phase, msg.dartDir)));
         ctx.get().setPacketHandled(true);
     }
 }
