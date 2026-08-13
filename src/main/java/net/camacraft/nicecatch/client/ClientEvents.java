@@ -34,6 +34,9 @@ public class ClientEvents
             ClientFishing.reset();
             return;
         }
+        while (RodControls.CUT_LINE.consumeClick()) {
+            ClientFishing.cutLine(mc);
+        }
         ClientFishing.clientTick(mc);
     }
 
@@ -70,9 +73,13 @@ public class ClientEvents
                 if (player.fishing == null) {
                     boolean aimingAtNothing = mc.hitResult == null || mc.hitResult.getType() == HitResult.Type.MISS;
                     if (aimingAtNothing && !player.isHandsBusy() && ClientFishing.canStartCharge()) {
+                        // Block the vanilla cast either way; charging itself starts from the
+                        // rod-control key (this click, when it IS still bound to right-click).
                         event.setCanceled(true);
                         event.setSwingHand(false);
-                        ClientFishing.beginCharge(event.getHand());
+                        if (RodControls.controlIsUseButton(mc)) {
+                            ClientFishing.beginCharge(event.getHand());
+                        }
                     }
                 } else if (ClientFishing.gradualReelEnabled()) {
                     // Bobber is out: block the vanilla instant retract; hold to reel it in.
@@ -84,16 +91,23 @@ public class ClientEvents
     }
 
     /**
-     * Scroll wheel while working the reel: up cranks, down pays out line. Cancelled so the
-     * hotbar never switches away from the rod mid-fight.
+     * Scroll wheel while working the reel: up cranks, down pays out line. And with a fish
+     * on the line the wheel NEVER falls through to hotbar switching — a stray scroll
+     * swapping the rod away mid-fight loses the fish; the number keys still switch,
+     * deliberately, for anyone who truly means to.
      */
     @SubscribeEvent
     public static void onMouseScroll(InputEvent.MouseScrollingEvent event)
     {
-        if (!ClientFishing.isCapturingMouse()) return;
-        if (NiceCatchConfig.CLIENT.scrollReelPerNotch.get() <= 0.0D) return;
-        ClientFishing.onScroll(event.getScrollDelta());
-        event.setCanceled(true);
+        if (ClientFishing.isCapturingMouse()
+                && NiceCatchConfig.CLIENT.scrollReelPerNotch.get() > 0.0D) {
+            ClientFishing.onScroll(event.getScrollDelta());
+            event.setCanceled(true);
+            return;
+        }
+        if (ClientFishing.phase() == ClientFishing.Phase.FIGHT) {
+            event.setCanceled(true);
+        }
     }
 
     /**
@@ -113,7 +127,9 @@ public class ClientEvents
                     if (!player.isHandsBusy() && ClientFishing.canStartCharge()) {
                         event.setCanceled(true);
                         event.setCancellationResult(InteractionResult.CONSUME);
-                        ClientFishing.beginCharge(event.getHand());
+                        if (RodControls.controlIsUseButton(Minecraft.getInstance())) {
+                            ClientFishing.beginCharge(event.getHand());
+                        }
                     }
                 } else if (ClientFishing.gradualReelEnabled()) {
                     // Bobber is out: block the vanilla instant retract; hold to reel it in.

@@ -16,6 +16,8 @@ public class FishFight
     public float strength;
     /** Stamina multiplier: >1 tires slower. Species profile x traits. */
     public float stamina = 1.0F;
+    /** The fish's live weight in pounds; gates which tactics (sounding, darts) it may use. */
+    public float weightLbs;
     /** Thrash amplitude while sweeping (feisty fish). */
     public float sweepAmp = 1.0F;
     /** Force multiplier on its runs (swift/sluggish fish). */

@@ -243,7 +243,7 @@ public class ClientFishing
     {
         Minecraft mc = Minecraft.getInstance();
         return (phase == Phase.FIGHT || phase == Phase.REEL)
-                && mc.screen == null && mc.player != null && mc.options.keyUse.isDown();
+                && mc.screen == null && mc.player != null && RodControls.controlDown(mc);
     }
 
     /** Called from the MouseHandler mixin with the raw deltas it swallowed. */
@@ -309,10 +309,21 @@ public class ClientFishing
 
         switch (phase) {
             case IDLE -> {
-                // A bobber is sitting in the water with nothing on it: hold right-click to
+                // With rod control rebound off the use button, holding the key starts the
+                // cast charge directly (the right-click interception path never sees it).
+                if (!RodControls.controlIsUseButton(mc) && canStartCharge()
+                        && player.fishing == null && !player.isHandsBusy()
+                        && RodControls.controlDown(mc)) {
+                    InteractionHand rodHand = RodUtil.findRodHand(player);
+                    if (rodHand != null) {
+                        beginCharge(rodHand);
+                        break;
+                    }
+                }
+                // A bobber is sitting in the water with nothing on it: hold rod control to
                 // reel it back in gradually instead of the old instant retract.
                 if (gradualReelEnabled() && player.fishing != null && mc.screen == null
-                        && mc.options.keyUse.isDown() && !player.isHandsBusy()
+                        && RodControls.controlDown(mc) && !player.isHandsBusy()
                         && RodUtil.findRodHand(player) != null) {
                     startReel(player, false);
                 }
@@ -322,7 +333,7 @@ public class ClientFishing
                     phase = Phase.IDLE;
                     break;
                 }
-                if (!mc.options.keyUse.isDown()) {
+                if (!RodControls.controlDown(mc)) {
                     NiceCatchNet.sendToServer(new CastMessage(chargeValue(0.0F), chargeHand));
                     phase = Phase.IDLE;
                     castCooldown = 4;
@@ -343,7 +354,7 @@ public class ClientFishing
                     // and jolting the view sideways. Recent yaw motion accumulates with decay, so
                     // slow panning never trips it; without the grip the yank counts for nothing.
                     // The server judges whether the reported direction was the right one.
-                    boolean gripping = mc.screen == null && mc.options.keyUse.isDown();
+                    boolean gripping = RodControls.controlDown(mc);
                     float yaw = player.getYRot();
                     float delta = Float.isNaN(lastYaw) ? 0.0F : Mth.wrapDegrees(yaw - lastYaw);
                     lastYaw = yaw;
@@ -355,7 +366,7 @@ public class ClientFishing
                         break;
                     }
                 }
-                if (mc.screen == null && mc.options.keyUse.isDown()) {
+                if (RodControls.controlDown(mc)) {
                     if (biteIsEntity) {
                         if (!directional) {
                             // Directional hook-set disabled: a plain click sets the hook.
@@ -374,7 +385,7 @@ public class ClientFishing
                     phase = Phase.IDLE;
                     break;
                 }
-                boolean held = mc.screen == null && mc.options.keyUse.isDown();
+                boolean held = RodControls.controlDown(mc);
                 if (!held) {
                     // Let go: pause the reel-in; the camera pans back to the player.
                     NiceCatchNet.sendToServer(new ReelMessage(0.0F, 0.0F, 0.0F, 0.0F, false));
@@ -407,7 +418,7 @@ public class ClientFishing
                     fightAnchorId = -1;
                     break;
                 }
-                reelHeld = mc.screen == null && mc.options.keyUse.isDown();
+                reelHeld = RodControls.controlDown(mc);
                 ReelTracker.Result input = TRACKER.consume(reelHeld, dartDir != 0);
                 NiceCatchNet.sendToServer(new ReelMessage(input.crank(), input.lift(), input.side(), consumeFeed(), reelHeld));
                 feedAnimation(input);
@@ -536,6 +547,18 @@ public class ClientFishing
                     SimpleSoundInstance.forUI(SoundEvents.ARROW_HIT_PLAYER, 0.9F, 0.7F));
         }
         dartDir = newDartDir;
+    }
+
+    /**
+     * The cut-line key: give up on whatever the line is doing — fight, bite, retrieve, or a
+     * parked bobber — and snip it. The server frees the fish, discards the bobber, and ends
+     * the session; the client just asks. Charging isn't a line yet, so it is exempt.
+     */
+    public static void cutLine(Minecraft mc)
+    {
+        if (phase == Phase.CHARGING) return;
+        if (phase == Phase.IDLE && (mc.player == null || mc.player.fishing == null)) return;
+        NiceCatchNet.sendToServer(new net.camacraft.nicecatch.network.CutLineMessage());
     }
 
     public static void handleFightEnd(byte result)

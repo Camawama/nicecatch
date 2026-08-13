@@ -14,7 +14,9 @@ import net.minecraft.world.phys.Vec3;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.Unique;
 import org.spongepowered.asm.mixin.injection.At;
+import org.spongepowered.asm.mixin.injection.Constant;
 import org.spongepowered.asm.mixin.injection.Inject;
+import org.spongepowered.asm.mixin.injection.ModifyConstant;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
 
@@ -145,6 +147,19 @@ public abstract class FishingHookMixin
             double f = maxOut * inv;
             self.setPos(owner.getX() - dx * f, (owner.getY() + 0.3D) - dy * f, owner.getZ() - dz * f);
         }
+    }
+
+    /**
+     * Vanilla silently gives up on the line 32 blocks out (1024 squared) and discards the
+     * hook. Every reel system caps itself against the configured rod range instead, so the
+     * hard vanilla wall moves out to line.rodRangeLimit. Server-only call site: the client
+     * short-circuits before shouldStopFishing, so reading server config here is safe.
+     */
+    @ModifyConstant(method = "shouldStopFishing", constant = @Constant(doubleValue = 1024.0D))
+    private double nicecatch$rodRangeLimit(double vanilla)
+    {
+        double limit = NiceCatchConfig.SERVER.rodRangeLimit.get();
+        return limit * limit;
     }
 
     /**

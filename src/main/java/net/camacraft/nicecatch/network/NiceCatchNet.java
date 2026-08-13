@@ -28,6 +28,7 @@ public class NiceCatchNet
         CHANNEL.registerMessage(id++, FightEndMessage.class, FightEndMessage::encode, FightEndMessage::decode, FightEndMessage::handle);
         CHANNEL.registerMessage(id++, ArrowFightMessage.class, ArrowFightMessage::encode, ArrowFightMessage::decode, ArrowFightMessage::handle);
         CHANNEL.registerMessage(id++, ArrowLineMessage.class, ArrowLineMessage::encode, ArrowLineMessage::decode, ArrowLineMessage::handle);
+        CHANNEL.registerMessage(id++, CutLineMessage.class, CutLineMessage::encode, CutLineMessage::decode, CutLineMessage::handle);
     }
 
     public static void sendToServer(Object message)

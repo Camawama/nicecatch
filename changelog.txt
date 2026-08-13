@@ -5,6 +5,34 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Balance (multiplayer playtest feedback)
+- **Small fish are genuinely easy now.** Light fish never spring dart events
+  (`fight.dartMinWeightLbs`, default 75 lbs) and never use the Sounding dive that demands
+  rod lifts (`fight.soundPhaseMinWeightLbs`, default 25 lbs) — under 25 lbs a fight is a
+  pure crank-and-reel. Weak fish also barely resist the winch during their runs (run reel
+  effectiveness now scales with fish strength), and cranking against a small fish's run
+  puts far less strain on the line (run tension now scales with strength too). The skill
+  curve: minnows for beginners, trophies demand the advanced moves.
+- **No more instant red tension on a big bite.** Tension gains ramp in from zero over the
+  first ~2 seconds of a fight (`tension.earlyTensionGraceTicks`), so a heavyweight's
+  hook-set run can't max the bar before anyone has read the situation.
+- **Darts must be answered with an EASED pull, not a jerk.** Only a smooth, sustained
+  sideways sweep counts (`fight.dartMaxPullPerTick` caps progress per tick), and yanking
+  violently past the cap strains the line (`fight.dartJerkTensionPenalty`). Stop the reel,
+  then lean into the pull.
+
+### Added (control & reach)
+- **Scroll wheel can't lose the fight.** With a fish on the line the wheel never switches
+  hotbar slots (even when not gripping the rod); the number keys still switch, deliberately.
+- **Rebindable controls** (Options > Controls > Nice Catch): "Rod Control (hold)" — the
+  grip/reel/charge hold, default right mouse — and "Cut the Line" (default V): give up on
+  a fish that's too much, a bite, a retrieve, or a parked bobber. The line is snipped, the
+  fish bolts, the bobber is lost, the rod takes no damage.
+- **Longer line**: `line.rodRangeLimit` (default 64, vanilla hardcodes 32) is where the
+  line now finally gives out; `lineLength` and `spoolLength` can be raised toward it for
+  longer casts, fights, and boat trolling. NOTE: existing world configs keep their old
+  values — raise `lineLength` in the world's serverconfig toml to feel it.
+
 ### Added (sculk ears)
 - **Fish hear the world like sculk sensors** (`vibration` config section): fish now listen to the
   same vibration events sculk sensors and wardens do — footsteps, swimming, splashes,

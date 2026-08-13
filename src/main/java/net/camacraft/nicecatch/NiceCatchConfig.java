@@ -38,6 +38,7 @@ public class NiceCatchConfig
         public final ForgeConfigSpec.DoubleValue tensionPerRevolutionRun;
         public final ForgeConfigSpec.DoubleValue tensionPerRevolutionCalm;
         public final ForgeConfigSpec.DoubleValue tensionRecoveryPerTick;
+        public final ForgeConfigSpec.IntValue earlyTensionGraceTicks;
         public final ForgeConfigSpec.BooleanValue lineSnapEnabled;
         public final ForgeConfigSpec.IntValue snapRodDamage;
         public final ForgeConfigSpec.DoubleValue fishStrengthMin;
@@ -51,6 +52,10 @@ public class NiceCatchConfig
         public final ForgeConfigSpec.BooleanValue dartEventsEnabled;
         public final ForgeConfigSpec.IntValue dartWindowTicks;
         public final ForgeConfigSpec.DoubleValue dartSwingRequired;
+        public final ForgeConfigSpec.DoubleValue dartMinWeightLbs;
+        public final ForgeConfigSpec.DoubleValue soundPhaseMinWeightLbs;
+        public final ForgeConfigSpec.DoubleValue dartMaxPullPerTick;
+        public final ForgeConfigSpec.DoubleValue dartJerkTensionPenalty;
         public final ForgeConfigSpec.DoubleValue chainBiteChancePerSecond;
         public final ForgeConfigSpec.DoubleValue chainBiteSizeRatio;
 
@@ -64,6 +69,7 @@ public class NiceCatchConfig
         public final ForgeConfigSpec.IntValue playerEscapeCrouchTicks;
         public final ForgeConfigSpec.DoubleValue reelCompleteDistance;
         public final ForgeConfigSpec.IntValue reelIdleTimeoutTicks;
+        public final ForgeConfigSpec.DoubleValue rodRangeLimit;
 
         // Fishing-line arrow
         public final ForgeConfigSpec.BooleanValue arrowFightEnabled;
@@ -193,8 +199,8 @@ public class NiceCatchConfig
             b.pop();
 
             b.push("fight");
-            lineLength = b.comment("Blocks of line on the reel. The bar shows line retrieved; the fish escapes if it takes it all. Must stay under 32 (vanilla breaks the line there).")
-                    .defineInRange("lineLength", 30.0D, 10.0D, 31.0D);
+            lineLength = b.comment("Blocks of line on the reel. The bar shows line retrieved; the fish escapes if it takes it all. Capped at runtime just under line.rodRangeLimit (where the line finally gives out entirely).")
+                    .defineInRange("lineLength", 30.0D, 10.0D, 126.0D);
             runReelEffectiveness = b.comment("Fraction of your reel-in pull that still applies while the fish is running (cranking through a run builds heavy tension).")
                     .defineInRange("runReelEffectiveness", 0.35D, 0.0D, 1.0D);
             liftRunResistance = b.comment("How strongly pulling the mouse up (lifting the rod) resists a running fish taking line (per lift unit).")
@@ -227,6 +233,14 @@ public class NiceCatchConfig
                     .defineInRange("dartWindowTicks", 35, 10, 80);
             dartSwingRequired = b.comment("How much sideways mouse-swing answers a dart (roughly comparable to the rod-lift scale). Lower = easier.")
                     .defineInRange("dartSwingRequired", 1.2D, 0.2D, 5.0D);
+            dartMinWeightLbs = b.comment("Fish lighter than this (in pounds) never spring dart events at all — the PULL LEFT / PULL RIGHT tests are reserved for genuine heavyweights, so everyday fish stay simple to reel and only trophies demand the advanced moves. 0 gives every fish darts.")
+                    .defineInRange("dartMinWeightLbs", 75.0D, 0.0D, 100000.0D);
+            soundPhaseMinWeightLbs = b.comment("Fish lighter than this (in pounds) never use the Sounding tactic (the deep dive that demands rod lifts before it can be reeled). Light fish are then a pure reel-and-crank affair; only sizeable fish make you work the rod vertically.")
+                    .defineInRange("soundPhaseMinWeightLbs", 25.0D, 0.0D, 100000.0D);
+            dartMaxPullPerTick = b.comment("The most dart-answering pull that counts per tick. This forces EASING into the sideways pull over a few smooth ticks — a single violent yank can't complete the prompt instantly.")
+                    .defineInRange("dartMaxPullPerTick", 0.25D, 0.05D, 2.0D);
+            dartJerkTensionPenalty = b.comment("Line tension added per unit of sideways swing beyond the smooth-pull cap while answering a dart — jerking the rod violently strains the line. 0 disables the penalty.")
+                    .defineInRange("dartJerkTensionPenalty", 0.08D, 0.0D, 1.0D);
             chainBiteChancePerSecond = b.comment("Chance per second, while reeling a hooked fish, that a much larger fish nearby strikes it — eating your catch off the hook and taking its place on the line. The small fish becomes the bait; the fight restarts fresh against the monster. Once per fight, rod fights only. 0 disables.")
                     .defineInRange("chainBiteChancePerSecond", 0.03D, 0.0D, 1.0D);
             chainBiteSizeRatio = b.comment("How much larger (hitbox area) the striking fish must be than the hooked one for a chain bite.")
@@ -236,8 +250,8 @@ public class NiceCatchConfig
             b.push("line");
             spoolDragEnabled = b.comment("As you walk away from a cast bobber the reel pays out line; once you reach the end of the spool it drags the bobber along behind you instead of the line snapping back and retracting. Disable for vanilla behavior (the line retracts when you get too far).")
                     .define("spoolDragEnabled", true);
-            spoolLength = b.comment("Blocks of line on the spool for a cast (no fish) bobber. Walk past this and the bobber gets dragged along at this distance. Must stay under 32 (vanilla retracts the line there).")
-                    .defineInRange("spoolLength", 30.0D, 8.0D, 31.0D);
+            spoolLength = b.comment("Blocks of line on the spool for a cast (no fish) bobber. Walk past this and the bobber gets dragged along at this distance. Keep it under line.rodRangeLimit (where the line gives out entirely).")
+                    .defineInRange("spoolLength", 30.0D, 8.0D, 126.0D);
             gradualReelEnabled = b.comment("Instead of a right-click instantly retracting the line, hold right-click and reel (circle the mouse) to bring the bobber in — fast on an empty line, a little slower with a loot item on the hook (no chance of the line snapping; only real fish fight). Disable for vanilla instant retrieval.")
                     .define("gradualReelEnabled", true);
             emptyReelSpeed = b.comment("Top speed, in blocks per second, at which you can reel in an empty line (nothing on the hook).")
@@ -252,6 +266,8 @@ public class NiceCatchConfig
                     .defineInRange("reelCompleteDistance", 2.5D, 1.0D, 8.0D);
             reelIdleTimeoutTicks = b.comment("If you stop reeling (release right-click) for this many ticks, the reel-in is abandoned and the bobber is left sitting in the water again.")
                     .defineInRange("reelIdleTimeoutTicks", 40, 5, 400);
+            rodRangeLimit = b.comment("Absolute range of the fishing line in blocks: past this the line gives out and the bobber is lost, vanilla-style (vanilla hardcodes 32). Raise it for longer casts, longer fights, and longer boat trolling; lineLength and spoolLength can then be raised toward it.")
+                    .defineInRange("rodRangeLimit", 64.0D, 33.0D, 128.0D);
             b.pop();
 
             b.push("lineArrow");
@@ -262,12 +278,14 @@ public class NiceCatchConfig
             b.pop();
 
             b.push("tension");
-            tensionPerRevolutionRun = b.comment("Line tension added per crank revolution while the fish is running.")
+            tensionPerRevolutionRun = b.comment("Line tension added per crank revolution while the fish is running. Scaled by the fish's strength (a weak fish strains the line far less than a monster), so this is the value for the strongest fish.")
                     .defineInRange("tensionPerRevolutionRun", 0.30D, 0.0D, 2.0D);
             tensionPerRevolutionCalm = b.comment("Line tension added per crank revolution while the fish is calm.")
                     .defineInRange("tensionPerRevolutionCalm", 0.04D, 0.0D, 2.0D);
             tensionRecoveryPerTick = b.comment("Line tension released per tick while not cranking hard.")
                     .defineInRange("tensionRecoveryPerTick", 0.012D, 0.0D, 0.5D);
+            earlyTensionGraceTicks = b.comment("Tension gains ramp in from zero over this many ticks at the start of a fight, so a big fish's opening run can't flash the bar red before anyone can even react. 0 disables the grace.")
+                    .defineInRange("earlyTensionGraceTicks", 40, 0, 200);
             lineSnapEnabled = b.comment("Whether the line can snap (losing the fish and bobber) when tension maxes out.")
                     .define("lineSnapEnabled", true);
             snapRodDamage = b.comment("Extra rod durability damage when the line snaps.")
