@@ -72,7 +72,8 @@ public class ClientEvents
                 if (!RodUtil.isRod(stack)) break;
                 if (player.fishing == null) {
                     boolean aimingAtNothing = mc.hitResult == null || mc.hitResult.getType() == HitResult.Type.MISS;
-                    if (aimingAtNothing && !player.isHandsBusy() && ClientFishing.canStartCharge()) {
+                    if (aimingAtNothing && !player.isHandsBusy() && ClientFishing.canStartCharge()
+                            && !player.getCooldowns().isOnCooldown(stack.getItem())) {
                         // Block the vanilla cast either way; charging itself starts from the
                         // rod-control key (this click, when it IS still bound to right-click).
                         event.setCanceled(true);
@@ -124,7 +125,8 @@ public class ClientEvents
         switch (ClientFishing.phase()) {
             case IDLE -> {
                 if (player.fishing == null) {
-                    if (!player.isHandsBusy() && ClientFishing.canStartCharge()) {
+                    if (!player.isHandsBusy() && ClientFishing.canStartCharge()
+                            && !player.getCooldowns().isOnCooldown(event.getItemStack().getItem())) {
                         event.setCanceled(true);
                         event.setCancellationResult(InteractionResult.CONSUME);
                         if (RodControls.controlIsUseButton(Minecraft.getInstance())) {

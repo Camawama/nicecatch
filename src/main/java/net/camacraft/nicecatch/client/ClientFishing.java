@@ -55,6 +55,8 @@ public class ClientFishing
     private static float pendingFeed;
     /** Last fight tick a lift whoosh played, so the cue never machine-guns. */
     private static int lastLiftCueTick;
+    /** Previous tick's lift level, for rising-edge detection on the lift cue. */
+    private static float prevLiftLevel;
     // >=0 means the current fight is a line-arrow fight anchored to this entity (the fish) rather
     // than to a rod bobber: the follow camera tracks it and the fishing line renders to it.
     private static int fightAnchorId = -1;
@@ -315,7 +317,8 @@ public class ClientFishing
                         && player.fishing == null && !player.isHandsBusy()
                         && RodControls.controlDown(mc)) {
                     InteractionHand rodHand = RodUtil.findRodHand(player);
-                    if (rodHand != null) {
+                    if (rodHand != null
+                            && !player.getCooldowns().isOnCooldown(player.getItemInHand(rodHand).getItem())) {
                         beginCharge(rodHand);
                         break;
                     }
@@ -424,12 +427,15 @@ public class ClientFishing
                 feedAnimation(input);
 
                 // A soft rustle the moment a real lift registers: hear the pull-up land.
-                // (Deliberately NOT a rod/cast sound — those mean other things here.)
-                if (reelHeld && input.lift() > 0.25F && fightTicks - lastLiftCueTick >= 8) {
+                // Rising-edge only — lift is a held LEVEL now, and a rod simply staying up
+                // must not rustle forever. (Deliberately NOT a rod/cast sound.)
+                if (reelHeld && input.lift() >= 0.3F && prevLiftLevel < 0.3F
+                        && fightTicks - lastLiftCueTick >= 8) {
                     lastLiftCueTick = fightTicks;
                     mc.getSoundManager().play(SimpleSoundInstance.forUI(
                             SoundEvents.ARMOR_EQUIP_LEATHER, 1.1F, 0.35F));
                 }
+                prevLiftLevel = input.lift();
 
                 if (reelHeld && NiceCatchConfig.CLIENT.reelClickSounds.get()) {
                     revFeedback += input.crank();

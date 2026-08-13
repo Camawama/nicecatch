@@ -20,6 +20,36 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   sideways sweep counts (`fight.dartMaxPullPerTick` caps progress per tick), and yanking
   violently past the cap strains the line (`fight.dartJerkTensionPenalty`). Stop the reel,
   then lean into the pull.
+- **Heavyweights can actually be beaten now.** A big fish used to rip line to the end of
+  the spool faster than any counter existed and escape — cranking harder did nothing (by
+  design: you can't out-crank a run) but nothing else worked either. Three fixes: the
+  drag now loads up with line out (`fight.runDragTaper` — at the end of the spool a run
+  keeps only ~40% of its force, so monsters stall further and further out instead of
+  spooling you), lifting the rod resists boring runs again (the "pull the rod up" hint
+  now genuinely works on every run style, not just diving fish — ease off the crank and
+  lift), and sprinting against the loaded drag burns extra stamina scaled by line taken
+  (`fight.dragRunFatigue`) — a monster's own spectacular runs are what finally wear it
+  down. The rhythm: let it run while lifting, then crank hard between runs.
+- **Reeling faster finally matters** (`fight.crankOverdrive`, default 1.5): crank speed
+  used to hit a hard ceiling at the base full-crank rate, so furious circling pulled no
+  harder than a lazy circle — exactly why a strong fish felt uncounterable. Circling
+  faster than the base rate now keeps adding pull, up to 1.5x, at the cost of
+  proportionally more line tension. Base resistance also eased: a fresh monster now
+  cancels 40% of your reel speed instead of 50% (`fight.reelResistance`).
+- **Pull up and HOLD.** Rod lift is now a held position, not a continuous motion: one
+  upward pull raises the rod and keeping the mouse still keeps it raised (it eases down
+  only very slowly; push the mouse down to lower it deliberately, release the grip to
+  drop it). No more pump-reposition-pump running off the mousepad — and since the level
+  survives cranking, "lift, then reel" against a sounding fish finally works as one
+  motion. The rod stays visibly raised in hand while held high.
+- **The end of the spool is a hard brake**: the drag now bites from two blocks before
+  the line's end (stronger than the old at-the-line damp), so a run bleeds to a crawl at
+  the wall — an actively fighting angler (rod high, cranking between runs) can hold a
+  monster there and work it back, and escape takes sustained uncountered pull.
+- **Fish health scales with size** (`weight.healthScaleExponent`, default 2.0): max
+  health is multiplied by bodyScale^exponent, so a 500 lb leviathan tuna is a genuine
+  tank while a minnow is fragile. Applied server-side, persists correctly, never stacks,
+  and config changes take effect on load. 0 disables.
 
 ### Added (control & reach)
 - **Scroll wheel can't lose the fight.** With a fish on the line the wheel never switches
@@ -27,7 +57,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Rebindable controls** (Options > Controls > Nice Catch): "Rod Control (hold)" — the
   grip/reel/charge hold, default right mouse — and "Cut the Line" (default V): give up on
   a fish that's too much, a bite, a retrieve, or a parked bobber. The line is snipped, the
-  fish bolts, the bobber is lost, the rod takes no damage.
+  fish bolts, the bobber is lost, the rod takes no damage — but tying fresh tackle on
+  takes a moment: the rod goes on a visible 10-second cooldown before it can cast again
+  (`line.cutLineCooldownTicks`).
 - **Longer line**: `line.rodRangeLimit` (default 64, vanilla hardcodes 32) is where the
   line now finally gives out; `lineLength` and `spoolLength` can be raised toward it for
   longer casts, fights, and boat trolling. NOTE: existing world configs keep their old

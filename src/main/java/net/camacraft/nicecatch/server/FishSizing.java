@@ -134,13 +134,49 @@ public final class FishSizing
      * The size event first fires during construction, when the UUID is still the ctor's
      * placeholder (loading from disk and client spawn packets both overwrite it afterward).
      * Re-derive dimensions once the entity actually joins a level — both sides — so the
-     * hitbox always reflects the final UUID.
+     * hitbox always reflects the final UUID. The server also stamps the size-scaled max
+     * health here (health is server-authoritative and needs the final UUID too).
      */
     @SubscribeEvent
     public static void onEntityJoin(EntityJoinLevelEvent event)
     {
-        if (FishBehavior.isFishKind(event.getEntity())) {
-            event.getEntity().refreshDimensions();
+        if (!FishBehavior.isFishKind(event.getEntity())) return;
+        event.getEntity().refreshDimensions();
+        if (!event.getLevel().isClientSide && event.getEntity() instanceof PathfinderMob fish) {
+            applySizeHealth(fish);
+        }
+    }
+
+    /** Stable id for the size-health modifier, so a rejoin replaces it instead of stacking. */
+    private static final java.util.UUID HEALTH_MODIFIER_ID
+            = java.util.UUID.fromString("6f5cc9a1-8f2e-4b7d-9c3a-2d94f00d15ca");
+
+    /**
+     * Big fish are big animals: max health is multiplied by bodyScale^healthScaleExponent,
+     * so a monster is a genuine tank and a minnow is fragile. Applied as a permanent
+     * attribute modifier — it persists with the entity, is stripped and re-applied on every
+     * join (so config changes take effect and it can never stack), and full-health fish are
+     * topped up to their new maximum while a wounded one keeps its absolute health.
+     */
+    private static void applySizeHealth(PathfinderMob fish)
+    {
+        var attr = fish.getAttribute(net.minecraft.world.entity.ai.attributes.Attributes.MAX_HEALTH);
+        if (attr == null) return;
+        boolean wasFull = fish.getHealth() >= fish.getMaxHealth() - 0.01F;
+        attr.removeModifier(HEALTH_MODIFIER_ID);
+        double exp = NiceCatchConfig.SERVER.healthScaleExponent.get();
+        if (exp > 0.0D) {
+            double mult = Mth.clamp(Math.pow(scaleOf(fish), exp), 0.2D, 60.0D);
+            if (Math.abs(mult - 1.0D) > 1.0E-3D) {
+                attr.addPermanentModifier(new net.minecraft.world.entity.ai.attributes.AttributeModifier(
+                        HEALTH_MODIFIER_ID, "nicecatch_size_health", mult - 1.0D,
+                        net.minecraft.world.entity.ai.attributes.AttributeModifier.Operation.MULTIPLY_TOTAL));
+            }
+        }
+        if (wasFull) {
+            fish.setHealth(fish.getMaxHealth());
+        } else {
+            fish.setHealth(Math.min(fish.getHealth(), fish.getMaxHealth()));
         }
     }
 }

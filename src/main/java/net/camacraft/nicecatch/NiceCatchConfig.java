@@ -28,6 +28,10 @@ public class NiceCatchConfig
         public final ForgeConfigSpec.DoubleValue biteWindowMultiplier;
         public final ForgeConfigSpec.DoubleValue runReelEffectiveness;
         public final ForgeConfigSpec.DoubleValue liftRunResistance;
+        public final ForgeConfigSpec.DoubleValue runDragTaper;
+        public final ForgeConfigSpec.DoubleValue dragRunFatigue;
+        public final ForgeConfigSpec.DoubleValue crankOverdrive;
+        public final ForgeConfigSpec.DoubleValue reelResistance;
         public final ForgeConfigSpec.DoubleValue liftPumpBonus;
         public final ForgeConfigSpec.DoubleValue lineLength;
         public final ForgeConfigSpec.DoubleValue fatiguePerRevolution;
@@ -70,6 +74,7 @@ public class NiceCatchConfig
         public final ForgeConfigSpec.DoubleValue reelCompleteDistance;
         public final ForgeConfigSpec.IntValue reelIdleTimeoutTicks;
         public final ForgeConfigSpec.DoubleValue rodRangeLimit;
+        public final ForgeConfigSpec.IntValue cutLineCooldownTicks;
 
         // Fishing-line arrow
         public final ForgeConfigSpec.BooleanValue arrowFightEnabled;
@@ -97,6 +102,7 @@ public class NiceCatchConfig
         public final ForgeConfigSpec.DoubleValue sizeVarianceMin;
         public final ForgeConfigSpec.DoubleValue sizeVarianceMax;
         public final ForgeConfigSpec.DoubleValue weightPerVolume;
+        public final ForgeConfigSpec.DoubleValue healthScaleExponent;
         public final ForgeConfigSpec.DoubleValue traitChance;
         public final ForgeConfigSpec.DoubleValue doubleTraitChance;
         public final ForgeConfigSpec.BooleanValue traitAurasEnabled;
@@ -203,8 +209,12 @@ public class NiceCatchConfig
                     .defineInRange("lineLength", 30.0D, 10.0D, 126.0D);
             runReelEffectiveness = b.comment("Fraction of your reel-in pull that still applies while the fish is running (cranking through a run builds heavy tension).")
                     .defineInRange("runReelEffectiveness", 0.35D, 0.0D, 1.0D);
-            liftRunResistance = b.comment("How strongly pulling the mouse up (lifting the rod) resists a running fish taking line (per lift unit).")
+            liftRunResistance = b.comment("How strongly pulling the mouse up (lifting the rod) resists a running fish taking line (per lift unit). Applies to both run styles: boring straight away (Pull) and diving (Sounding) — lifting the rod is the angler's live counter while a fish strips line.")
                     .defineInRange("liftRunResistance", 1.6D, 0.0D, 10.0D);
+            runDragTaper = b.comment("How much of a running fish's pull the loaded drag eats by the time the line is fully out (ramping up quadratically with line taken). At 0.6, a fish at the end of the spool runs with only 40% of its force — heavyweights stall further and further out instead of ripping straight off the end of the line. 0 disables (old behavior: a monster's run never weakens).")
+                    .defineInRange("runDragTaper", 0.6D, 0.0D, 0.95D);
+            dragRunFatigue = b.comment("Extra stamina a running fish burns for sprinting against the loaded drag, scaling with how much line it has taken (run fatigue x (1 + this x lineOutFraction)). This is what finally wears a monster down: its own long runs exhaust it. 0 disables.")
+                    .defineInRange("dragRunFatigue", 2.0D, 0.0D, 8.0D);
             liftPumpBonus = b.comment("Extra reel-in speed per lift unit while the fish is calm — pumping the rod as you crank.")
                     .defineInRange("liftPumpBonus", 0.5D, 0.0D, 2.0D);
             fatiguePerRevolution = b.comment("Fish stamina drained per full crank revolution while it is calm. Fatigue is what weakens and shortens its runs.")
@@ -217,8 +227,12 @@ public class NiceCatchConfig
                     .defineInRange("slackTakeFactor", 0.7D, 0.0D, 1.5D);
             chargeChance = b.comment("How strongly the Charge tactic is weighted when the fish picks its next move: it sprints back toward you, dumping slack you must crank up. 0 makes it never charge.")
                     .defineInRange("chargeChance", 0.2D, 0.0D, 1.0D);
-            maxRevolutionsPerTick = b.comment("Server-side cap on crank speed, in mouse revolutions per tick.")
+            maxRevolutionsPerTick = b.comment("Crank speed (mouse revolutions per tick) that counts as a FULL crank — the base reel-in rate. Circling faster than this keeps helping, up to crankOverdrive times the base pull.")
                     .defineInRange("maxRevolutionsPerTick", 0.25D, 0.05D, 1.0D);
+            crankOverdrive = b.comment("How far past the base full-crank rate genuinely fast circling keeps adding pull (1.5 = circling 50% faster than the base rate reels 50% harder). Working the reel furiously now visibly matters against a strong fish — at the cost of proportionally more line tension. 1.0 restores the old hard ceiling.")
+                    .defineInRange("crankOverdrive", 1.5D, 1.0D, 3.0D);
+            reelResistance = b.comment("How much of your reel-in speed the strongest fish can cancel while fresh (fatigue erodes it): at 0.4 a fresh monster reels in at 60% of your crank speed. Was effectively 0.5 before.")
+                    .defineInRange("reelResistance", 0.4D, 0.0D, 0.9D);
             reelInSpeed = b.comment("Top speed, in blocks per second, at which full-speed cranking drags a calm fish toward the player. The strongest fish resist down to about half this.")
                     .defineInRange("reelInSpeed", 4.0D, 0.5D, 10.0D);
             escapeGraceTicks = b.comment("Ticks after hooking a fish before it is allowed to escape by taking all the line.")
@@ -268,6 +282,8 @@ public class NiceCatchConfig
                     .defineInRange("reelIdleTimeoutTicks", 40, 5, 400);
             rodRangeLimit = b.comment("Absolute range of the fishing line in blocks: past this the line gives out and the bobber is lost, vanilla-style (vanilla hardcodes 32). Raise it for longer casts, longer fights, and longer boat trolling; lineLength and spoolLength can then be raised toward it.")
                     .defineInRange("rodRangeLimit", 64.0D, 33.0D, 128.0D);
+            cutLineCooldownTicks = b.comment("Rod cooldown (ticks) after cutting the line, simulating tying fresh terminal tackle on — the rod shows the vanilla item-cooldown sweep and cannot cast until it clears. 200 = 10 seconds. 0 disables.")
+                    .defineInRange("cutLineCooldownTicks", 200, 0, 2400);
             b.pop();
 
             b.push("lineArrow");
@@ -459,6 +475,8 @@ public class NiceCatchConfig
                     .defineInRange("sizeVarianceMax", 1.4D, 1.0D, 2.5D);
             weightPerVolume = b.comment("Kilograms per block-volume of hitbox; weight = width x width x height x this (x density traits). Shown on every caught fish's tooltip.")
                     .defineInRange("weightPerVolume", 25.0D, 1.0D, 500.0D);
+            healthScaleExponent = b.comment("Fish max health scales with body size: multiplied by bodyScale^this. At 2.0 a double-size fish has 4x the health and a half-size one a quarter — a 500 lb leviathan tuna is a genuine tank instead of a one-punch kill, and a tiny minnow is fragile. 0 disables (every fish keeps its species' base health).")
+                    .defineInRange("healthScaleExponent", 2.0D, 0.0D, 4.0D);
             traitChance = b.comment("Chance a fish is born with a trait (feisty, tough, cosmic...). Traits color the fight, the fish's temperament, its size or heft — and are named on the caught item's tooltip.")
                     .defineInRange("traitChance", 0.25D, 0.0D, 1.0D);
             doubleTraitChance = b.comment("Chance a trait-bearing fish carries a second trait.")

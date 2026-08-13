@@ -20,7 +20,13 @@ public class ReelTracker
     private int circlingFrames;
 
     private float crank;
-    private float lift;
+    /**
+     * How high the rod is held, 0..1 — a LEVEL, not a rate. One upward pull raises it and
+     * holding the mouse still KEEPS it raised (a real rod held high costs nothing to keep
+     * there); pushing the mouse back down lowers it. It survives cranking untouched, so
+     * "lift, then reel" works without pumping the mouse off the pad.
+     */
+    private float liftLevel;
     private float side;
     private float scrollCrank;
 
@@ -67,10 +73,15 @@ public class ReelTracker
         }
 
         if (circlingFrames > 0) circlingFrames--;
-        // Lift only from a deliberate straight pull — never the upstroke of a circle
-        // (which used to register phantom lift and spam its cue while cranking).
-        if (circlingFrames == 0 && dy < 0.0D && -smoothY > Math.abs(smoothX) * 1.2D) {
-            lift += (float) (-dy * 0.01D * sens);
+        // Lift level moves only on deliberate straight strokes — never inside a circle
+        // (whose up- and down-strokes must neither raise nor lower the held rod). Up
+        // raises and stays; down lowers a touch faster (dropping the tip is easy).
+        if (circlingFrames == 0) {
+            if (dy < 0.0D && -smoothY > Math.abs(smoothX) * 1.2D) {
+                liftLevel = Math.min(1.0F, liftLevel + (float) (-dy * 0.008D * sens));
+            } else if (dy > 0.0D && smoothY > Math.abs(smoothX) * 1.2D) {
+                liftLevel = Math.max(0.0F, liftLevel - (float) (dy * 0.012D * sens));
+            }
         }
     }
 
@@ -89,14 +100,17 @@ public class ReelTracker
     public Result consume(boolean holding, boolean dartActive)
     {
         // Scroll and circling are ALTERNATIVE cranks, not additive — the faster of the two
-        // wins, so working both at once buys nothing.
-        float outCrank = Math.min(Math.max(crank, scrollCrank), 0.35F);
-        float outLift = Math.min(lift, 0.8F);
+        // wins, so working both at once buys nothing. The cap leaves headroom above the
+        // server's base full-crank rate: genuinely fast circling overdrives the reel.
+        float outCrank = Math.min(Math.max(crank, scrollCrank), 0.5F);
+        float outLift = liftLevel;
         float outSide = net.minecraft.util.Mth.clamp(side, -1.2F, 1.2F);
         crank = 0.0F;
-        lift = 0.0F;
         side = 0.0F;
         scrollCrank = 0.0F;
+        // The held rod eases down only very slowly on its own — an occasional small re-tug
+        // keeps it pinned high; releasing the grip drops it entirely.
+        liftLevel *= 0.99F;
         if (holding && !dartActive && !NiceCatchConfig.CLIENT.requireCircularMotion.get()) {
             outCrank = Math.max(outCrank, 0.12F);
         }
@@ -104,6 +118,7 @@ public class ReelTracker
             outCrank = 0.0F;
             outLift = 0.0F;
             outSide = 0.0F;
+            liftLevel = 0.0F;
         }
         return new Result(outCrank, outLift, outSide);
     }
@@ -117,7 +132,7 @@ public class ReelTracker
         spinSign = 0.0F;
         circlingFrames = 0;
         crank = 0.0F;
-        lift = 0.0F;
+        liftLevel = 0.0F;
         side = 0.0F;
         scrollCrank = 0.0F;
     }
