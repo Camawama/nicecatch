@@ -51,6 +51,8 @@ public class ClientFishing
     private static FightPhase fightPhase = FightPhase.PULL;
     /** Active dart event: 0 none, 1 = PULL LEFT to answer, 2 = PULL RIGHT. */
     private static byte dartDir;
+    /** This fish's difficulty-ladder tier: 0 basic reel only, 1 lifts, 2 charges, 3 darts. */
+    private static byte fightTier;
     /** Line queued to pay out from scroll-up, consumed into the next reel packet. */
     private static float pendingFeed;
     /** Last fight tick a lift whoosh played, so the cue never machine-guns. */
@@ -143,6 +145,12 @@ public class ClientFishing
     public static byte dartDirection()
     {
         return dartDir;
+    }
+
+    /** The fish's difficulty-ladder tier: 0 basic reel only, 1 lifts, 2 charges, 3 darts. */
+    public static byte fightTier()
+    {
+        return fightTier;
     }
 
     /**
@@ -539,7 +547,7 @@ public class ClientFishing
     }
 
     public static void handleFightTick(float newProgress, float newTension, float newFatigue,
-                                       boolean running, byte phaseId, byte newDartDir)
+                                       boolean running, byte phaseId, byte newDartDir, byte tier)
     {
         if (phase != Phase.FIGHT) return;
         progress = newProgress;
@@ -547,6 +555,7 @@ public class ClientFishing
         fatigue = newFatigue;
         fishRunning = running;
         fightPhase = FightPhase.byId(phaseId);
+        fightTier = tier;
         if (newDartDir != 0 && dartDir == 0) {
             // A dart just began: an audible jolt so the prompt is never missed.
             Minecraft.getInstance().getSoundManager().play(
@@ -593,6 +602,7 @@ public class ClientFishing
         fightPhase = FightPhase.PULL;
         fightAnchorId = -1;
         dartDir = 0;
+        fightTier = 0;
         pendingFeed = 0.0F;
         reelItem = false;
         progress = shownProgress = 0.0F;
@@ -607,6 +617,7 @@ public class ClientFishing
         phase = Phase.FIGHT;
         fightAnchorId = -1; // a rod fight; the bobber is the anchor
         dartDir = 0;
+        fightTier = 0;
         fightTicks = 0;
         lastLiftCueTick = -100;
         // The bar shows line retrieved; the server's first fight tick fills in the real value.

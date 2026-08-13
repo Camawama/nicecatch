@@ -6,13 +6,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Balance (multiplayer playtest feedback)
-- **Small fish are genuinely easy now.** Light fish never spring dart events
-  (`fight.dartMinWeightLbs`, default 75 lbs) and never use the Sounding dive that demands
-  rod lifts (`fight.soundPhaseMinWeightLbs`, default 25 lbs) — under 25 lbs a fight is a
-  pure crank-and-reel. Weak fish also barely resist the winch during their runs (run reel
-  effectiveness now scales with fish strength), and cranking against a small fish's run
-  puts far less strain on the line (run tension now scales with strength too). The skill
-  curve: minnows for beginners, trophies demand the advanced moves.
+- **The difficulty ladder — every demand a fish can make is now weight-gated.**
+  Under 5 lbs (`fight.soundPhaseMinWeightLbs`): a pure basic reel — the fish NEVER runs
+  at all (runs are what take line, and a pan fish takes no line): no hook-set run, no
+  lifts, no dives, no charges, no darts. It thrashes and holds while the crank brings it
+  straight home in a few seconds. From 5 lbs: runs begin, plus Sounding dives that demand
+  rod lifts. From 25 lbs (`fight.chargePhaseMinWeightLbs`): the Charge ("reel fast, take
+  up the slack!"). From 75 lbs (`fight.dartMinWeightLbs`): PULL LEFT/RIGHT darts.
+  Beginners land pan fish on reeling alone; every extra mechanic is something the fish
+  earned by being huge. Weak fish also barely resist the winch during runs (run reel
+  effectiveness scales with strength), and cranking against a small fish's run puts far
+  less strain on the line (run tension scales with strength too).
+  NOTE for existing worlds: soundPhaseMinWeightLbs may be stored at its old default 25 —
+  set it to 5 in the world's serverconfig toml for the intended tiers.
 - **No more instant red tension on a big bite.** Tension gains ramp in from zero over the
   first ~2 seconds of a fight (`tension.earlyTensionGraceTicks`), so a heavyweight's
   hook-set run can't max the bar before anyone has read the situation.
@@ -46,6 +52,43 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   the line's end (stronger than the old at-the-line damp), so a run bleeds to a crawl at
   the wall — an actively fighting angler (rod high, cranking between runs) can hold a
   monster there and work it back, and escape takes sustained uncountered pull.
+- **The tension corridor on big fish is livable now.** Cranking hard through a CALM phase
+  — the exact play the fight design demands — used to red-line the bar in ~5 seconds
+  against a monster, leaving no speed that both kept up with the fish and kept the line
+  alive. Calm-crank tension now scales gentler with strength (sustained overdrive
+  cranking on a monster roughly breaks even with recovery), run-crank tension eased
+  (0.30 to 0.24 per rev — still absolutely a way to snap the line), and tension bleeds
+  faster while bracing (0.012 to 0.016/tick): a braced run clears a full red bar in ~3
+  seconds. The rhythm is unchanged, just survivable: brace + lift through runs, crank
+  flat-out between them.
+- **Fish swim-sound volume config actually works now.** Vanilla plays fish swim sounds
+  through the positional sound path, and the mod was listening on the entity path — the
+  handler never fired, so `fishSwimSoundVolume` did nothing. It now hooks the base sound
+  event and matches the fish-swim sound itself.
+- **Heavy-carry rendering fixes**: while both arms heft a heavy fish, the other hand's
+  item no longer renders at the same time (no torch floating over the cradling arm — it
+  reappears when the fish is put away), and a heavy fish held in the OFF hand is no
+  longer upside down (the mirrored yaw inverted under the third-person frame correction;
+  both hands now share one upright orientation).
+- **The Charge finally works like the hint says.** Two fixes: (1) the line is SLACK while
+  a fish charges you, so cranking through a charge no longer builds tension — it bleeds
+  off fast instead (crank flat out, free; the only sin during a charge is not reeling);
+  (2) the gained ground must actually be reeled up: sustain a modest crank through the
+  charge (`fight.chargeSlackCrankPerTick`) or the fish spits the slack at the phase's end
+  and bolts right back out with it — a charge you don't reel through was just the fish
+  resting. Merely watching it swim closer (or only lifting the rod) no longer counts.
+- **Trait system: stale-roll bug fixed** (also the `/nicecatch summon ... none` ghost
+  traits). Trait modifiers were cached per entity on first lookup — which happens in the
+  entity CONSTRUCTOR, before the real UUID is set (loading, spawn packets, and summon all
+  set it afterward) — freezing a random placeholder roll in as the fish's traits. The
+  cache now revalidates against the entity's current UUID, so summoned, loaded, and
+  spawned fish all carry (and fight with) exactly the traits their UUID says.
+- **Abandoning a cast line = cutting it**: switching hotbar slots or stowing the rod
+  while any line is out (fish or not) now triggers the same re-rig rod cooldown as the
+  cut-line key. Deliberate reel-ins cost nothing.
+- **Carry fixes**: a truly giant fish (trophy tuna) no longer floats forward out of the
+  hands (the size-scaled cradle offset is capped), and only ONE heavy fish shows at a
+  time — a second heavy fish in the other hand stays stowed instead of intersecting.
 - **Fish health scales with size** (`weight.healthScaleExponent`, default 2.0): max
   health is multiplied by bodyScale^exponent, so a 500 lb leviathan tuna is a genuine
   tank while a minnow is fragile. Applied server-side, persists correctly, never stacks,

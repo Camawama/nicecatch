@@ -32,6 +32,7 @@ public class NiceCatchConfig
         public final ForgeConfigSpec.DoubleValue dragRunFatigue;
         public final ForgeConfigSpec.DoubleValue crankOverdrive;
         public final ForgeConfigSpec.DoubleValue reelResistance;
+        public final ForgeConfigSpec.DoubleValue chargeSlackCrankPerTick;
         public final ForgeConfigSpec.DoubleValue liftPumpBonus;
         public final ForgeConfigSpec.DoubleValue lineLength;
         public final ForgeConfigSpec.DoubleValue fatiguePerRevolution;
@@ -58,6 +59,7 @@ public class NiceCatchConfig
         public final ForgeConfigSpec.DoubleValue dartSwingRequired;
         public final ForgeConfigSpec.DoubleValue dartMinWeightLbs;
         public final ForgeConfigSpec.DoubleValue soundPhaseMinWeightLbs;
+        public final ForgeConfigSpec.DoubleValue chargePhaseMinWeightLbs;
         public final ForgeConfigSpec.DoubleValue dartMaxPullPerTick;
         public final ForgeConfigSpec.DoubleValue dartJerkTensionPenalty;
         public final ForgeConfigSpec.DoubleValue chainBiteChancePerSecond;
@@ -247,14 +249,18 @@ public class NiceCatchConfig
                     .defineInRange("dartWindowTicks", 35, 10, 80);
             dartSwingRequired = b.comment("How much sideways mouse-swing answers a dart (roughly comparable to the rod-lift scale). Lower = easier.")
                     .defineInRange("dartSwingRequired", 1.2D, 0.2D, 5.0D);
-            dartMinWeightLbs = b.comment("Fish lighter than this (in pounds) never spring dart events at all — the PULL LEFT / PULL RIGHT tests are reserved for genuine heavyweights, so everyday fish stay simple to reel and only trophies demand the advanced moves. 0 gives every fish darts.")
+            dartMinWeightLbs = b.comment("The difficulty ladder's top rung: fish lighter than this (in pounds) never spring PULL LEFT / PULL RIGHT dart events — those are reserved for genuine trophies. The full ladder: under soundPhaseMinWeightLbs = pure reeling, then rod lifts, then (chargePhaseMinWeightLbs) charges, then (this) darts. 0 gives every fish darts.")
                     .defineInRange("dartMinWeightLbs", 75.0D, 0.0D, 100000.0D);
-            soundPhaseMinWeightLbs = b.comment("Fish lighter than this (in pounds) never use the Sounding tactic (the deep dive that demands rod lifts before it can be reeled). Light fish are then a pure reel-and-crank affair; only sizeable fish make you work the rod vertically.")
-                    .defineInRange("soundPhaseMinWeightLbs", 25.0D, 0.0D, 100000.0D);
+            soundPhaseMinWeightLbs = b.comment("The difficulty ladder's first rung: fish lighter than this (in pounds) demand NOTHING beyond basic reeling — no Sounding dives, no rod lifts, runs that can be cranked straight through. From this weight up the fish starts sounding and the rod must be worked vertically. (NOTE: worlds created before this ladder existed may have 25 stored here — set it to 5 for the intended tiers.)")
+                    .defineInRange("soundPhaseMinWeightLbs", 5.0D, 0.0D, 100000.0D);
+            chargePhaseMinWeightLbs = b.comment("The difficulty ladder's second rung: fish lighter than this (in pounds) never use the Charge tactic (rushing the angler, demanding fast slack take-up). Mid-weights and up spring it.")
+                    .defineInRange("chargePhaseMinWeightLbs", 25.0D, 0.0D, 100000.0D);
             dartMaxPullPerTick = b.comment("The most dart-answering pull that counts per tick. This forces EASING into the sideways pull over a few smooth ticks — a single violent yank can't complete the prompt instantly.")
                     .defineInRange("dartMaxPullPerTick", 0.25D, 0.05D, 2.0D);
             dartJerkTensionPenalty = b.comment("Line tension added per unit of sideways swing beyond the smooth-pull cap while answering a dart — jerking the rod violently strains the line. 0 disables the penalty.")
                     .defineInRange("dartJerkTensionPenalty", 0.08D, 0.0D, 1.0D);
+            chargeSlackCrankPerTick = b.comment("Average crank (revolutions per tick) the player must sustain through a Charge to actually take up the slack — 0.09 is a modest, unhurried circle. Fall short and the charge gains you nothing: the fish spits the slack and bolts back out with it. The line is slack during a charge, so this cranking builds no tension. 0 disables the requirement (a charge closes distance for free).")
+                    .defineInRange("chargeSlackCrankPerTick", 0.09D, 0.0D, 0.5D);
             chainBiteChancePerSecond = b.comment("Chance per second, while reeling a hooked fish, that a much larger fish nearby strikes it — eating your catch off the hook and taking its place on the line. The small fish becomes the bait; the fight restarts fresh against the monster. Once per fight, rod fights only. 0 disables.")
                     .defineInRange("chainBiteChancePerSecond", 0.03D, 0.0D, 1.0D);
             chainBiteSizeRatio = b.comment("How much larger (hitbox area) the striking fish must be than the hooked one for a chain bite.")
@@ -294,12 +300,12 @@ public class NiceCatchConfig
             b.pop();
 
             b.push("tension");
-            tensionPerRevolutionRun = b.comment("Line tension added per crank revolution while the fish is running. Scaled by the fish's strength (a weak fish strains the line far less than a monster), so this is the value for the strongest fish.")
-                    .defineInRange("tensionPerRevolutionRun", 0.30D, 0.0D, 2.0D);
+            tensionPerRevolutionRun = b.comment("Line tension added per crank revolution while the fish is running. Scaled by the fish's strength (a weak fish strains the line far less than a monster), so this is the value for the strongest fish. Cranking through a strong run is still the classic way to snap a line — brace (hold without cranking) and lift instead.")
+                    .defineInRange("tensionPerRevolutionRun", 0.24D, 0.0D, 2.0D);
             tensionPerRevolutionCalm = b.comment("Line tension added per crank revolution while the fish is calm.")
                     .defineInRange("tensionPerRevolutionCalm", 0.04D, 0.0D, 2.0D);
-            tensionRecoveryPerTick = b.comment("Line tension released per tick while not cranking hard.")
-                    .defineInRange("tensionRecoveryPerTick", 0.012D, 0.0D, 0.5D);
+            tensionRecoveryPerTick = b.comment("Line tension released per tick while not cranking hard. Bracing through a run (holding without cranking) bleeds tension at this rate; letting go entirely bleeds it twice as fast but lets the fish rest.")
+                    .defineInRange("tensionRecoveryPerTick", 0.016D, 0.0D, 0.5D);
             earlyTensionGraceTicks = b.comment("Tension gains ramp in from zero over this many ticks at the start of a fight, so a big fish's opening run can't flash the bar red before anyone can even react. 0 disables the grace.")
                     .defineInRange("earlyTensionGraceTicks", 40, 0, 200);
             lineSnapEnabled = b.comment("Whether the line can snap (losing the fish and bobber) when tension maxes out.")

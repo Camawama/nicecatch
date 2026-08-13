@@ -555,11 +555,16 @@ public final class FishBehavior
         return net.camacraft.nicecatch.compat.AquacultureCompat.interestGainMultiplier(owner.getItemInHand(hand));
     }
 
-    /** Fish swim way faster now, and vanilla's swim sound at that speed is a racket — hush it. */
+    /**
+     * Fish swim way faster now, and vanilla's swim sound at that speed is a racket — hush
+     * it. Listens on the BASE sound event, not AtEntity: Entity.playSwimSound routes
+     * through the positional playSound(x,y,z) overload, which fires AtPosition — an
+     * AtEntity listener never hears a single fish swim sound (the old bug that made the
+     * volume config do nothing). The sound id alone identifies it; only fish emit it.
+     */
     @SubscribeEvent
-    public static void onFishSwimSound(net.minecraftforge.event.PlayLevelSoundEvent.AtEntity event)
+    public static void onFishSwimSound(net.minecraftforge.event.PlayLevelSoundEvent event)
     {
-        if (!(event.getEntity() instanceof PathfinderMob fish) || !isFishLike(fish)) return;
         var sound = event.getSound();
         if (sound != null && sound.value().getLocation().equals(
                 net.minecraft.sounds.SoundEvents.FISH_SWIM.getLocation())) {

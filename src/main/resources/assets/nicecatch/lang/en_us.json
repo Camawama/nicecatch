@@ -11,6 +11,7 @@
   "nicecatch.hint.reel_empty": "Circle your mouse to crank the line in",
   "nicecatch.hint.reel_item": "Circle your mouse to crank the catch in — it won't get away",
   "nicecatch.hint.run": "It's running! Ease off and pull the rod up",
+  "nicecatch.hint.run_light": "It's running — keep reeling!",
   "nicecatch.hint.phase.hold": "It's holding — reel it in!",
   "nicecatch.hint.phase.sweep": "It's thrashing — keep on it and reel",
   "nicecatch.hint.phase.sound": "It's sounding — pull the rod up to lift it!",

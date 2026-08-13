@@ -155,8 +155,16 @@ public final class FishCarryRenderer
             // Toward the chest's center line (this sign centers it; flipped, it doubles the
             // offset the user saw).
             pose.translate((leftHand ? -1.0D : 1.0D) * CARRY_CENTER, 0.0D, 0.0D);
-            pose.mulPose(Axis.YP.rotationDegrees(leftHand ? 90.0F : -90.0F));
-            pose.translate(0.0D, -display.getBbHeight() * scale * CARRY_SINK, 0.0D);
+            // SAME yaw for both hands, deliberately: mirroring it (+90 left) faced the fish
+            // the opposite way, and the third-person X-90 correction pitching an
+            // opposite-facing fish turned it fully upside down in the off hand. One
+            // orientation is upright in every hand; nobody misses the mirrored nose.
+            pose.mulPose(Axis.YP.rotationDegrees(-90.0F));
+            // The sink is CAPPED: the item-socket frame's "down" is not perfectly world-down,
+            // so a sink that keeps growing with fish size slid a trophy tuna visibly out of
+            // the hands along the off-axis component. Mid-weights keep their exact old rest;
+            // giants settle at the cap instead of drifting away.
+            pose.translate(0.0D, -Math.min(0.42D, display.getBbHeight() * scale * CARRY_SINK), 0.0D);
             if (thirdPerson) {
                 // Levels the carried fish out of its slight downward slope; negative if it
                 // ever tips the other way.
@@ -181,6 +189,27 @@ public final class FishCarryRenderer
     {
         if (!NiceCatchConfig.CLIENT.fishCarryEnabled.get()) return false;
         return isHeavyFish(holder.getMainHandItem()) || isHeavyFish(holder.getOffhandItem());
+    }
+
+    /**
+     * With both arms hefting a heavy fish, no OTHER held item can render — a torch floating
+     * over the cradling off-arm reads as broken, and TWO heavy fish intersecting through
+     * each other even more so. Only one heavy fish can be held up at a time: the main
+     * hand's wins; everything else in either hand is simply not shown until it's put away.
+     */
+    public static boolean suppressedByCarry(LivingEntity holder, ItemStack stack, boolean leftHand)
+    {
+        if (!NiceCatchConfig.CLIENT.fishCarryEnabled.get()) return false;
+        boolean mainHeavy = isHeavyFish(holder.getMainHandItem());
+        if (!mainHeavy && !isHeavyFish(holder.getOffhandItem())) return false;
+        if (isHeavyFish(stack)) {
+            // Rendering as the OFF hand (the non-main arm side) while the main hand also
+            // hefts a heavy fish: this one stays stowed.
+            boolean renderingOffHand =
+                    (holder.getMainArm() == net.minecraft.world.entity.HumanoidArm.RIGHT) == leftHand;
+            return renderingOffHand && mainHeavy;
+        }
+        return true;
     }
 
     /** A light fish this hand dangles — the arm holds out for the display (mixin). */

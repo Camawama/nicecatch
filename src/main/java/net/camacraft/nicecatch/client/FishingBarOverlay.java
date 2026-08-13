@@ -83,8 +83,12 @@ public class FishingBarOverlay
                     switch (ClientFishing.fightPhase()) {
                         case HOLD -> drawHint(graphics, window, y, "nicecatch.hint.phase.hold", 0xFFB6E8A0, false);
                         case SWEEP -> drawHint(graphics, window, y, "nicecatch.hint.phase.sweep", 0xFFB6E8A0, false);
-                        case PULL -> drawHint(graphics, window, y, "nicecatch.hint.run",
-                                lifting ? 0xFF7EE044 : 0xFFE8C33A, false);
+                        // A basic-tier fish (bottom of the difficulty ladder) demands no rod
+                        // work — never coach a lift the fight doesn't need; just keep reeling.
+                        case PULL -> drawHint(graphics, window, y,
+                                ClientFishing.fightTier() == 0 ? "nicecatch.hint.run_light" : "nicecatch.hint.run",
+                                ClientFishing.fightTier() == 0 ? 0xFFB6E8A0
+                                        : (lifting ? 0xFF7EE044 : 0xFFE8C33A), false);
                         case SOUND -> drawHint(graphics, window, y, "nicecatch.hint.phase.sound",
                                 lifting ? 0xFF7EE044 : 0xFFE8C33A, false);
                         case CHARGE -> drawHint(graphics, window, y, "nicecatch.hint.phase.charge", 0xFFF08A3A, true);

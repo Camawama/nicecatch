@@ -118,6 +118,9 @@ public final class FishTraits
     /** Both sides read this (render scale client, everything else server) — synchronized. */
     private static final Map<Entity, Modifiers> CACHE =
             Collections.synchronizedMap(new WeakHashMap<>());
+    /** The UUID each cache entry was built from, to catch entries gone stale under setUUID. */
+    private static final Map<Entity, UUID> CACHE_UUID =
+            Collections.synchronizedMap(new WeakHashMap<>());
     private static final long TRAIT_SALT = 0x7A175A17F15EL;
 
     /** Extension point: register a trait before any fish of interest spawns (mod init is fine). */
@@ -199,12 +202,19 @@ public final class FishTraits
 
     public static Modifiers of(Entity fish)
     {
+        // The cache entry is only good for the UUID it was built from. Every entity's FIRST
+        // call happens in its constructor (the size event fires there) with the ctor's
+        // placeholder random UUID — the real one arrives afterward via setUUID (loading,
+        // spawn packets, /nicecatch summon). Trusting the entity key alone froze that
+        // placeholder roll in as the fish's traits: a summoned "none"-trait fish reported
+        // (and fought with!) whatever the placeholder had rolled.
         Modifiers cached = CACHE.get(fish);
-        if (cached != null) return cached;
+        if (cached != null && fish.getUUID().equals(CACHE_UUID.get(fish))) return cached;
         // Config not in yet (very early entity construction): answer neutrally, don't cache.
         if (!NiceCatchConfig.SERVER_SPEC.isLoaded()) return NONE;
         Modifiers built = build(fish.getUUID());
         CACHE.put(fish, built);
+        CACHE_UUID.put(fish, fish.getUUID());
         return built;
     }
 
@@ -212,6 +222,7 @@ public final class FishTraits
     public static void clearCache()
     {
         CACHE.clear();
+        CACHE_UUID.clear();
     }
 
     /** Every registered trait, in registration order (for commands and listings). */

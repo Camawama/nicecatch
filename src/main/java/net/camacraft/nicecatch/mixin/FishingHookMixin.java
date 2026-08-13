@@ -45,6 +45,8 @@ public abstract class FishingHookMixin
     @Unique private int nicecatch$escapeTicks;
     /** Re-show cadence for the "you've been hooked" actionbar warning. */
     @Unique private int nicecatch$warnCooldown;
+    /** The rod item last seen in the owner's hands, for the abandoned-line cooldown. */
+    @Unique private net.minecraft.world.item.Item nicecatch$lastRod;
 
     /**
      * Server-side line feel: (1) A hooked PLAYER is told on screen how to escape, and holding
@@ -57,6 +59,15 @@ public abstract class FishingHookMixin
     {
         FishingHook self = (FishingHook) (Object) this;
         if (self.level().isClientSide) return;
+
+        // Remember which rod owns this line while it is still in hand — by the time the
+        // owner stows it (and vanilla gives up on the line), the hand only holds whatever
+        // replaced it, and the abandoned-line cooldown below needs the rod itself.
+        Player tracker = self.getPlayerOwner();
+        if (tracker != null) {
+            var rodHand = RodUtil.findRodHand(tracker);
+            if (rodHand != null) nicecatch$lastRod = tracker.getItemInHand(rodHand).getItem();
+        }
 
         // Hooked-player escape.
         if (self.hookedIn instanceof ServerPlayer hooked && self.getPlayerOwner() != hooked) {
@@ -160,6 +171,23 @@ public abstract class FishingHookMixin
     {
         double limit = NiceCatchConfig.SERVER.rodRangeLimit.get();
         return limit * limit;
+    }
+
+    /**
+     * Abandoning a line out on the water — switching hotbar slots, stowing the rod, or
+     * walking out past the line's absolute range — IS cutting it: the tackle is gone
+     * either way, so it carries the same re-rig cooldown as the cut-line key. (Deliberate
+     * retrieves go through the rod's own use path, never through this vanilla give-up
+     * check, so reeling in normally costs nothing.)
+     */
+    @Inject(method = "shouldStopFishing", at = @At("RETURN"))
+    private void nicecatch$abandonedLineCooldown(Player player, CallbackInfoReturnable<Boolean> cir)
+    {
+        if (!cir.getReturnValueZ() || nicecatch$lastRod == null) return;
+        int cooldown = NiceCatchConfig.SERVER.cutLineCooldownTicks.get();
+        if (cooldown > 0 && !player.getCooldowns().isOnCooldown(nicecatch$lastRod)) {
+            player.getCooldowns().addCooldown(nicecatch$lastRod, cooldown);
+        }
     }
 
     /**

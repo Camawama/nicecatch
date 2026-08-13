@@ -28,6 +28,13 @@ public abstract class ItemInHandRendererMixin
                                              boolean leftHand, PoseStack poseStack, MultiBufferSource buffer,
                                              int light, CallbackInfo ci)
     {
+        // Both arms hefting a heavy fish leaves no hand free: whatever the other hand
+        // nominally holds — a torch, or even a second heavy fish — is not rendered at
+        // all while the carry lasts.
+        if (FishCarryRenderer.suppressedByCarry(holder, stack, leftHand)) {
+            ci.cancel();
+            return;
+        }
         if (FishCarryRenderer.render(holder, stack, context, leftHand, poseStack, buffer, light)) {
             ci.cancel();
         }

@@ -451,11 +451,12 @@ public class ServerFishingManager
         fight.lineLength = (float) Math.min(maxLine, Math.max(cfg.lineLength.get(), dist + 4.0D));
         fight.progress = closeness(fight, effectiveFightDistance(player, fish));
         double headroom = fight.lineLength - dist;
-        if (headroom < 8.0D) {
+        if (headroom < 8.0D || fight.weightLbs < cfg.soundPhaseMinWeightLbs.get()) {
             // Hooked far out with almost no spool left: opening with a line-tearing run
             // would be an instant, unwinnable escape. The fish thrashes in place instead,
             // and the grace window stretches so the angler can win some line back before
-            // escape is even on the table.
+            // escape is even on the table. A basic-reel (bottom-tier) fish also opens
+            // thrashing — it never runs at all, so no hook-set run for it either.
             fight.phase = FightPhase.SWEEP;
             fight.phaseTicks = 30 + random.nextInt(20);
             fight.graceTicks = cfg.escapeGraceTicks.get() + 60;
@@ -476,7 +477,7 @@ public class ServerFishingManager
         level.playSound(null, player.getX(), player.getY(), player.getZ(),
                 SoundEvents.FISHING_BOBBER_RETRIEVE, SoundSource.PLAYERS, 0.6F, 1.15F);
         NiceCatchNet.sendTo(player, new FightTickMessage(fight.progress, fight.tension, fight.fatigue,
-                fight.phase.isRun(), fight.phase.id(), (byte) 0));
+                fight.phase.isRun(), fight.phase.id(), (byte) 0, fightTier(fight)));
     }
 
     public static void onReelInput(ServerPlayer player, float crank, float lift, float side,
@@ -1034,7 +1035,7 @@ public class ServerFishingManager
         // straight away, sounding for the deep, or charging back at you. Each phase changes
         // what the angler must do; a tiring fish favors the calm ones so it can be landed.
         if (--fight.phaseTicks <= 0) {
-            advancePhase(fight, random, level, fish);
+            advancePhase(player, fight, random, level, fish);
         }
         boolean run = fight.phase.isRun();
 
@@ -1077,6 +1078,9 @@ public class ServerFishingManager
         int graceLen = cfg.earlyTensionGraceTicks.get();
         float tensionEase = graceLen <= 0 ? 1.0F : Math.min(1.0F, fight.ticks / (float) graceLen);
         boolean charging = fight.phase == FightPhase.CHARGE;
+        // Cranking during a charge is the slack take-up the HUD demands: bank it so the
+        // phase can judge, at its end, whether the gained ground was actually reeled up.
+        if (charging) fight.chargeCrank += crank;
         // Sprinting against a loaded drag is exhausting: the more line the fish has already
         // taken, the faster its runs burn stamina. This is what finally wears a monster
         // down — its own long, spectacular runs are the very thing that beats it.
@@ -1090,7 +1094,12 @@ public class ServerFishingManager
                 float chargeDrain = charging ? crank * cfg.fatiguePerRevolution.get().floatValue() : 0.0F;
                 fight.fatigue += (runBurn
                         + crank * cfg.fatiguePerRevolution.get().floatValue() * 0.5F + chargeDrain) * wear;
-                if (crank > 0.01F) {
+                if (charging) {
+                    // A charging fish is SLACKING the line — no amount of cranking can
+                    // strain a slack line, and the un-tensioned line breathes fast. Crank
+                    // flat out, free of charge; the only sin during a charge is NOT reeling.
+                    fight.tension -= cfg.tensionRecoveryPerTick.get().floatValue() * 3.0F;
+                } else if (crank > 0.01F) {
                     // Run tension scales with the fish: cranking against a minnow's run is
                     // nearly free, against a monster it is the classic way to snap a line.
                     fight.tension += (crank * cfg.tensionPerRevolutionRun.get().floatValue()
@@ -1103,8 +1112,13 @@ public class ServerFishingManager
                 }
             } else {
                 fight.fatigue += crank * cfg.fatiguePerRevolution.get().floatValue() * wear;
+                // Calm phases are the DESIGNED reel-hard windows: even against the strongest
+                // fish, sustained full-overdrive cranking must roughly break even with the
+                // recovery — the calm crank tax exists to punish sloppiness, not the one
+                // play the fight demands. (The old 0.5+strength factor red-lined a monster
+                // in five seconds of doing exactly the right thing.)
                 fight.tension += crank * cfg.tensionPerRevolutionCalm.get().floatValue()
-                        * (0.5F + fight.strength) / fight.tensionScale * tensionEase;
+                        * (0.35F + 0.45F * fight.strength) / fight.tensionScale * tensionEase;
                 fight.tension -= cfg.tensionRecoveryPerTick.get().floatValue();
             }
         } else {
@@ -1209,7 +1223,8 @@ public class ServerFishingManager
         }
 
         NiceCatchNet.sendTo(player, new FightTickMessage(fight.progress, fight.tension, fight.fatigue,
-                run, fight.phase.id(), fight.dartTicksLeft > 0 ? fight.dartDir : (byte) 0));
+                run, fight.phase.id(), fight.dartTicksLeft > 0 ? fight.dartDir : (byte) 0,
+                fightTier(fight)));
     }
 
     /**
@@ -1374,10 +1389,29 @@ public class ServerFishingManager
      * landed); the same phase rarely repeats back to back. Sets the phase's duration and gives
      * the fish a fresh heading and a splash whenever a run kicks off.
      */
-    private static void advancePhase(FishFight fight, RandomSource random, ServerLevel level, PathfinderMob fish)
+    private static void advancePhase(ServerPlayer player, FishFight fight, RandomSource random,
+                                     ServerLevel level, PathfinderMob fish)
     {
         FightPhase prev = fight.phase;
         FightPhase next = pickPhase(fight, random, prev);
+
+        // The charge's bill comes due: it rushed in dumping slack, and if the angler never
+        // cranked that slack up, none of the gained ground is real — the fish spits the
+        // loose line and bolts right back out with it, straight into an away-run. Reel
+        // through the charge, or the whole phase was just the fish resting.
+        if (prev == FightPhase.CHARGE && fight.chargeNeeded > 0.0F
+                && fight.chargeCrank < fight.chargeNeeded) {
+            Vec3 away = new Vec3(fish.getX() - player.getX(), 0.0D, fish.getZ() - player.getZ());
+            if (away.lengthSqr() > 1.0E-4D) {
+                fish.setDeltaMovement(fish.getDeltaMovement()
+                        .add(away.normalize().scale(0.4D * (0.5D + fight.strength))));
+            }
+            level.playSound(null, player.getX(), player.getY(), player.getZ(),
+                    SoundEvents.LEASH_KNOT_PLACE, SoundSource.PLAYERS, 0.5F, 0.45F);
+            next = FightPhase.PULL;
+        }
+        fight.chargeNeeded = 0.0F;
+
         fight.phase = next;
         fight.veerTicks = 0; // pick a fresh heading on the very next movement tick
 
@@ -1390,6 +1424,11 @@ public class ServerFishingManager
                     * (0.7F + 0.6F * fight.strength) * (1.0F - 0.55F * fight.fatigue)));
             case CHARGE -> fight.phaseTicks = 18 + random.nextInt(16);
         }
+        if (next == FightPhase.CHARGE) {
+            fight.chargeCrank = 0.0F;
+            fight.chargeNeeded = NiceCatchConfig.SERVER.chargeSlackCrankPerTick.get().floatValue()
+                    * fight.phaseTicks;
+        }
 
         if (next.isRun() && !prev.isRun()) {
             level.playSound(null, fish.getX(), fish.getY(), fish.getZ(),
@@ -1401,10 +1440,29 @@ public class ServerFishingManager
         }
     }
 
+    /**
+     * The fish's rung on the difficulty ladder, for the HUD's coaching: 0 = basic reel only,
+     * 1 = works the rod vertically (sounding), 2 = also charges, 3 = also darts.
+     */
+    private static byte fightTier(FishFight fight)
+    {
+        NiceCatchConfig.Server cfg = NiceCatchConfig.SERVER;
+        if (fight.weightLbs >= cfg.dartMinWeightLbs.get()) return 3;
+        if (fight.weightLbs >= cfg.chargePhaseMinWeightLbs.get()) return 2;
+        if (fight.weightLbs >= cfg.soundPhaseMinWeightLbs.get()) return 1;
+        return 0;
+    }
+
     /** Weighted random next phase, biased by fatigue and away from immediately repeating. */
     private static FightPhase pickPhase(FishFight fight, RandomSource random, FightPhase prev)
     {
         float f = fight.fatigue;
+        // Bottom rung of the difficulty ladder: a basic-reel fish NEVER runs. Runs are the
+        // mechanic that takes line, and a pan fish takes no line — it thrashes and holds
+        // while the crank brings it straight home, easy from hook-set to hand.
+        if (fight.weightLbs < NiceCatchConfig.SERVER.soundPhaseMinWeightLbs.get()) {
+            return random.nextFloat() < 0.55F ? FightPhase.HOLD : FightPhase.SWEEP;
+        }
         // Played out: no run left in it, just hold or thrash weakly so it can be reeled home.
         if (f >= 0.9F) {
             return random.nextFloat() < 0.6F ? FightPhase.HOLD : FightPhase.SWEEP;
@@ -1416,9 +1474,11 @@ public class ServerFishingManager
         float wPull = 1.4F * (1.0F - 0.6F * f) * (0.6F + fight.strength);
         float wSound = 1.1F * (1.0F - 0.6F * f);
         float wCharge = 4.0F * chargePref * (1.0F - 0.7F * f) * fight.chargeBias;
-        // Sounding (the deep dive that demands rod lifts) is reserved for sizeable fish —
-        // light catches stay a pure crank-and-reel affair.
+        // The difficulty ladder trims the tactic pool by weight: light catches stay a pure
+        // crank-and-reel affair (no Sounding dives), and only mid-weights and up spring the
+        // Charge (fast slack take-up). Darts have their own, higher rung in tickDartEvent.
         if (fight.weightLbs < cfg.soundPhaseMinWeightLbs.get()) wSound = 0.0F;
+        if (fight.weightLbs < cfg.chargePhaseMinWeightLbs.get()) wCharge = 0.0F;
         switch (prev) { // discourage repeating the same tactic twice in a row
             case HOLD -> wHold *= 0.15F;
             case SWEEP -> wSweep *= 0.2F;
@@ -1533,6 +1593,12 @@ public class ServerFishingManager
                         * (0.4D + 0.9D * Math.min(1.0D, lift * 2.0D)); // lift a diver before it will come
                 case CHARGE -> 1.3D;                                // take up its slack fast
             };
+            // Bottom rung of the difficulty ladder: a fish light enough to demand no rod
+            // work at all can simply be cranked through its own runs — no lift needed,
+            // ever. "Very easy with a basic reel" is a promise, not a vibe.
+            if (fight.phase.isRun() && fight.weightLbs < cfg.soundPhaseMinWeightLbs.get()) {
+                eff *= 1.6D;
+            }
             target = cfg.reelInSpeed.get() / 20.0D * crankFrac * (1.0D - resist) * eff * fight.reelScale;
             // A darting fish is pulling broadside: the crank gains NOTHING until the prompt
             // is answered — the dart is an interrupt, and answering it demands a stopped
