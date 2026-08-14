@@ -1,1 +1,12 @@
-{ "variants": { "": { "model": "nicecatch:block/fish_tank" } } }
+{
+  "multipart": [
+    { "apply": { "model": "nicecatch:block/fish_tank" } },
+    { "when": { "filled": "true" }, "apply": { "model": "nicecatch:block/fish_tank_water" } },
+    { "when": { "north": "false" }, "apply": { "model": "nicecatch:block/tank_frame_north" } },
+    { "when": { "east": "false" },  "apply": { "model": "nicecatch:block/tank_frame_north", "y": 90 } },
+    { "when": { "south": "false" }, "apply": { "model": "nicecatch:block/tank_frame_north", "y": 180 } },
+    { "when": { "west": "false" },  "apply": { "model": "nicecatch:block/tank_frame_north", "y": 270 } },
+    { "when": { "up": "false" },    "apply": { "model": "nicecatch:block/tank_frame_up" } },
+    { "when": { "down": "false" },  "apply": { "model": "nicecatch:block/tank_frame_down" } }
+  ]
+}

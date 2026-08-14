@@ -30,11 +30,25 @@ public final class ClientModEvents
         event.registerEntityRenderer(ModEntities.LINE_ARROW.get(), LineArrowRenderer::new);
         event.registerBlockEntityRenderer(
                 net.camacraft.nicecatch.registry.ModBlockEntities.FISH_TANK.get(), FishTankRenderer::new);
+        event.registerBlockEntityRenderer(
+                net.camacraft.nicecatch.registry.ModBlockEntities.ROD_STAND.get(), RodStandRenderer::new);
     }
+
 
     @SubscribeEvent
     public static void onClientSetup(FMLClientSetupEvent event)
     {
         event.enqueueWork(() -> MenuScreens.register(ModMenus.FISH_TRAP.get(), FishTrapScreen::new));
+    }
+
+    /** The tank's water uses the real vanilla water texture, so it needs the biome tint. */
+    @SubscribeEvent
+    public static void onBlockColors(net.minecraftforge.client.event.RegisterColorHandlersEvent.Block event)
+    {
+        event.register((state, level, pos, tintIndex) ->
+                        level != null && pos != null
+                                ? net.minecraft.client.renderer.BiomeColors.getAverageWaterColor(level, pos)
+                                : 0x3F76E4,
+                net.camacraft.nicecatch.registry.ModBlocks.FISH_TANK.get());
     }
 }

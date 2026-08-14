@@ -103,8 +103,10 @@ public abstract class FishingHookMixin
             nicecatch$escapeTicks = 0;
         }
 
-        // Line pay-out clicks from a settled, fishless bobber.
-        if (self.currentState == FishingHook.FishHookState.BOBBING && self.hookedIn == null) {
+        // Line pay-out clicks from a settled, fishless bobber. A stand-parked line is not
+        // paying out anything — the owner walking away has let go of that rod entirely.
+        if (self.currentState == FishingHook.FishHookState.BOBBING && self.hookedIn == null
+                && !net.camacraft.nicecatch.block.RodStandBlockEntity.isStandHeld(self)) {
             Player owner = self.getPlayerOwner();
             if (owner != null) {
                 double dist = self.distanceTo(owner);
@@ -139,6 +141,8 @@ public abstract class FishingHookMixin
         FishingHook self = (FishingHook) (Object) this;
         if (!NiceCatchConfig.SERVER.spoolDragEnabled.get()) return;
         if (self.currentState != FishingHook.FishHookState.BOBBING || self.hookedIn != null) return;
+        // A stand holds this line, not the walking owner: it must never trail after them.
+        if (net.camacraft.nicecatch.block.RodStandBlockEntity.isStandHeld(self)) return;
 
         Player owner = self.getPlayerOwner();
         if (owner == null || RodUtil.findRodHand(owner) == null) return;

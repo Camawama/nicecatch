@@ -27,9 +27,55 @@ import net.minecraft.world.phys.BlockHitResult;
  */
 public class FishTankBlock extends BaseEntityBlock
 {
+    // One connection flag per side: a connected side renders neither glass frame nor
+    // interior faces, which is what makes a bank of tanks read as ONE seamless aquarium.
+    public static final java.util.Map<Direction, net.minecraft.world.level.block.state.properties.BooleanProperty>
+            CONNECTED = java.util.Map.of(
+                    Direction.NORTH, net.minecraft.world.level.block.state.properties.BlockStateProperties.NORTH,
+                    Direction.SOUTH, net.minecraft.world.level.block.state.properties.BlockStateProperties.SOUTH,
+                    Direction.EAST, net.minecraft.world.level.block.state.properties.BlockStateProperties.EAST,
+                    Direction.WEST, net.minecraft.world.level.block.state.properties.BlockStateProperties.WEST,
+                    Direction.UP, net.minecraft.world.level.block.state.properties.BlockStateProperties.UP,
+                    Direction.DOWN, net.minecraft.world.level.block.state.properties.BlockStateProperties.DOWN);
+
+    /** A tank starts EMPTY: it holds water (and then fish) only once a bucket fills it. */
+    public static final net.minecraft.world.level.block.state.properties.BooleanProperty FILLED =
+            net.minecraft.world.level.block.state.properties.BooleanProperty.create("filled");
+
     public FishTankBlock(Properties properties)
     {
         super(properties);
+        BlockState state = stateDefinition.any().setValue(FILLED, false);
+        for (var property : CONNECTED.values()) {
+            state = state.setValue(property, false);
+        }
+        registerDefaultState(state);
+    }
+
+    @Override
+    protected void createBlockStateDefinition(
+            net.minecraft.world.level.block.state.StateDefinition.Builder<net.minecraft.world.level.block.Block, BlockState> builder)
+    {
+        CONNECTED.values().forEach(builder::add);
+        builder.add(FILLED);
+    }
+
+    @Override
+    public BlockState getStateForPlacement(net.minecraft.world.item.context.BlockPlaceContext context)
+    {
+        BlockState state = defaultBlockState();
+        for (Direction dir : Direction.values()) {
+            state = state.setValue(CONNECTED.get(dir),
+                    context.getLevel().getBlockState(context.getClickedPos().relative(dir)).is(this));
+        }
+        return state;
+    }
+
+    @Override
+    public BlockState updateShape(BlockState state, Direction direction, BlockState neighbor,
+                                  net.minecraft.world.level.LevelAccessor level, BlockPos pos, BlockPos neighborPos)
+    {
+        return state.setValue(CONNECTED.get(direction), neighbor.is(this));
     }
 
     @Override
@@ -38,11 +84,16 @@ public class FishTankBlock extends BaseEntityBlock
         return RenderShape.MODEL;
     }
 
-    /** Neighboring tanks merge visually: interior faces (glass AND water) are skipped. */
+    /**
+     * Neighboring tanks merge visually: interior faces (glass AND water) are skipped —
+     * but only between tanks in the SAME fill state, so an empty tank against a full one
+     * still shows the water wall through the shared pane.
+     */
     @Override
     public boolean skipRendering(BlockState state, BlockState adjacent, Direction direction)
     {
-        return adjacent.is(this) || super.skipRendering(state, adjacent, direction);
+        return (adjacent.is(this) && adjacent.getValue(FILLED) == state.getValue(FILLED))
+                || super.skipRendering(state, adjacent, direction);
     }
 
     @Override
@@ -86,7 +137,19 @@ public class FishTankBlock extends BaseEntityBlock
         }
         ItemStack held = player.getItemInHand(hand);
 
-        if (tank.getFish().isEmpty() && isTankable(held, level)) {
+        // An empty tank wants water first: a bucket fills THIS pane's worth.
+        if (!state.getValue(FILLED) && held.is(net.minecraft.world.item.Items.WATER_BUCKET)) {
+            if (!level.isClientSide) {
+                level.setBlock(pos, state.setValue(FILLED, true), 3);
+                if (!player.getAbilities().instabuild) {
+                    player.setItemInHand(hand, new ItemStack(net.minecraft.world.item.Items.BUCKET));
+                }
+                level.playSound(null, pos, SoundEvents.BUCKET_EMPTY, SoundSource.BLOCKS, 0.8F, 1.0F);
+            }
+            return InteractionResult.sidedSuccess(level.isClientSide);
+        }
+
+        if (state.getValue(FILLED) && tank.getFish().isEmpty() && isTankable(held, level)) {
             if (!level.isClientSide) {
                 ItemStack one = held.copyWithCount(1);
                 if (!player.getAbilities().instabuild) held.shrink(1);

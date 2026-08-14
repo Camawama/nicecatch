@@ -5,6 +5,38 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed (polish round 2)
+- **Parked rods show their CAST texture** (line-out model), resolved through the rod's own
+  item override so modded rods' cast models work too.
+- **Tank fish no longer puppet the fish in your hand**: the tank kept writing motion into
+  the same display dummy the in-hand carry renders; tanks now keep their own dummies.
+- **Tank fish stay inside the glass**: in L- and T-shaped builds the fish glides from tank
+  cell to ADJACENT tank cell (a random walk over the actual filled blocks) instead of
+  roaming the bounding box through open air.
+- **Tanks start EMPTY and take a water bucket** to fill (per pane), and the water inside
+  is now the real vanilla water texture with proper biome tint.
+- **Stand lines went quiet for their owner**: no more pay-out clicking when walking away
+  from a parked rod, and the spool-drag no longer tugs a parked bobber after the player.
+- **Grabbing a stand rod with a fish on actually starts the fight** on screen (the client
+  was never told and sat in plain reel mode with a full blue bar).
+- **Bell sits flush against the stand post.**
+
+### Fixed (polish round)
+- **Fish tanks are truly seamless now**: connection-aware faces — the glass FRAME only
+  renders on sides not touching another tank, the fill uses new borderless glass and
+  water textures, and interior faces vanish. A bank of tanks reads as one framed glass
+  aquarium with one continuous body of water, no grid lines.
+- **Rod stand shows the REAL rod**: the parked rod renders as its actual item (any modded
+  rod, enchant glint and all), planted on the stand and leaning toward wherever its line
+  was cast — a drifting bobber swings the rod live. The ugly block-model arm is gone.
+  The line now meets the rod tip instead of floating overhead (vanilla adds the caster's
+  own first-person hand lift to line anchors; it is now compensated).
+- **Rod stand pickup soft-lock fixed**: taking a rod back restores the client's line
+  state, so the rod correctly shows the line as out (and reels it) instead of offering a
+  phantom cast that did nothing until a hotbar flicker.
+- **Bubble jet burbles** like a vanilla bubble column (offset per jet so rows chorus
+  rather than tick together).
+
 ### Fixed (big-pass follow-up)
 - **Fish tanks actually connect now**: tanks placed together merge into one aquarium —
   shared glass walls and interior water seams vanish, so a 2x2x2 or 3x3x3 reads as a
@@ -19,9 +51,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   weird floating rod arm is gone from the ITEM model, an attached bell now renders as a
   small bell on the stand and can be snipped off with shears, and a parked line survives
   its owner logging out (frozen until they return).
-- **Water murk v2**: smoothly interpolated noise (no more blocky patches, seamless across
-  chunks), and murk now scales with DEPTH — shore shallows stay readable, the drop-off
-  past them goes dark. Exactly like standing over real water.
 - **Bubble jet**: reach doubled (12 default, up to 32), intake bubbles now drift into the
   soul-sand sides so the pump visibly breathes in and out, and jets idle for free when no
   player is near.
@@ -56,10 +85,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   BELL right-clicked onto the stand rings out when something takes it. Grabbing the rod
   with a fish on sets the hook instantly — the fight starts on the spot. The line renders
   from the stand, not from your empty hands.
-- **Patchy water murk** (`client.waterMurk*`): the water surface darkens in irregular
-  noise patches, so fish under a murky patch are hard to spot from above and a bite gets
-  its surprise back. Underwater visibility is untouched. (Baked into chunk geometry;
-  shader packs that replace the water renderer bypass it.)
 - **Fish jump** (`jumps:true` in fishProfiles — salmon and tropical fish by default,
   `species.fishJumpChance`): idle near-surface fish occasionally leap clear of the water.
 - **Weather matters** (`species.rainBiteMultiplier` / `thunderBiteMultiplier`): rain on

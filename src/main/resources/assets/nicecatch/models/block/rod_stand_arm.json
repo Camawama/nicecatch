@@ -1,8 +1,0 @@
-{
-  "textures": { "rod": "minecraft:block/dark_oak_log", "particle": "minecraft:block/dark_oak_log" },
-  "elements": [
-    { "from": [7.5, 6, -2], "to": [8.5, 7, 14],
-      "rotation": { "origin": [8, 6.5, 8], "axis": "x", "angle": -45 },
-      "faces": { "north": {"texture": "#rod"}, "south": {"texture": "#rod"}, "east": {"texture": "#rod"}, "west": {"texture": "#rod"}, "up": {"texture": "#rod"}, "down": {"texture": "#rod"} } }
-  ]
-}

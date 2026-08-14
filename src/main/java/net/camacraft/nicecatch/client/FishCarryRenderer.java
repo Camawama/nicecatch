@@ -90,35 +90,21 @@ public final class FishCarryRenderer
         return DISPLAY.contains(entity);
     }
 
-    /** The cached display entity for a fish item — shared with the fish tank's renderer. */
+    /** The cached display entity for a fish item — the in-hand carry's own dummies. */
     @Nullable
     public static Entity displayFor(ItemStack stack)
     {
         return stack.isEmpty() ? null : displayEntity(stack.getItem());
     }
 
-    /** A cached display entity straight from an entity type (spawn eggs, fish buckets). */
-    @Nullable
-    public static Entity displayForType(@Nullable EntityType<?> type)
+    /**
+     * Registers an EXTERNAL display dummy (the fish tank keeps its own — sharing ours let
+     * a tank's motion puppet the fish item in the player's hand) so the world-fish render
+     * hooks skip it like they skip ours.
+     */
+    public static void markDisplayEntity(Entity entity)
     {
-        Minecraft mc = Minecraft.getInstance();
-        if (type == null || mc.level == null) return null;
-        if (dummyLevel != mc.level) {
-            DUMMIES.clear();
-            DISPLAY.clear();
-            TYPE_BY_ITEM.clear();
-            dummyLevel = mc.level;
-        }
-        Entity cached = DUMMIES.get(type);
-        if (cached != null) return cached;
-        Entity created = type.create(mc.level);
-        if (created == null || !FishBehavior.isFishKind(created)) {
-            if (created != null) created.discard();
-            return null;
-        }
-        DUMMIES.put(type, created);
-        DISPLAY.add(created);
-        return created;
+        DISPLAY.add(entity);
     }
 
     /**

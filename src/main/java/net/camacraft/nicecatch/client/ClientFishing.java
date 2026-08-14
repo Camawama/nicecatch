@@ -433,7 +433,9 @@ public class ClientFishing
             }
             case FIGHT -> {
                 fightTicks++;
-                if (fightTargetGone(mc, player)) {
+                // A grace over the first few ticks: a stand-grab fight message can land a
+                // tick before the block-entity sync that restores player.fishing.
+                if (fightTicks > 8 && fightTargetGone(mc, player)) {
                     phase = Phase.IDLE;
                     fightAnchorId = -1;
                     break;

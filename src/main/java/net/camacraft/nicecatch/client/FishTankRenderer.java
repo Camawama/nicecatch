@@ -1,8 +1,8 @@
 package net.camacraft.nicecatch.client;
 
 import com.mojang.blaze3d.vertex.PoseStack;
-import com.mojang.math.Axis;
 import net.camacraft.nicecatch.block.FishTankBlockEntity;
+import net.camacraft.nicecatch.server.FishBehavior;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.renderer.MultiBufferSource;
 import net.minecraft.client.renderer.blockentity.BlockEntityRenderer;
@@ -12,26 +12,34 @@ import net.minecraft.resources.ResourceLocation;
 import net.minecraft.util.Mth;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.EntityType;
+import net.minecraft.world.entity.LivingEntity;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.SpawnEggItem;
-import net.minecraft.world.phys.AABB;
+import net.minecraft.world.level.Level;
 import net.minecraftforge.registries.ForgeRegistries;
 
 import javax.annotation.Nullable;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
+import java.util.Random;
 
 /**
- * Renders the tank's occupant actually SWIMMING: the fish cruises a slow, wandering closed
- * path through the whole connected aquarium (the block entity's region scan), facing along
- * its motion, upright and finning at real-time animation rate.
+ * Renders the tank's occupant swimming its aquarium. The fish glides from tank cell to
+ * ADJACENT tank cell (a random walk over the actual filled blocks), so in an L- or
+ * T-shaped build it never drifts through open air — it can only be where glass and water
+ * actually are. It faces its motion, sits upright, and fins at real-time rate.
  *
- * The two rendering traps this dodges: display dummies never tick, so their animation clock
- * is frozen — the clock is driven from world game time instead (real seconds, not frame
- * rate) — and fish renderers lay a "dry" fish on its side in a fast flop, so the dummy is
- * marked as touching water for exactly the duration of the render (and restored, because
- * the in-hand carry shares these dummies and its poses were calibrated around the flop).
+ * Tanks keep their OWN display dummies, deliberately not shared with the in-hand carry
+ * renderer: the tank writes yaw and animation state into its dummy every frame, and a
+ * shared dummy made the fish item in the player's hand mirror the tank fish's motion.
  */
 public class FishTankRenderer implements BlockEntityRenderer<FishTankBlockEntity>
 {
+    /** Tank-private dummies (per type), never added to the world. */
+    private static final Map<EntityType<?>, Entity> TANK_DUMMIES = new HashMap<>();
+    @Nullable private static Level dummyLevel;
+
     public FishTankRenderer(BlockEntityRendererProvider.Context context) {}
 
     @Override
@@ -45,51 +53,52 @@ public class FishTankRenderer implements BlockEntityRenderer<FishTankBlockEntity
 
         float trueScale = stack.getTagElement("NiceCatch") != null
                 ? FishCarryRenderer.displayScale(display, stack) : 1.0F;
-
-        AABB region = tank.tankRegion();
-        double minDim = Math.min(region.getXsize(), Math.min(region.getYsize(), region.getZsize()));
+        // Fit to a single cell's interior, so the fish can follow corridors of any build.
         float span = Math.max(display.getBbWidth(), display.getBbHeight());
-        // The fish fits its aquarium: bigger builds genuinely hold bigger fish.
-        float scale = Math.min(trueScale, (float) (minDim - 0.5D) / Math.max(0.15F, span));
-        float halfW = display.getBbWidth() * scale * 0.5F;
+        float scale = Math.min(trueScale, 0.55F / Math.max(0.15F, span));
         float halfH = display.getBbHeight() * scale * 0.5F;
 
-        // A slow lissajous wander filling the region: irrational-ish frequency ratios keep
-        // the path from ever visibly repeating, and a per-tank phase desynchronizes a row
-        // of separate aquariums.
-        double t = tank.getLevel().getGameTime() + partialTick;
-        BlockPos pos = tank.getBlockPos();
-        double phase = (pos.asLong() * 0x9E3779B97F4A7C15L >>> 40 & 0xFFF) / 651.0D;
-
-        double cx = (region.minX + region.maxX) * 0.5D;
-        double cy = (region.minY + region.maxY) * 0.5D;
-        double cz = (region.minZ + region.maxZ) * 0.5D;
-        double ax = Math.max(0.0D, region.getXsize() * 0.5D - 0.25D - halfW);
-        double ay = Math.max(0.0D, region.getYsize() * 0.5D - 0.30D - halfH);
-        double az = Math.max(0.0D, region.getZsize() * 0.5D - 0.25D - halfW);
-
-        double wx = 0.017D, wz = 0.011D, wy = 0.006D;
-        double px = cx + Math.sin(t * wx + phase) * ax;
-        double pz = cz + Math.sin(t * wz + phase * 1.7D) * az;
-        double py = cy + Math.sin(t * wy + phase * 2.3D) * ay * 0.8D;
-
-        // Face along the path's tangent, like something choosing where it swims.
-        double dx = Math.cos(t * wx + phase) * wx * ax;
-        double dz = Math.cos(t * wz + phase * 1.7D) * wz * az;
-        float yaw = (dx * dx + dz * dz) > 1.0E-10D
-                ? (float) Math.toDegrees(Math.atan2(-dx, dz)) : 0.0F;
-
-        // Real-time animation clock + in-water pose for the duration of this render only.
-        display.tickCount = (int) tank.getLevel().getGameTime();
-        display.setYRot(yaw);
-        display.yRotO = yaw;
-        if (display instanceof net.minecraft.world.entity.LivingEntity living) {
-            living.yBodyRot = yaw;
-            living.yBodyRotO = yaw;
-            living.yHeadRot = yaw;
-            living.yHeadRotO = yaw;
+        // Advance the cell-to-cell glide (frame-rate independent via the world clock).
+        List<BlockPos> cells = tank.tankCells();
+        double now = tank.getLevel().getGameTime() + partialTick;
+        if (tank.swimFrom == null || tank.swimTo == null
+                || !cells.contains(tank.swimFrom) || !cells.contains(tank.swimTo)) {
+            tank.swimFrom = tank.getBlockPos();
+            tank.swimTo = pickNeighbor(cells, tank.swimFrom, tank.getBlockPos());
+            tank.swimProgress = 0.0D;
+        }
+        tank.swimProgress += 0.017D * frameDelta(tank, now);
+        if (tank.swimProgress >= 1.0D) {
+            tank.swimProgress = 0.0D;
+            tank.swimFrom = tank.swimTo;
+            tank.swimTo = pickNeighbor(cells, tank.swimFrom, tank.getBlockPos());
         }
 
+        double eased = tank.swimProgress * tank.swimProgress * (3.0D - 2.0D * tank.swimProgress);
+        double px = Mth.lerp(eased, tank.swimFrom.getX(), tank.swimTo.getX()) + 0.5D;
+        double py = Mth.lerp(eased, tank.swimFrom.getY(), tank.swimTo.getY()) + 0.45D
+                + Math.sin(now * 0.07D) * 0.04D;
+        double pz = Mth.lerp(eased, tank.swimFrom.getZ(), tank.swimTo.getZ()) + 0.5D;
+
+        // Face travel; hovering in place keeps the last heading and idles a slow turn.
+        double dx = tank.swimTo.getX() - tank.swimFrom.getX();
+        double dz = tank.swimTo.getZ() - tank.swimFrom.getZ();
+        float targetYaw = (dx * dx + dz * dz) > 1.0E-6D
+                ? (float) Math.toDegrees(Math.atan2(-dx, dz)) : tank.swimYaw + 0.15F;
+        tank.swimYaw += Mth.wrapDegrees(targetYaw - tank.swimYaw) * 0.06F;
+
+        // Real-time animation clock + upright in-water pose, on OUR dummy only.
+        display.tickCount = (int) tank.getLevel().getGameTime();
+        display.setYRot(tank.swimYaw);
+        display.yRotO = tank.swimYaw;
+        if (display instanceof LivingEntity living) {
+            living.yBodyRot = tank.swimYaw;
+            living.yBodyRotO = tank.swimYaw;
+            living.yHeadRot = tank.swimYaw;
+            living.yHeadRotO = tank.swimYaw;
+        }
+
+        BlockPos pos = tank.getBlockPos();
         pose.pushPose();
         pose.translate(px - pos.getX(), py - pos.getY() - halfH, pz - pos.getZ());
         pose.scale(scale, scale, scale);
@@ -103,22 +112,70 @@ public class FishTankRenderer implements BlockEntityRenderer<FishTankBlockEntity
         pose.popPose();
     }
 
+    /** Per-tank frame delta from the world clock (render time isn't tick time). */
+    private static final Map<BlockPos, Double> LAST_RENDER = new HashMap<>();
+
+    private static double frameDelta(FishTankBlockEntity tank, double now)
+    {
+        Double last = LAST_RENDER.put(tank.getBlockPos().immutable(), now);
+        if (last == null) return 0.0D;
+        double delta = now - last;
+        return delta > 0.0D && delta < 5.0D ? delta : 0.0D;
+    }
+
+    /** A random ADJACENT filled cell (deterministic-ish, but wandering); stays put if boxed in. */
+    private static BlockPos pickNeighbor(List<BlockPos> cells, BlockPos from, BlockPos seedPos)
+    {
+        var options = new java.util.ArrayList<BlockPos>(6);
+        for (var dir : net.minecraft.core.Direction.values()) {
+            BlockPos next = from.relative(dir);
+            if (cells.contains(next)) options.add(next);
+        }
+        if (options.isEmpty()) return from;
+        Random random = new Random(seedPos.asLong() * 31L + System.nanoTime() / 200_000_000L);
+        return options.get(random.nextInt(options.size()));
+    }
+
     /** Live-fish sources: stamped catch items, fish spawn eggs, and fish buckets. */
     @Nullable
     private static Entity resolveDisplay(ItemStack stack)
     {
         if (stack.getItem() instanceof SpawnEggItem egg) {
-            return FishCarryRenderer.displayForType(egg.getType(stack.getTag()));
+            return tankDummy(egg.getType(stack.getTag()));
         }
         var id = ForgeRegistries.ITEMS.getKey(stack.getItem());
         if (id != null && id.getPath().endsWith("_bucket")) {
             var entityId = ResourceLocation.fromNamespaceAndPath(
                     id.getNamespace(), id.getPath().substring(0, id.getPath().length() - 7));
             if (ForgeRegistries.ENTITY_TYPES.containsKey(entityId)) {
-                EntityType<?> type = ForgeRegistries.ENTITY_TYPES.getValue(entityId);
-                return FishCarryRenderer.displayForType(type);
+                return tankDummy(ForgeRegistries.ENTITY_TYPES.getValue(entityId));
             }
         }
-        return FishCarryRenderer.displayFor(stack);
+        if (id != null && ForgeRegistries.ENTITY_TYPES.containsKey(id)) {
+            return tankDummy(ForgeRegistries.ENTITY_TYPES.getValue(id));
+        }
+        return null;
+    }
+
+    @Nullable
+    private static Entity tankDummy(@Nullable EntityType<?> type)
+    {
+        Minecraft mc = Minecraft.getInstance();
+        if (type == null || mc.level == null) return null;
+        if (dummyLevel != mc.level) {
+            TANK_DUMMIES.clear();
+            LAST_RENDER.clear();
+            dummyLevel = mc.level;
+        }
+        Entity cached = TANK_DUMMIES.get(type);
+        if (cached != null) return cached;
+        Entity created = type.create(mc.level);
+        if (created == null || !FishBehavior.isFishKind(created)) {
+            if (created != null) created.discard();
+            return null;
+        }
+        TANK_DUMMIES.put(type, created);
+        FishCarryRenderer.markDisplayEntity(created);
+        return created;
     }
 }

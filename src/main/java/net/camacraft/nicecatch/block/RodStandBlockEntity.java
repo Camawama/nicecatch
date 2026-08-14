@@ -75,6 +75,18 @@ public class RodStandBlockEntity extends BlockEntity
         return !rod.isEmpty();
     }
 
+    /** The parked rod, for the stand's renderer (the ACTUAL item, glint and all). */
+    public ItemStack getRod()
+    {
+        return rod;
+    }
+
+    /** The parked line's hook entity id as the client knows it; -1 when no line. */
+    public int clientHookId()
+    {
+        return hookId;
+    }
+
     public boolean hasBell()
     {
         return bell;

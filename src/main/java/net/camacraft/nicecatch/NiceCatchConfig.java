@@ -666,8 +666,6 @@ public class NiceCatchConfig
         public final ForgeConfigSpec.BooleanValue rodAnimationsEnabled;
         public final ForgeConfigSpec.BooleanValue fishCarryEnabled;
         public final ForgeConfigSpec.DoubleValue scrollReelPerNotch;
-        public final ForgeConfigSpec.BooleanValue waterMurkEnabled;
-        public final ForgeConfigSpec.DoubleValue waterMurkStrength;
 
         Client(ForgeConfigSpec.Builder b)
         {
@@ -707,10 +705,6 @@ public class NiceCatchConfig
                     .define("fishCarryEnabled", true);
             scrollReelPerNotch = b.comment("Crank revolutions added per scroll-wheel notch while working the reel (scroll DOWN = wind line in, scroll UP = deliberately pay line out, easing tension at the cost of ground — matching a real reel handle's motion). 0 disables scroll controls entirely.")
                     .defineInRange("scrollReelPerNotch", 0.12D, 0.0D, 1.0D);
-            waterMurkEnabled = b.comment("Patchy surface murk: the water surface darkens in irregular noise patches, so fish under it are harder to spot from above and a bite stays a surprise. Underwater visibility is untouched (only surface-layer water is tinted). Purely visual, client-side; shader packs that replace the water renderer bypass it.")
-                    .define("waterMurkEnabled", true);
-            waterMurkStrength = b.comment("How dark the murkiest surface patches get (0 = invisible, 1 = near-black).")
-                    .defineInRange("waterMurkStrength", 0.5D, 0.0D, 1.0D);
         }
     }
 }

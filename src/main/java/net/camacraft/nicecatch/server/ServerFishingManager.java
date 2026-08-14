@@ -140,6 +140,9 @@ public class ServerFishingManager
         Session session = session(player);
         clearBiteFlow(player.serverLevel(), session);
         startEntityFight(player, session, hook, hand, fish);
+        // The client never went through the bite/hook-set flow for a stand grab, so it
+        // must be told to enter the fight directly (-1 = an ordinary rod-anchored fight).
+        NiceCatchNet.sendTo(player, new net.camacraft.nicecatch.network.ArrowFightMessage(-1));
         return true;
     }
 

@@ -110,6 +110,14 @@ public class BubbleJetBlock extends BaseEntityBlock
             }
         }
 
+        // It sounds exactly like the vanilla upward column, offset per jet so a row of
+        // them burbles as a chorus instead of a metronome.
+        if ((level.getGameTime() + (pos.asLong() & 63)) % 52 == 0) {
+            level.playSound(null, pos, net.minecraft.sounds.SoundEvents.BUBBLE_COLUMN_UPWARDS_AMBIENT,
+                    net.minecraft.sounds.SoundSource.BLOCKS, 0.6F,
+                    0.9F + level.random.nextFloat() * 0.2F);
+        }
+
         // The visible stream: a couple of bubbles somewhere along the beam every few ticks.
         if (level.getGameTime() % 3 == 0) {
             double t = level.random.nextDouble() * reach;

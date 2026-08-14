@@ -80,29 +80,37 @@ public class FishTankBlockEntity extends BlockEntity
     /** Hard cap on how many joined tanks one region scan follows (a 4x4x4 build). */
     private static final int REGION_CAP = 64;
 
-    @Nullable private net.minecraft.world.phys.AABB regionCache;
+    @Nullable private java.util.List<BlockPos> cellCache;
+    @Nullable private net.minecraft.world.phys.AABB boundsCache;
     private long regionCacheTime = Long.MIN_VALUE;
 
+    // The occupant's wandering state: it glides cell-center to ADJACENT cell-center, so in
+    // an L- or T-shaped build it never cuts a corner through open air. (Client-side only.)
+    @Nullable public BlockPos swimFrom;
+    @Nullable public BlockPos swimTo;
+    public double swimProgress;
+    public float swimYaw;
+
     /**
-     * The full interior of every fish tank connected to this one, so the occupant swims the
-     * WHOLE aquarium the player built, not one glass cell. Rescanned every couple of
-     * seconds — placing or breaking tanks reshapes the swim room shortly after.
+     * Every WATER-FILLED tank cell connected to this one — the actual rooms the occupant
+     * may swim through, not a bounding box that could include open air in non-cuboid
+     * builds. Rescanned every couple of seconds so edits reshape the swim room shortly.
      */
-    public net.minecraft.world.phys.AABB tankRegion()
+    public java.util.List<BlockPos> tankCells()
     {
-        if (level == null) return new net.minecraft.world.phys.AABB(worldPosition);
+        if (level == null) return java.util.List.of(worldPosition);
         long now = level.getGameTime();
-        if (regionCache == null || now - regionCacheTime > 40) {
+        if (cellCache == null || now - regionCacheTime > 40) {
             regionCacheTime = now;
-            regionCache = computeRegion();
+            computeRegion();
         }
-        return regionCache;
+        return cellCache != null ? cellCache : java.util.List.of(worldPosition);
     }
 
-    private net.minecraft.world.phys.AABB computeRegion()
+    private void computeRegion()
     {
         var block = getBlockState().getBlock();
-        var visited = new java.util.HashSet<BlockPos>();
+        var visited = new java.util.LinkedHashSet<BlockPos>();
         var queue = new java.util.ArrayDeque<BlockPos>();
         queue.add(worldPosition);
         visited.add(worldPosition);
@@ -116,12 +124,17 @@ public class FishTankBlockEntity extends BlockEntity
                     Math.max(max.getY(), current.getY()), Math.max(max.getZ(), current.getZ()));
             for (var dir : net.minecraft.core.Direction.values()) {
                 BlockPos next = current.relative(dir);
-                if (visited.add(next) && level != null && level.getBlockState(next).is(block)) {
-                    queue.add(next);
+                if (!visited.contains(next) && level != null) {
+                    var neighborState = level.getBlockState(next);
+                    if (neighborState.is(block) && neighborState.getValue(FishTankBlock.FILLED)) {
+                        visited.add(next);
+                        queue.add(next);
+                    }
                 }
             }
         }
-        return new net.minecraft.world.phys.AABB(min.getX(), min.getY(), min.getZ(),
+        cellCache = java.util.List.copyOf(visited);
+        boundsCache = new net.minecraft.world.phys.AABB(min.getX(), min.getY(), min.getZ(),
                 max.getX() + 1.0D, max.getY() + 1.0D, max.getZ() + 1.0D);
     }
 
@@ -129,6 +142,8 @@ public class FishTankBlockEntity extends BlockEntity
     @Override
     public net.minecraft.world.phys.AABB getRenderBoundingBox()
     {
-        return tankRegion().inflate(1.0D);
+        tankCells();
+        return (boundsCache != null ? boundsCache
+                : new net.minecraft.world.phys.AABB(worldPosition)).inflate(1.0D);
     }
 }

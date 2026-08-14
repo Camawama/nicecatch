@@ -1,0 +1,13 @@
+{
+  "textures": { "frame": "nicecatch:block/tank_frame", "particle": "nicecatch:block/tank_frame" },
+  "elements": [
+    { "from": [0, 0, 0], "to": [16, 1, 0.05],
+      "faces": { "north": {"texture": "#frame", "cullface": "north"}, "south": {"texture": "#frame"} } },
+    { "from": [0, 15, 0], "to": [16, 16, 0.05],
+      "faces": { "north": {"texture": "#frame", "cullface": "north"}, "south": {"texture": "#frame"} } },
+    { "from": [0, 1, 0], "to": [1, 15, 0.05],
+      "faces": { "north": {"texture": "#frame", "cullface": "north"}, "south": {"texture": "#frame"} } },
+    { "from": [15, 1, 0], "to": [16, 15, 0.05],
+      "faces": { "north": {"texture": "#frame", "cullface": "north"}, "south": {"texture": "#frame"} } }
+  ]
+}
