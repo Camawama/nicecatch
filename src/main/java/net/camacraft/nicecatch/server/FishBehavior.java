@@ -92,6 +92,8 @@ public final class FishBehavior
         @Nullable public Vec3 vibrationPos;
         public long vibrationTime;
         public boolean vibrationUrgent;
+        /** Game time until which this fish wants nothing to do with any bobber (snapped a line off its lip). */
+        public long bobberShyUntil;
     }
 
     public static FishState state(PathfinderMob fish)
@@ -430,6 +432,7 @@ public final class FishBehavior
             PathfinderMob fish = entry.getKey();
             FishState state = entry.getValue();
             if (state.bobber != hook || state.hooked || state.biteBobber != null) continue;
+            if (now < state.bobberShyUntil) continue;
             if (!fish.isAlive() || isScattering(fish) || now < state.biteCooldownUntil) continue;
             if (fish.distanceToSqr(hook) > range * range) continue;
             out.add(fish);
@@ -447,6 +450,22 @@ public final class FishBehavior
     {
         FishState state = STATES.get(fish);
         return state != null && state.hooked;
+    }
+
+    /** A fish that just broke a line off its lip wants nothing to do with any bobber. */
+    public static boolean isBobberShy(PathfinderMob fish)
+    {
+        FishState state = STATES.get(fish);
+        return state != null && fish.level().getGameTime() < state.bobberShyUntil;
+    }
+
+    /** The hook tore free of this fish's mouth: bobbers are dead to it for a while. */
+    public static void makeBobberShy(PathfinderMob fish, int ticks)
+    {
+        if (ticks <= 0) return;
+        FishState state = state(fish);
+        state.bobberShyUntil = fish.level().getGameTime() + ticks;
+        state.interest = 0.0F;
     }
 
     // ---- Mutations ----
@@ -677,6 +696,7 @@ public final class FishBehavior
     @Nullable
     public static FishingHook findFollowableBobber(PathfinderMob fish)
     {
+        if (isBobberShy(fish)) return null;
         double radius = NiceCatchConfig.SERVER.followFollowerRadius.get();
         AABB box = fish.getBoundingBox().inflate(radius);
         for (PathfinderMob other : fish.level().getEntitiesOfClass(PathfinderMob.class, box, f -> f != fish)) {
@@ -698,6 +718,7 @@ public final class FishBehavior
     @Nullable
     public static FishingHook findNearbyBobber(PathfinderMob fish)
     {
+        if (isBobberShy(fish)) return null;
         java.util.Set<FishingHook> hooks = BOBBERS.get(fish.level());
         if (hooks == null || hooks.isEmpty()) return null;
         FishingHook best = null;

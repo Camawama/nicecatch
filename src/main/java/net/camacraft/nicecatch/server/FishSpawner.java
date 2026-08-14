@@ -58,6 +58,8 @@ public final class FishSpawner
         if ((player.tickCount + (player.getId() & 0xFFFF)) % interval != 0) return;
 
         ServerLevel level = player.serverLevel();
+        // The supplemental spawner is still MOB SPAWNING: the gamerule turns it off too.
+        if (!level.getGameRules().getBoolean(net.minecraft.world.level.GameRules.RULE_DOMOBSPAWNING)) return;
         double radius = cfg.extraSpawnRadius.get();
 
         // Our own accounting: every fish-kind entity in the column around the player counts.

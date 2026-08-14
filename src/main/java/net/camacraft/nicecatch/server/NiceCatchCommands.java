@@ -183,8 +183,11 @@ public final class NiceCatchCommands
         RandomSource random = level.random;
         int spawned = 0;
         String lastSummary = "";
+        // One time budget for the whole command, so a 24-fish extreme-weight request can't
+        // stall the server: later fish just settle for slightly-further-off weights.
+        long deadline = System.nanoTime() + 400_000_000L;
         for (int i = 0; i < count; i++) {
-            UUID individual = findIndividual(type, weightLbs, wantTraits, random);
+            UUID individual = findIndividual(type, weightLbs, wantTraits, random, deadline);
             if (individual == null) {
                 source.sendFailure(Component.literal(
                         "No such individual exists: " + unreachableHint(type, weightLbs)));
@@ -220,15 +223,26 @@ public final class NiceCatchCommands
      * Sizes and traits are a pure function of the UUID (that's what keeps them sync-free and
      * persistent), so a fish matching the request is FOUND, not fabricated: roll the lottery
      * until an individual with the right weight and traits comes up, then spawn exactly it.
+     *
+     * BEST-EFFORT on weight: an extreme request (a 777-pounder needs a rare trait AND a top
+     * size roll) used to succeed or fail on pure lottery luck, which felt broken. Now the
+     * requested traits stay a hard requirement, but if no candidate lands inside the weight
+     * tolerance before the tries (or the shared time budget) run out, the CLOSEST-weighted
+     * candidate found is spawned instead — the summary line shows its true weight. Null only
+     * when the trait combination itself never came up (genuinely impossible under config).
      */
     @Nullable
     private static UUID findIndividual(EntityType<?> type, float weightLbs,
-                                       @Nullable Set<String> wantTraits, RandomSource random)
+                                       @Nullable Set<String> wantTraits, RandomSource random,
+                                       long deadlineNanos)
     {
         if (weightLbs <= 0.0F && wantTraits == null) {
             return Mth.createInsecureUUID(random);
         }
+        UUID best = null;
+        double bestError = Double.MAX_VALUE;
         for (int tries = 0; tries < MAX_SEARCH_TRIES; tries++) {
+            if ((tries & 2047) == 0 && System.nanoTime() > deadlineNanos) break;
             UUID candidate = Mth.createInsecureUUID(random);
             FishTraits.Modifiers mods = FishTraits.computeFor(candidate);
             if (wantTraits != null) {
@@ -236,13 +250,16 @@ public final class NiceCatchCommands
                 for (FishTraits.FishTrait trait : mods.traits()) has.add(trait.id);
                 if (!has.equals(wantTraits)) continue;
             }
-            if (weightLbs > 0.0F) {
-                float lbs = weightFor(type, candidate, mods);
-                if (Math.abs(lbs - weightLbs) / weightLbs > WEIGHT_TOLERANCE) continue;
+            if (weightLbs <= 0.0F) return candidate;
+            float lbs = weightFor(type, candidate, mods);
+            double error = Math.abs(lbs - weightLbs) / weightLbs;
+            if (error <= WEIGHT_TOLERANCE) return candidate;
+            if (error < bestError) {
+                bestError = error;
+                best = candidate;
             }
-            return candidate;
         }
-        return null;
+        return best;
     }
 
     private static float weightFor(EntityType<?> type, UUID id, FishTraits.Modifiers mods)

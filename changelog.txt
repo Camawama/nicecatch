@@ -84,8 +84,43 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   cache now revalidates against the entity's current UUID, so summoned, loaded, and
   spawned fish all carry (and fight with) exactly the traits their UUID says.
 - **Abandoning a cast line = cutting it**: switching hotbar slots or stowing the rod
-  while any line is out (fish or not) now triggers the same re-rig rod cooldown as the
-  cut-line key. Deliberate reel-ins cost nothing.
+  while any line is out (fish or not) now gets the FULL cut-line treatment, identical to
+  the keybind — the snip sound, the "Line cut." notice, and the re-rig rod cooldown.
+  Deliberate reel-ins cost nothing.
+- **A fish that snaps your line remembers it** (`fishAI.lineSnapShyTicks`, default 2
+  minutes): after breaking free on a tension snap it shows no interest in ANY bobber —
+  no approaching, no following, no biting — until the memory fades. You don't hook the
+  same monster twice in a row by casting straight back out.
+- **The Charge, redesigned around SLACK.** A charging fish swims toward you at a
+  deliberate pace (about half its old rush — toward you, not into your boots), never
+  charges when it's already near landing range, and the crank does not move it AT ALL.
+  Instead the tension bar inverts its meaning: slack piles up every tick of the charge
+  (`fight.chargeSlackTensionPerTick`) and cranking takes it back up
+  (`fight.chargeCrankTensionRestore`, capped well below the snapping point — a slack
+  line cannot be cranked into breaking). Let the line go FULLY limp and the fish can
+  shake the unheld hook loose and escape (`fight.chargeHookThrowChance`). Snap the line
+  at the top, lose the fish at the bottom — "reel fast, take up the slack!" is now
+  literally the physics.
+- **Darts never vanish unread anymore**: a dart could spring at the tail end of a calm
+  phase and get cancelled seconds later by the next run starting — gone before the
+  prompt was readable. Darts now only spring when the full reaction window fits in the
+  phase's remaining time.
+- **`/nicecatch summon` extreme weights are consistent now**: a 777-pounder needs a rare
+  trait AND a top size roll, so the exact-match lottery sometimes came up empty ("No
+  such individual exists") on pure luck. Requested traits stay a hard requirement, but
+  weight is best-effort: if nothing lands inside tolerance, the closest-weighted
+  candidate found is spawned (the summary shows its true weight). A shared time budget
+  keeps 24-fish requests from stalling the server.
+- **Supplemental fish spawning respects /gamerule doMobSpawning** — it's still mob
+  spawning, so turning the rule off now stops Nice Catch's top-up schools too.
+- **Fish trap overhaul.** Its own GUI (no more borrowed hopper row): the green-tinted
+  bait slot stands alone on the left, an arrow points into the 2x2 haul grid — no
+  guessing which slot does what. And the trap is bait-driven now: an UNBAITED trap
+  catches nothing at all, plain food catches small fry only
+  (`trap.trapFoodBaitMaxLbs`, 5 lbs), and putting a CAUGHT FISH in the bait slot raises
+  the ceiling to several times the bait's own weight (`trap.trapBaitWeightMultiplier`,
+  x8) — crumbs catch minnows, minnows catch keepers, keepers catch trophies. No more
+  700 lb tuna strolling into an empty trap baited with nothing.
 - **Carry fixes**: a truly giant fish (trophy tuna) no longer floats forward out of the
   hands (the size-scaled cradle offset is capped AND oversized fish are pulled back
   toward the chest proportionally), and only ONE heavy fish shows at a time — a second

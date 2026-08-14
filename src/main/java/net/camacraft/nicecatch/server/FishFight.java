@@ -89,11 +89,6 @@ public class FishFight
     /** Ticks since the player last cranked; the answering yank only counts from a stopped reel. */
     public int crankQuietTicks;
 
-    /** Crank accumulated during the current Charge phase — the slack actually taken up. */
-    public float chargeCrank;
-    /** Crank the current Charge demands in total; falling short lets the fish undo it. */
-    public float chargeNeeded;
-
     /** A chain bite already happened this fight (a bigger fish ate the hooked one). */
     public boolean chainHappened;
     /** One-shot flag: tell the client about the chain bite on the next fight tick message. */

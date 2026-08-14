@@ -42,14 +42,16 @@ import java.util.WeakHashMap;
 import java.util.concurrent.ConcurrentHashMap;
 
 /**
- * The trap's working parts, behind a real inventory now: right-click opens a hopper-style
- * GUI — the bait slot on the left (any food item), the four catch slots to its right.
- * Every so often the trap rolls a catch attempt: a real fish loitering inside the catch
- * radius may be caught (converted to its item and stored), and a baited trap in empty water
- * occasionally produces a biome-appropriate fish on its own. Bait multiplies the odds, is
- * consumed one per catch, and, via the fish AI's food-interest goal, actively draws fish
- * over to nose around the trap; that investigation is exactly what puts them inside the
- * catch radius.
+ * The trap's working parts, behind a real inventory: right-click opens its dedicated GUI —
+ * the bait slot alone on the left, the 2x2 haul grid on the right. Every so often a BAITED
+ * trap rolls a catch attempt: a real fish loitering inside the catch radius may be caught
+ * (converted to its item and stored), and a baited trap in empty water occasionally
+ * produces a biome-appropriate small fish on its own. An unbaited trap catches NOTHING,
+ * and the bait sets the ceiling on what it can take: plain food brings in small fry only,
+ * while a caught fish used as bait takes fish up to several times its own weight — feed
+ * the trap upward, crumbs to minnows to keepers to trophies. Bait is consumed one per
+ * catch and, via the fish AI's food-interest goal, actively draws fish over to nose around
+ * the trap; that investigation is exactly what puts them inside the catch radius.
  *
  * Deliberately slow: it's the lazy fisher's method and must never outfish a rod.
  */
@@ -231,15 +233,21 @@ public class FishTrapBlockEntity extends BlockEntity implements Container, MenuP
         int interval = cfg.trapCheckIntervalTicks.get();
         trap.checkIn = interval - interval / 4 + random.nextInt(Math.max(1, interval / 2));
 
-        boolean baited = !trap.getItem(BAIT_SLOT).isEmpty();
-        float chance = cfg.trapCatchChance.get().floatValue()
-                * (baited ? cfg.trapBaitMultiplier.get().floatValue() : 1.0F);
+        // No bait, no catches, period: a trap catches because something in it was worth
+        // swimming into, and the bait sets the ceiling on what bothers — plain food takes
+        // only small fry; a fish in the bait slot takes fish up to several times its own
+        // weight. Feed the trap upward: crumbs, then minnows, then keepers, then trophies.
+        ItemStack bait = trap.getItem(BAIT_SLOT);
+        if (bait.isEmpty()) return;
+        float chance = cfg.trapCatchChance.get().floatValue();
+        double maxLbs = baitMaxCatchLbs(bait);
 
         Vec3 center = Vec3.atCenterOf(pos);
         double radius = cfg.trapCatchRadius.get();
         List<PathfinderMob> near = serverLevel.getEntitiesOfClass(PathfinderMob.class,
                 AABB.ofSize(center, radius * 2.0D, radius * 2.0D, radius * 2.0D),
-                f -> f.isAlive() && f.isInWater() && FishBehavior.isFishLike(f) && !FishBehavior.isHooked(f));
+                f -> f.isAlive() && f.isInWater() && FishBehavior.isFishLike(f) && !FishBehavior.isHooked(f)
+                        && net.camacraft.nicecatch.server.FishSizing.weightLbs(f) <= maxLbs);
 
         if (!near.isEmpty() && random.nextFloat() < chance) {
             PathfinderMob caught = near.get(random.nextInt(near.size()));
@@ -254,13 +262,33 @@ public class FishTrapBlockEntity extends BlockEntity implements Container, MenuP
         }
 
         // Empty water, but the bait's scent still drifts: the odd fish finds its way in.
-        if (baited && random.nextFloat() < cfg.trapAmbientCatchChance.get().floatValue()) {
+        if (random.nextFloat() < cfg.trapAmbientCatchChance.get().floatValue()) {
             ItemStack ambient = ambientCatch(serverLevel, pos, random);
             if (!ambient.isEmpty() && trap.store(ambient)) {
                 serverLevel.playSound(null, pos, SoundEvents.FISHING_BOBBER_SPLASH, SoundSource.BLOCKS, 0.3F, 0.8F);
                 trap.consumeBait();
             }
         }
+    }
+
+    /**
+     * The heaviest fish (lbs) this bait can bring into the trap. A caught fish carries its
+     * stamped weight; a fresh-off-the-loot-table fish item counts as a small one; anything
+     * that is merely food caps out at small fry. This is the trap's whole progression:
+     * what you feed it decides what it can take.
+     */
+    private static double baitMaxCatchLbs(ItemStack bait)
+    {
+        NiceCatchConfig.Server cfg = NiceCatchConfig.SERVER;
+        CompoundTag info = bait.getTagElement("NiceCatch");
+        if (info != null && info.contains("Weight")) {
+            return info.getFloat("Weight") * net.camacraft.nicecatch.server.FishSizing.KG_TO_LBS
+                    * cfg.trapBaitWeightMultiplier.get();
+        }
+        if (bait.is(net.minecraft.tags.ItemTags.FISHES)) {
+            return 1.5D * cfg.trapBaitWeightMultiplier.get(); // un-stamped fish: a small one
+        }
+        return cfg.trapFoodBaitMaxLbs.get();
     }
 
     /** A biome-appropriate fish item, by the entity-id/item-id naming convention; empty if none. */

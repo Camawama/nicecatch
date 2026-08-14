@@ -7,16 +7,20 @@ import net.minecraft.network.chat.Component;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.world.entity.player.Inventory;
 
-/** The trap's GUI: the vanilla hopper layout — bait slot left, the haul to its right. */
+/**
+ * The trap's dedicated GUI (no more borrowed hopper row): the green-tinted bait slot
+ * stands alone on the left, an arrow points at the 2x2 haul grid, and there is no
+ * guessing which slot does what.
+ */
 public class FishTrapScreen extends AbstractContainerScreen<FishTrapMenu>
 {
     private static final ResourceLocation TEXTURE =
-            ResourceLocation.withDefaultNamespace("textures/gui/container/hopper.png");
+            ResourceLocation.fromNamespaceAndPath("nicecatch", "textures/gui/fish_trap.png");
 
     public FishTrapScreen(FishTrapMenu menu, Inventory playerInventory, Component title)
     {
         super(menu, playerInventory, title);
-        imageHeight = 133;
+        imageHeight = 152;
         inventoryLabelY = imageHeight - 94;
     }
 

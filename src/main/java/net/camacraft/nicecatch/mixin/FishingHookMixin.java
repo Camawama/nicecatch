@@ -176,18 +176,26 @@ public abstract class FishingHookMixin
     /**
      * Abandoning a line out on the water — switching hotbar slots, stowing the rod, or
      * walking out past the line's absolute range — IS cutting it: the tackle is gone
-     * either way, so it carries the same re-rig cooldown as the cut-line key. (Deliberate
+     * either way, so it gets the full cut-line treatment, identical to the keybind's:
+     * the snip sound, the "Line cut." notice, and the re-rig cooldown. (Deliberate
      * retrieves go through the rod's own use path, never through this vanilla give-up
-     * check, so reeling in normally costs nothing.)
+     * check, so reeling in normally costs nothing. A dead or logged-out owner skips
+     * the ceremony.)
      */
     @Inject(method = "shouldStopFishing", at = @At("RETURN"))
     private void nicecatch$abandonedLineCooldown(Player player, CallbackInfoReturnable<Boolean> cir)
     {
         if (!cir.getReturnValueZ() || nicecatch$lastRod == null) return;
+        if (player.isRemoved() || !player.isAlive()) return;
         int cooldown = NiceCatchConfig.SERVER.cutLineCooldownTicks.get();
-        if (cooldown > 0 && !player.getCooldowns().isOnCooldown(nicecatch$lastRod)) {
+        if (cooldown > 0 && player.getCooldowns().isOnCooldown(nicecatch$lastRod)) return;
+        if (cooldown > 0) {
             player.getCooldowns().addCooldown(nicecatch$lastRod, cooldown);
         }
+        FishingHook self = (FishingHook) (Object) this;
+        self.level().playSound(null, player.getX(), player.getY(), player.getZ(),
+                SoundEvents.SHEEP_SHEAR, SoundSource.PLAYERS, 0.8F, 1.3F);
+        player.displayClientMessage(Component.translatable("nicecatch.line_cut"), true);
     }
 
     /**

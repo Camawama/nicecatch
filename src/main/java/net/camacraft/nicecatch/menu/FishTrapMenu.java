@@ -11,10 +11,11 @@ import net.minecraft.world.inventory.Slot;
 import net.minecraft.world.item.ItemStack;
 
 /**
- * The fish trap's inventory: a hopper-style row — the bait slot on the left (accepts any
- * food a fish would eat), the four catch slots to its right (take-out only; the trap fills
- * them itself). Shift-clicking food from the player's inventory loads the bait slot;
- * shift-clicking the haul empties it.
+ * The fish trap's inventory, on its own dedicated GUI: the bait slot alone on the left
+ * (green-tinted — accepts any food a fish would eat, INCLUDING caught fish, which raise
+ * the size ceiling of what the trap can take), an arrow, and the 2x2 haul grid on the
+ * right (take-out only; the trap fills it itself). Shift-clicking bait-worthy items from
+ * the player's inventory loads the bait slot; shift-clicking the haul empties it.
  */
 public class FishTrapMenu extends AbstractContainerMenu
 {
@@ -33,8 +34,8 @@ public class FishTrapMenu extends AbstractContainerMenu
         this.trap = trap;
         trap.startOpen(playerInventory.player);
 
-        // The trap row (hopper coordinates): bait far left, then the haul.
-        addSlot(new Slot(trap, FishTrapBlockEntity.BAIT_SLOT, 44, 20)
+        // Bait alone on the left; the 2x2 haul grid on the right (fish_trap.png layout).
+        addSlot(new Slot(trap, FishTrapBlockEntity.BAIT_SLOT, 26, 35)
         {
             @Override
             public boolean mayPlace(ItemStack stack)
@@ -42,8 +43,10 @@ public class FishTrapMenu extends AbstractContainerMenu
                 return FishTrapBlockEntity.isBait(stack);
             }
         });
+        int[][] haul = { {97, 26}, {115, 26}, {97, 44}, {115, 44} };
         for (int i = FishTrapBlockEntity.STORAGE_START; i < FishTrapBlockEntity.SLOT_COUNT; i++) {
-            addSlot(new Slot(trap, i, 44 + i * 18, 20)
+            int[] at = haul[i - FishTrapBlockEntity.STORAGE_START];
+            addSlot(new Slot(trap, i, at[0], at[1])
             {
                 @Override
                 public boolean mayPlace(ItemStack stack)
@@ -53,14 +56,14 @@ public class FishTrapMenu extends AbstractContainerMenu
             });
         }
 
-        // Player inventory, hopper-screen layout.
+        // Player inventory, below the trap area.
         for (int row = 0; row < 3; row++) {
             for (int col = 0; col < 9; col++) {
-                addSlot(new Slot(playerInventory, col + row * 9 + 9, 8 + col * 18, row * 18 + 51));
+                addSlot(new Slot(playerInventory, col + row * 9 + 9, 8 + col * 18, row * 18 + 70));
             }
         }
         for (int col = 0; col < 9; col++) {
-            addSlot(new Slot(playerInventory, col, 8 + col * 18, 109));
+            addSlot(new Slot(playerInventory, col, 8 + col * 18, 128));
         }
     }
 

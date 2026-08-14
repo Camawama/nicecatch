@@ -32,7 +32,9 @@ public class NiceCatchConfig
         public final ForgeConfigSpec.DoubleValue dragRunFatigue;
         public final ForgeConfigSpec.DoubleValue crankOverdrive;
         public final ForgeConfigSpec.DoubleValue reelResistance;
-        public final ForgeConfigSpec.DoubleValue chargeSlackCrankPerTick;
+        public final ForgeConfigSpec.DoubleValue chargeSlackTensionPerTick;
+        public final ForgeConfigSpec.DoubleValue chargeCrankTensionRestore;
+        public final ForgeConfigSpec.DoubleValue chargeHookThrowChance;
         public final ForgeConfigSpec.DoubleValue liftPumpBonus;
         public final ForgeConfigSpec.DoubleValue lineLength;
         public final ForgeConfigSpec.DoubleValue fatiguePerRevolution;
@@ -118,7 +120,8 @@ public class NiceCatchConfig
         public final ForgeConfigSpec.DoubleValue trapCatchRadius;
         public final ForgeConfigSpec.DoubleValue trapAttractRadius;
         public final ForgeConfigSpec.DoubleValue trapAmbientCatchChance;
-        public final ForgeConfigSpec.DoubleValue trapBaitMultiplier;
+        public final ForgeConfigSpec.DoubleValue trapFoodBaitMaxLbs;
+        public final ForgeConfigSpec.DoubleValue trapBaitWeightMultiplier;
 
         // Fish AI
         public final ForgeConfigSpec.BooleanValue entityFishingEnabled;
@@ -136,6 +139,7 @@ public class NiceCatchConfig
         public final ForgeConfigSpec.DoubleValue biteRange;
         public final ForgeConfigSpec.IntValue biteWindowTicks;
         public final ForgeConfigSpec.IntValue fishBiteCooldownTicks;
+        public final ForgeConfigSpec.IntValue lineSnapShyTicks;
         public final ForgeConfigSpec.DoubleValue scatterOnHookChance;
         public final ForgeConfigSpec.DoubleValue scatterRadius;
         public final ForgeConfigSpec.DoubleValue swimScareRadius;
@@ -259,8 +263,12 @@ public class NiceCatchConfig
                     .defineInRange("dartMaxPullPerTick", 0.25D, 0.05D, 2.0D);
             dartJerkTensionPenalty = b.comment("Line tension added per unit of sideways swing beyond the smooth-pull cap while answering a dart — jerking the rod violently strains the line. 0 disables the penalty.")
                     .defineInRange("dartJerkTensionPenalty", 0.08D, 0.0D, 1.0D);
-            chargeSlackCrankPerTick = b.comment("Average crank (revolutions per tick) the player must sustain through a Charge to actually take up the slack — 0.09 is a modest, unhurried circle. Fall short and the charge gains you nothing: the fish spits the slack and bolts back out with it. The line is slack during a charge, so this cranking builds no tension. 0 disables the requirement (a charge closes distance for free).")
-                    .defineInRange("chargeSlackCrankPerTick", 0.09D, 0.0D, 0.5D);
+            chargeSlackTensionPerTick = b.comment("Line tension LOST per tick while the fish charges toward you — slack piles up faster than the reel takes it in unless you crank. The danger during a charge is the line going limp, not snapping.")
+                    .defineInRange("chargeSlackTensionPerTick", 0.02D, 0.0D, 0.2D);
+            chargeCrankTensionRestore = b.comment("Line tension RESTORED per crank revolution during a charge (taking up the slack). Capped well below the snapping point — a slack line cannot be cranked into breaking — so during a charge, cranking hard is always safe and always right.")
+                    .defineInRange("chargeCrankTensionRestore", 0.10D, 0.0D, 1.0D);
+            chargeHookThrowChance = b.comment("Chance per tick, while the line is FULLY slack (tension at zero) during a charge, that the fish shakes the unheld hook loose and escapes. This is what punishes watching a charge instead of reeling through it. 0 disables.")
+                    .defineInRange("chargeHookThrowChance", 0.10D, 0.0D, 1.0D);
             chainBiteChancePerSecond = b.comment("Chance per second, while reeling a hooked fish, that a much larger fish nearby strikes it — eating your catch off the hook and taking its place on the line. The small fish becomes the bait; the fight restarts fresh against the monster. Once per fight, rod fights only. 0 disables.")
                     .defineInRange("chainBiteChancePerSecond", 0.03D, 0.0D, 1.0D);
             chainBiteSizeRatio = b.comment("How much larger (hitbox area) the striking fish must be than the hooked one for a chain bite.")
@@ -378,6 +386,8 @@ public class NiceCatchConfig
                     .defineInRange("biteWindowTicks", 50, 10, 200);
             fishBiteCooldownTicks = b.comment("How long a fish that escaped or got spooked waits before it can bite again.")
                     .defineInRange("fishBiteCooldownTicks", 400, 0, 6000);
+            lineSnapShyTicks = b.comment("A fish that broke the line (tension snap) remembers the hook in its lip: for this many ticks it shows NO interest in any bobber at all — no approaching, no following, no biting. 2400 = 2 minutes. 0 disables.")
+                    .defineInRange("lineSnapShyTicks", 12000, 0, 24000);
             scatterOnHookChance = b.comment("Chance for each nearby fish to scatter when another fish is hooked. Kept low so a bite doesn't empty the spot.")
                     .defineInRange("scatterOnHookChance", 0.2D, 0.0D, 1.0D);
             scatterRadius = b.comment("Radius of the scatter shockwave around a hooked or attacked fish.")
@@ -503,7 +513,7 @@ public class NiceCatchConfig
             b.push("trap");
             trapCheckIntervalTicks = b.comment("Ticks between a placed fish trap's catch attempts. Traps are meant to be slow, passive fishing.")
                     .defineInRange("trapCheckIntervalTicks", 600, 100, 24000);
-            trapCatchChance = b.comment("Chance per attempt that a real fish swimming inside the trap's catch radius is caught.")
+            trapCatchChance = b.comment("Chance per attempt that a real fish swimming inside the trap's catch radius is caught. An UNBAITED trap catches nothing at all, and the bait decides what can be caught: plain food takes only small fry (trapFoodBaitMaxLbs), while a FISH in the bait slot takes fish up to its own weight times trapBaitWeightMultiplier — feed the trap minnows to catch keepers, keepers to catch trophies. No monster tuna on a slice of bread.")
                     .defineInRange("trapCatchChance", 0.35D, 0.0D, 1.0D);
             trapCatchRadius = b.comment("Radius around the trap in which a fish can be caught by it.")
                     .defineInRange("trapCatchRadius", 2.5D, 1.0D, 6.0D);
@@ -511,8 +521,10 @@ public class NiceCatchConfig
                     .defineInRange("trapAttractRadius", 10.0D, 2.0D, 24.0D);
             trapAmbientCatchChance = b.comment("Chance per attempt that a baited trap catches a biome-appropriate fish even with none swimming nearby. Keeps traps slowly productive without replacing rod fishing.")
                     .defineInRange("trapAmbientCatchChance", 0.05D, 0.0D, 1.0D);
-            trapBaitMultiplier = b.comment("Catch chance multiplier while the trap holds bait (any food item). Each catch consumes one bait.")
-                    .defineInRange("trapBaitMultiplier", 1.8D, 1.0D, 5.0D);
+            trapFoodBaitMaxLbs = b.comment("Heaviest fish (pounds) plain FOOD bait (bread, worms, any edible) can catch. Anything bigger ignores a trap baited with mere crumbs.")
+                    .defineInRange("trapFoodBaitMaxLbs", 5.0D, 0.5D, 100000.0D);
+            trapBaitWeightMultiplier = b.comment("With a FISH item as bait, the trap can catch fish up to the bait's own weight times this. Un-stamped fish items (no weight data) count as about 1.5 lbs. The ladder: food -> small fry -> use those as bait for keepers -> use keepers for trophies. Each catch consumes the bait.")
+                    .defineInRange("trapBaitWeightMultiplier", 8.0D, 1.0D, 100.0D);
             b.pop();
 
             b.push("spawning");
