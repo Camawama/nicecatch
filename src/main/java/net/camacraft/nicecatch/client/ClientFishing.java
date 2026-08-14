@@ -53,6 +53,8 @@ public class ClientFishing
     private static byte dartDir;
     /** This fish's difficulty-ladder tier: 0 basic reel only, 1 lifts, 2 charges, 3 darts. */
     private static byte fightTier;
+    /** Ticks left of the chain-bite announcement flashing in the fight HUD's hint slot. */
+    private static int chainNoticeTicks;
     /** Line queued to pay out from scroll-up, consumed into the next reel packet. */
     private static float pendingFeed;
     /** Last fight tick a lift whoosh played, so the cue never machine-guns. */
@@ -151,6 +153,12 @@ public class ClientFishing
     public static byte fightTier()
     {
         return fightTier;
+    }
+
+    /** Ticks left of the chain-bite announcement; >0 means the hint slot shows it. */
+    public static int chainNoticeTicks()
+    {
+        return chainNoticeTicks;
     }
 
     /**
@@ -298,6 +306,7 @@ public class ClientFishing
         }
         if (castCooldown > 0) castCooldown--;
         if (celebrateTicks > 0) celebrateTicks--;
+        if (chainNoticeTicks > 0) chainNoticeTicks--;
 
         // Animation signals decay every tick; live reel input below re-feeds them, and the
         // crank angle keeps coasting so the wobble spins down instead of freezing.
@@ -547,7 +556,8 @@ public class ClientFishing
     }
 
     public static void handleFightTick(float newProgress, float newTension, float newFatigue,
-                                       boolean running, byte phaseId, byte newDartDir, byte tier)
+                                       boolean running, byte phaseId, byte newDartDir, byte tier,
+                                       boolean chainBite)
     {
         if (phase != Phase.FIGHT) return;
         progress = newProgress;
@@ -556,6 +566,7 @@ public class ClientFishing
         fishRunning = running;
         fightPhase = FightPhase.byId(phaseId);
         fightTier = tier;
+        if (chainBite) chainNoticeTicks = 60;
         if (newDartDir != 0 && dartDir == 0) {
             // A dart just began: an audible jolt so the prompt is never missed.
             Minecraft.getInstance().getSoundManager().play(
@@ -603,6 +614,7 @@ public class ClientFishing
         fightAnchorId = -1;
         dartDir = 0;
         fightTier = 0;
+        chainNoticeTicks = 0;
         pendingFeed = 0.0F;
         reelItem = false;
         progress = shownProgress = 0.0F;
@@ -618,6 +630,7 @@ public class ClientFishing
         fightAnchorId = -1; // a rod fight; the bobber is the anchor
         dartDir = 0;
         fightTier = 0;
+        chainNoticeTicks = 0;
         fightTicks = 0;
         lastLiftCueTick = -100;
         // The bar shows line retrieved; the server's first fight tick fills in the real value.

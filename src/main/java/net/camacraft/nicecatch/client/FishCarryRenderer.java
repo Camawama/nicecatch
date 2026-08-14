@@ -155,6 +155,12 @@ public final class FishCarryRenderer
             // Toward the chest's center line (this sign centers it; flipped, it doubles the
             // offset the user saw).
             pose.translate((leftHand ? -1.0D : 1.0D) * CARRY_CENTER, 0.0D, 0.0D);
+            // Oversized fish drift out in front of the arms (the hand socket's axes are not
+            // perfectly body-aligned, so a giant's bulk accumulates along the off-axis):
+            // pull anything bigger than the ordinary two-hander back toward the chest,
+            // proportionally and capped. Ordinary heavy fish (the calibrated case) get 0.
+            double oversize = Math.max(0.0D, display.getBbHeight() * scale - 0.9D);
+            pose.translate(0.0D, 0.0D, -Math.min(0.55D, oversize * 0.45D));
             // SAME yaw for both hands, deliberately: mirroring it (+90 left) faced the fish
             // the opposite way, and the third-person X-90 correction pitching an
             // opposite-facing fish turned it fully upside down in the off hand. One

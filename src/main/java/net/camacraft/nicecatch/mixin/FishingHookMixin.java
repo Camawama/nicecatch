@@ -270,7 +270,11 @@ public abstract class FishingHookMixin
         final double REACH = 0.9D;   // forward along the body, in body-widths — out to the snout
         final double HEIGHT = 0.42D;  // up the body, in body-heights — low so the hook meets the mouth
         double rad = Math.toRadians(fish.yBodyRot);
-        double reach = fish.getBbWidth() * REACH;
+        // Sublinear reach: on big fish the hitbox grows faster than the model's actual
+        // snout distance, so a straight body-width fraction floats the bobber in the air
+        // ahead of the head. Growth past the small-fish baseline is reined in — better a
+        // hair inside a trophy's lip than hovering in front of it.
+        double reach = Math.min(fish.getBbWidth() * REACH, 0.45D + fish.getBbWidth() * 0.35D);
         self.setPos(
                 fish.getX() - Math.sin(rad) * reach,
                 fish.getY(HEIGHT),

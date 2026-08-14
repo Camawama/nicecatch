@@ -477,7 +477,7 @@ public class ServerFishingManager
         level.playSound(null, player.getX(), player.getY(), player.getZ(),
                 SoundEvents.FISHING_BOBBER_RETRIEVE, SoundSource.PLAYERS, 0.6F, 1.15F);
         NiceCatchNet.sendTo(player, new FightTickMessage(fight.progress, fight.tension, fight.fatigue,
-                fight.phase.isRun(), fight.phase.id(), (byte) 0, fightTier(fight)));
+                fight.phase.isRun(), fight.phase.id(), (byte) 0, fightTier(fight), false));
     }
 
     public static void onReelInput(ServerPlayer player, float crank, float lift, float side,
@@ -1224,7 +1224,8 @@ public class ServerFishingManager
 
         NiceCatchNet.sendTo(player, new FightTickMessage(fight.progress, fight.tension, fight.fatigue,
                 run, fight.phase.id(), fight.dartTicksLeft > 0 ? fight.dartDir : (byte) 0,
-                fightTier(fight)));
+                fightTier(fight), fight.chainNotify));
+        fight.chainNotify = false;
     }
 
     /**
@@ -1289,8 +1290,9 @@ public class ServerFishingManager
         fight.phaseTicks = 30 + random.nextInt(15);
         endDart(fight, random);
         fight.chainHappened = true;
-
-        player.displayClientMessage(Component.translatable("nicecatch.chain"), true);
+        // Announced through the fight HUD's own hint slot, NOT the actionbar — the fight
+        // hints draw at the vanilla actionbar height, and the two overlapped into mush.
+        fight.chainNotify = true;
         return taker;
     }
 

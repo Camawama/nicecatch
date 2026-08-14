@@ -87,8 +87,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   while any line is out (fish or not) now triggers the same re-rig rod cooldown as the
   cut-line key. Deliberate reel-ins cost nothing.
 - **Carry fixes**: a truly giant fish (trophy tuna) no longer floats forward out of the
-  hands (the size-scaled cradle offset is capped), and only ONE heavy fish shows at a
-  time — a second heavy fish in the other hand stays stowed instead of intersecting.
+  hands (the size-scaled cradle offset is capped AND oversized fish are pulled back
+  toward the chest proportionally), and only ONE heavy fish shows at a time — a second
+  heavy fish in the other hand stays stowed instead of intersecting.
+- **"Something bigger took your catch!" no longer smears over the fight hints** — the
+  fight HUD draws its coaching at the vanilla actionbar height, so the chain-bite
+  actionbar message overlapped it. The announcement now flashes in the fight HUD's own
+  hint slot (top priority, 3 seconds, gold).
+- **The bobber stays pinned to big fish' mouths**: the head-pin reach grew linearly with
+  hitbox width, which on large fish overshot the model's actual snout and hung the bobber
+  in open water ahead of the head. Reach growth is now sublinear — small fish unchanged,
+  trophies keep the hook visually in the lip.
 - **Fish health scales with size** (`weight.healthScaleExponent`, default 2.0): max
   health is multiplied by bodyScale^exponent, so a 500 lb leviathan tuna is a genuine
   tank while a minnow is fragile. Applied server-side, persists correctly, never stacks,

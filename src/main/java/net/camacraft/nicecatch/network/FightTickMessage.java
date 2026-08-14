@@ -24,9 +24,11 @@ public class FightTickMessage
     private final byte phase;
     private final byte dartDir;
     private final byte tier;
+    /** One-shot: a chain bite just happened (the HUD flashes its announcement). */
+    private final boolean chainBite;
 
     public FightTickMessage(float progress, float tension, float fatigue, boolean fishRunning,
-                            byte phase, byte dartDir, byte tier)
+                            byte phase, byte dartDir, byte tier, boolean chainBite)
     {
         this.progress = progress;
         this.tension = tension;
@@ -35,6 +37,7 @@ public class FightTickMessage
         this.phase = phase;
         this.dartDir = dartDir;
         this.tier = tier;
+        this.chainBite = chainBite;
     }
 
     public static void encode(FightTickMessage msg, FriendlyByteBuf buf)
@@ -46,12 +49,13 @@ public class FightTickMessage
         buf.writeByte(msg.phase);
         buf.writeByte(msg.dartDir);
         buf.writeByte(msg.tier);
+        buf.writeBoolean(msg.chainBite);
     }
 
     public static FightTickMessage decode(FriendlyByteBuf buf)
     {
         return new FightTickMessage(buf.readFloat(), buf.readFloat(), buf.readFloat(),
-                buf.readBoolean(), buf.readByte(), buf.readByte(), buf.readByte());
+                buf.readBoolean(), buf.readByte(), buf.readByte(), buf.readByte(), buf.readBoolean());
     }
 
     public static void handle(FightTickMessage msg, Supplier<NetworkEvent.Context> ctx)
@@ -59,7 +63,7 @@ public class FightTickMessage
         ctx.get().enqueueWork(() ->
                 DistExecutor.unsafeRunWhenOn(Dist.CLIENT, () -> () ->
                         ClientFishing.handleFightTick(msg.progress, msg.tension, msg.fatigue,
-                                msg.fishRunning, msg.phase, msg.dartDir, msg.tier)));
+                                msg.fishRunning, msg.phase, msg.dartDir, msg.tier, msg.chainBite)));
         ctx.get().setPacketHandled(true);
     }
 }

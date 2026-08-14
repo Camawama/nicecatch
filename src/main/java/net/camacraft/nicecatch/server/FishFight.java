@@ -96,4 +96,6 @@ public class FishFight
 
     /** A chain bite already happened this fight (a bigger fish ate the hooked one). */
     public boolean chainHappened;
+    /** One-shot flag: tell the client about the chain bite on the next fight tick message. */
+    public boolean chainNotify;
 }

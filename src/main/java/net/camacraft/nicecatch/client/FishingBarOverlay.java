@@ -70,7 +70,12 @@ public class FishingBarOverlay
                 // visibly rising and a soft whoosh carry the same signal.)
                 boolean lifting = ClientFishing.liftAnim() > 0.35F;
 
-                if (ClientFishing.tension() > 0.8F) {
+                if (ClientFishing.chainNoticeTicks() > 0) {
+                    // A chain bite is the fight's biggest moment — it owns the hint slot
+                    // for a few seconds. (It used to go to the vanilla actionbar, which
+                    // draws at this exact height and overlapped these hints into mush.)
+                    drawHint(graphics, window, y, "nicecatch.chain", 0xFFFFB03A, true);
+                } else if (ClientFishing.tension() > 0.8F) {
                     drawHint(graphics, window, y, "nicecatch.hint.tension", 0xFFFF4040, true);
                 } else if (ClientFishing.dartDirection() != 0) {
                     // A dart demands its counter-pull NOW; it outranks every calm hint.
