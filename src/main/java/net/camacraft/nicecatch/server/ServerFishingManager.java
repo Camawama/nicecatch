@@ -128,6 +128,21 @@ public class ServerFishingManager
         return session != null && (session.fight != null || session.retrieve != null);
     }
 
+    /**
+     * A rod grabbed off a rod stand with a fish already on the line: the grab IS the
+     * hook-set, so the fight starts on the spot — no bite window minigame from a stand.
+     */
+    public static boolean startStandFight(ServerPlayer player, FishingHook hook, PathfinderMob fish)
+    {
+        if (isBusy(player) || FishBehavior.isHooked(fish) || !fish.isAlive()) return false;
+        InteractionHand hand = RodUtil.findRodHand(player);
+        if (hand == null) return false;
+        Session session = session(player);
+        clearBiteFlow(player.serverLevel(), session);
+        startEntityFight(player, session, hook, hand, fish);
+        return true;
+    }
+
     @SubscribeEvent
     public static void onLogout(PlayerEvent.PlayerLoggedOutEvent event)
     {
@@ -255,6 +270,9 @@ public class ServerFishingManager
         NiceCatchConfig.Server cfg = NiceCatchConfig.SERVER;
         power = Mth.clamp(power, 0.0F, 1.0F);
         double multiplier = Mth.lerp(power, cfg.castPowerMin.get(), cfg.castPowerMax.get());
+        // Long Cast: the whole throw flies harder, level by level.
+        multiplier *= 1.0D + 0.15D * net.camacraft.nicecatch.registry.ModEnchantments.level(
+                player.getItemInHand(hand), net.camacraft.nicecatch.registry.ModEnchantments.LONG_CAST);
 
         Session session = session(player);
         session.pendingCastMultiplier = multiplier;
@@ -323,8 +341,12 @@ public class ServerFishingManager
 
         ItemStack rod = player.getItemInHand(hand);
         fight.tensionScale = Math.max(1.0F, AquacultureCompat.tensionScale(rod))
+                * (1.0F + 0.25F * net.camacraft.nicecatch.registry.ModEnchantments.level(
+                        rod, net.camacraft.nicecatch.registry.ModEnchantments.IRON_LINE))
                 / FishTraits.of(fish).tension();
-        fight.reelScale = Math.max(1.0F, AquacultureCompat.reelEffectiveness(rod));
+        fight.reelScale = Math.max(1.0F, AquacultureCompat.reelEffectiveness(rod))
+                * (1.0F + 0.10F * net.camacraft.nicecatch.registry.ModEnchantments.level(
+                        rod, net.camacraft.nicecatch.registry.ModEnchantments.QUICK_REEL));
         fight.doubleCatchChance = AquacultureCompat.doubleCatchChance(rod)
                 + FishTraits.of(fish).doubleCatch();
 
@@ -526,7 +548,9 @@ public class ServerFishingManager
             Retrieve r = new Retrieve();
             r.hand = hand;
             r.item = isItemOnLine(hook);
-            r.reelScale = Math.max(1.0F, AquacultureCompat.reelEffectiveness(player.getItemInHand(hand)));
+            r.reelScale = Math.max(1.0F, AquacultureCompat.reelEffectiveness(player.getItemInHand(hand)))
+                    * (1.0F + 0.10F * net.camacraft.nicecatch.registry.ModEnchantments.level(
+                            player.getItemInHand(hand), net.camacraft.nicecatch.registry.ModEnchantments.QUICK_REEL));
             session.retrieve = r;
             clearBiteFlow(level, session); // we're reeling in now, not courting bites
         }
@@ -728,14 +752,14 @@ public class ServerFishingManager
             return;
         }
 
-        // Reeling in a fishless line: no bite courting while the bobber is being hauled in,
-        // and if the player lets go for too long the reel-in is abandoned (idle bobber again).
-        if (session.retrieve != null) {
-            if (++session.retrieve.idleTicks > NiceCatchConfig.SERVER.reelIdleTimeoutTicks.get()) {
-                session.retrieve = null;
-                NiceCatchNet.sendTo(player, new FightEndMessage(FightEndMessage.ESCAPED));
-            }
-            return;
+        // Reeling in a fishless line: the idle-timeout still abandons a released reel-in —
+        // but courting continues below, because the crawling bobber IS a worked lure now:
+        // movement-hunting species (lure_movement) strike a slow retrieve harder than a
+        // dead-still float. A bite that lands simply cancels the retrieve and takes over.
+        if (session.retrieve != null
+                && ++session.retrieve.idleTicks > NiceCatchConfig.SERVER.reelIdleTimeoutTicks.get()) {
+            session.retrieve = null;
+            NiceCatchNet.sendTo(player, new FightEndMessage(FightEndMessage.ESCAPED));
         }
 
         if (NiceCatchConfig.SERVER.entityFishingEnabled.get()) {
@@ -781,7 +805,25 @@ public class ServerFishingManager
         if (--session.fishNearbyCheckIn <= 0) {
             session.fishNearbyCheckIn = 20;
             session.fishNearby = FishBehavior.anyFishNear(hook);
-            session.envBiteMult = FishBehavior.coldFactor(level, hook.blockPosition());
+            session.envBiteMult = FishBehavior.coldFactor(level, hook.blockPosition())
+                    * FishBehavior.weatherFactor(level, hook.blockPosition());
+        }
+
+        // Auto Attract: the rod works the bobber all by itself — a small twitch every
+        // couple of seconds that reads as genuine drift to the movement-hunters below.
+        {
+            InteractionHand jigHand = RodUtil.findRodHand(player);
+            if (jigHand != null && hook.currentState == FishingHook.FishHookState.BOBBING
+                    && net.camacraft.nicecatch.registry.ModEnchantments.level(
+                            player.getItemInHand(jigHand),
+                            net.camacraft.nicecatch.registry.ModEnchantments.AUTO_ATTRACT) > 0
+                    && (hook.tickCount + hook.getId()) % 34 == 0) {
+                double angle = level.random.nextDouble() * Math.PI * 2.0D;
+                hook.setDeltaMovement(hook.getDeltaMovement().add(
+                        Math.cos(angle) * 0.05D, -0.03D, Math.sin(angle) * 0.05D));
+                level.sendParticles(ParticleTypes.FISHING, hook.getX(), hook.getY(), hook.getZ(),
+                        1, 0.05D, 0.02D, 0.05D, 0.0D);
+            }
         }
         if (hook.nibble <= 0) {
             if (session.fishNearby) {
@@ -881,14 +923,29 @@ public class ServerFishingManager
         for (PathfinderMob fish : candidates) {
             topInterest = Math.max(topInterest, FishBehavior.state(fish).interest);
         }
+        // Moving bait: a drifting or slowly-reeled bobber is a WORKED LURE to species that
+        // hunt movement (lure_movement), and a hair boring to them when dead still.
+        double hookDrift = Math.sqrt(
+                (hook.getX() - hook.xOld) * (hook.getX() - hook.xOld)
+                        + (hook.getZ() - hook.zOld) * (hook.getZ() - hook.zOld));
+        float moveFactor = (float) Mth.clamp(hookDrift / 0.04D, 0.0D, 1.0D);
+        float topLurePref = 0.0F;
+        for (PathfinderMob fish : candidates) {
+            topLurePref = Math.max(topLurePref, FishProfiles.of(fish).lureMovement);
+        }
+        float movementMult = (1.0F - 0.3F * topLurePref * (1.0F - moveFactor))
+                + topLurePref * cfg.lureMovementBonus.get().floatValue() * moveFactor;
+
         float chancePerTick = cfg.biteChancePerSecond.get().floatValue() / 20.0F
                 * (1.0F + 0.35F * lure)
                 * AquacultureCompat.biteChanceMultiplier(rod)
                 * (0.3F + 0.7F * topInterest)
+                * movementMult
                 * session.envBiteMult;
         if (level.random.nextFloat() < chancePerTick) {
             PathfinderMob biter = pickBiter(level, candidates, rod);
             // The fish commits: it beelines for the hook behind a vanilla wake, then bites on arrival.
+            session.retrieve = null; // the strike outranks a slow reel-in
             session.approachFish = biter.getUUID();
             session.approachTicks = (int) Mth.clamp(Math.sqrt(biter.distanceToSqr(hook)) * 8.0D, 15.0D, 70.0D);
             FishBehavior.state(biter).biteBobber = hook;
@@ -943,9 +1000,15 @@ public class ServerFishingManager
     private static void beginBite(Session session, ServerLevel level, FishingHook hook, PathfinderMob fish)
     {
         session.pendingFish = fish.getUUID();
-        // A slippery fish spits the hook fast: its bite window is meaningfully shorter.
+        session.retrieve = null; // a bite outranks whatever slow reel-in was in progress
+        // A slippery fish spits the hook fast: its bite window is meaningfully shorter;
+        // a Sure Hook rod holds it on meaningfully longer.
+        ItemStack windowRod = hook.getPlayerOwner() != null && RodUtil.findRodHand(hook.getPlayerOwner()) != null
+                ? hook.getPlayerOwner().getItemInHand(RodUtil.findRodHand(hook.getPlayerOwner())) : ItemStack.EMPTY;
         session.pendingBiteTicks = Math.max(10, Math.round(
-                NiceCatchConfig.SERVER.biteWindowTicks.get() * FishTraits.of(fish).biteWindow()));
+                NiceCatchConfig.SERVER.biteWindowTicks.get() * FishTraits.of(fish).biteWindow()
+                * (1.0F + 0.3F * net.camacraft.nicecatch.registry.ModEnchantments.level(
+                        windowRod, net.camacraft.nicecatch.registry.ModEnchantments.SURE_HOOK))));
         // The hook-set direction for this bite, rolled here so it can ride the bite packet.
         session.pendingBiteDir = NiceCatchConfig.SERVER.directionalHookSet.get()
                 ? (byte) (1 + level.random.nextInt(2)) : 0;
@@ -1076,7 +1139,8 @@ public class ServerFishingManager
         // opening grace, so a big fish's hook-set run can't flash the bar red before the
         // angler has even read the situation.
         int graceLen = cfg.earlyTensionGraceTicks.get();
-        float tensionEase = graceLen <= 0 ? 1.0F : Math.min(1.0F, fight.ticks / (float) graceLen);
+        float tensionEase = graceLen <= 0 ? 1.0F
+                : Math.min(1.0F, (fight.ticks - fight.tensionEaseStart) / (float) graceLen);
         boolean charging = fight.phase == FightPhase.CHARGE;
         // Sprinting against a loaded drag is exhausting: the more line the fish has already
         // taken, the faster its runs burn stamina. This is what finally wears a monster
@@ -1296,10 +1360,15 @@ public class ServerFishingManager
         applyFishCharacter(fight, taker);
         ItemStack rod = player.getItemInHand(fight.hand);
         fight.tensionScale = Math.max(1.0F, AquacultureCompat.tensionScale(rod))
+                * (1.0F + 0.25F * net.camacraft.nicecatch.registry.ModEnchantments.level(
+                        rod, net.camacraft.nicecatch.registry.ModEnchantments.IRON_LINE))
                 / FishTraits.of(taker).tension();
         fight.doubleCatchChance = AquacultureCompat.doubleCatchChance(rod)
                 + FishTraits.of(taker).doubleCatch();
         fight.fatigue = 0.0F;
+        // The monster deserves the same opening forgiveness the first fish got: re-arm the
+        // early-tension grace so its arrival can't flash the bar red mid-surprise.
+        fight.tensionEaseStart = fight.ticks;
         fight.lineLength = (float) Math.min(NiceCatchConfig.SERVER.rodRangeLimit.get() - 1.0D,
                 Math.max(fight.lineLength, player.distanceTo(taker) + 4.0D));
         fight.graceTicks = Math.max(fight.graceTicks, 30);
@@ -1601,12 +1670,6 @@ public class ServerFishingManager
                 // fish's own approach and reeled charges in absurdly fast.
                 case CHARGE -> 0.0D;
             };
-            // Bottom rung of the difficulty ladder: a fish light enough to demand no rod
-            // work at all can simply be cranked through its own runs — no lift needed,
-            // ever. "Very easy with a basic reel" is a promise, not a vibe.
-            if (fight.phase.isRun() && fight.weightLbs < cfg.soundPhaseMinWeightLbs.get()) {
-                eff *= 1.6D;
-            }
             target = cfg.reelInSpeed.get() / 20.0D * crankFrac * (1.0D - resist) * eff * fight.reelScale;
             // A darting fish is pulling broadside: the crank gains NOTHING until the prompt
             // is answered — the dart is an interrupt, and answering it demands a stopped
@@ -1846,7 +1909,7 @@ public class ServerFishingManager
         // the dispatch path runs through ServerPlayerGameMode.useItem, which honors it).
         int cooldown = NiceCatchConfig.SERVER.cutLineCooldownTicks.get();
         InteractionHand rodHand = RodUtil.findRodHand(player);
-        if (cooldown > 0 && rodHand != null) {
+        if (cooldown > 0 && rodHand != null && !player.isCreative()) {
             player.getCooldowns().addCooldown(player.getItemInHand(rodHand).getItem(), cooldown);
         }
         // endFight is safe with no fight on: it clears the session and resets the client.

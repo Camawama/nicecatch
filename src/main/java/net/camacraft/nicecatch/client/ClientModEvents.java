@@ -28,6 +28,8 @@ public final class ClientModEvents
     public static void onRegisterRenderers(EntityRenderersEvent.RegisterRenderers event)
     {
         event.registerEntityRenderer(ModEntities.LINE_ARROW.get(), LineArrowRenderer::new);
+        event.registerBlockEntityRenderer(
+                net.camacraft.nicecatch.registry.ModBlockEntities.FISH_TANK.get(), FishTankRenderer::new);
     }
 
     @SubscribeEvent

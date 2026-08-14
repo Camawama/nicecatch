@@ -12,6 +12,7 @@
     "FishingHookRendererMixin",
     "HumanoidModelMixin",
     "ItemInHandRendererMixin",
+    "LiquidBlockRendererMixin",
     "MouseHandlerMixin"
   ],
   "injectors": {

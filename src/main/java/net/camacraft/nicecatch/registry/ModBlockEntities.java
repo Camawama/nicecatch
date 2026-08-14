@@ -17,6 +17,21 @@ public final class ModBlockEntities
             BLOCK_ENTITIES.register("fish_trap", () ->
                     BlockEntityType.Builder.of(FishTrapBlockEntity::new, ModBlocks.FISH_TRAP.get()).build(null));
 
+    public static final RegistryObject<BlockEntityType<net.camacraft.nicecatch.block.BubbleJetBlockEntity>> BUBBLE_JET =
+            BLOCK_ENTITIES.register("bubble_jet", () ->
+                    BlockEntityType.Builder.of(net.camacraft.nicecatch.block.BubbleJetBlockEntity::new,
+                            ModBlocks.BUBBLE_JET.get()).build(null));
+
+    public static final RegistryObject<BlockEntityType<net.camacraft.nicecatch.block.FishTankBlockEntity>> FISH_TANK =
+            BLOCK_ENTITIES.register("fish_tank", () ->
+                    BlockEntityType.Builder.of(net.camacraft.nicecatch.block.FishTankBlockEntity::new,
+                            ModBlocks.FISH_TANK.get()).build(null));
+
+    public static final RegistryObject<BlockEntityType<net.camacraft.nicecatch.block.RodStandBlockEntity>> ROD_STAND =
+            BLOCK_ENTITIES.register("rod_stand", () ->
+                    BlockEntityType.Builder.of(net.camacraft.nicecatch.block.RodStandBlockEntity::new,
+                            ModBlocks.ROD_STAND.get()).build(null));
+
     private ModBlockEntities() {}
 
     public static void register(IEventBus modBus)

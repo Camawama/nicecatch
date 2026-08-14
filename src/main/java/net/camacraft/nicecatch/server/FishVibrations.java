@@ -58,6 +58,11 @@ public final class FishVibrations
     /** Last game time each source's noise was processed; movement events spam every tick. */
     private static final Map<Entity, Long> LAST_HEARD = new WeakHashMap<>();
     private static final int SOURCE_THROTTLE_TICKS = 15;
+    /** Worst-case cap: accepted vibrations per level tick, so a mob-dense area can't stack
+     * entity queries. Loud events always land; quiet ones past the cap just go unheard. */
+    private static final int MAX_EVENTS_PER_TICK = 16;
+    private static long budgetTick = Long.MIN_VALUE;
+    private static int budgetUsed;
 
     @SubscribeEvent
     public static void onGameEvent(VanillaGameEvent event)
@@ -106,6 +111,11 @@ public final class FishVibrations
             if (last != null && now - last < SOURCE_THROTTLE_TICKS) return;
             LAST_HEARD.put(source, now);
         }
+        if (budgetTick != now) {
+            budgetTick = now;
+            budgetUsed = 0;
+        }
+        if (!loud && ++budgetUsed > MAX_EVENTS_PER_TICK) return;
 
         double radius = NiceCatchConfig.SERVER.vibrationScareRadius.get() * (loud ? 1.5D : 1.0D);
         Vec3 pos = event.getEventPosition();

@@ -68,12 +68,34 @@ public final class FishSizing
         return base * traits.scale();
     }
 
-    /** Weight in kilograms: scaled hitbox volume x density config x trait density. */
+    /** Cache line for a fish's computed weight, valid while its UUID and hitbox stand still. */
+    private record CachedWeight(java.util.UUID uuid, float bbWidth, float kg) {}
+
+    private static final java.util.Map<PathfinderMob, CachedWeight> WEIGHT_CACHE =
+            java.util.Collections.synchronizedMap(new java.util.WeakHashMap<>());
+
+    /**
+     * Weight in kilograms: scaled hitbox volume x density config x trait density. Hot path
+     * (trap filters, habitat picks, fight-tier checks all ask), so it is memoized per
+     * entity and revalidated against the UUID and hitbox it was computed from.
+     */
     public static float weightKg(PathfinderMob fish)
     {
+        CachedWeight cached = WEIGHT_CACHE.get(fish);
+        if (cached != null && cached.uuid.equals(fish.getUUID()) && cached.bbWidth == fish.getBbWidth()) {
+            return cached.kg;
+        }
         double volume = fish.getBbWidth() * fish.getBbWidth() * fish.getBbHeight();
-        return (float) (volume * NiceCatchConfig.SERVER.weightPerVolume.get())
+        float kg = (float) (volume * NiceCatchConfig.SERVER.weightPerVolume.get())
                 * FishTraits.of(fish).weight();
+        WEIGHT_CACHE.put(fish, new CachedWeight(fish.getUUID(), fish.getBbWidth(), kg));
+        return kg;
+    }
+
+    /** Config reloads change weightPerVolume; recompute lazily. */
+    public static void clearWeightCache()
+    {
+        WEIGHT_CACHE.clear();
     }
 
     /** Weight in pounds — the unit the fight-difficulty bands are defined in. */

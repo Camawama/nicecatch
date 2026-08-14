@@ -24,6 +24,15 @@ public final class ModItems
     public static final RegistryObject<Item> FISH_TRAP =
             ITEMS.register("fish_trap", () -> new BlockItem(ModBlocks.FISH_TRAP.get(), new Item.Properties()));
 
+    public static final RegistryObject<Item> BUBBLE_JET =
+            ITEMS.register("bubble_jet", () -> new BlockItem(ModBlocks.BUBBLE_JET.get(), new Item.Properties()));
+
+    public static final RegistryObject<Item> FISH_TANK =
+            ITEMS.register("fish_tank", () -> new BlockItem(ModBlocks.FISH_TANK.get(), new Item.Properties()));
+
+    public static final RegistryObject<Item> ROD_STAND =
+            ITEMS.register("rod_stand", () -> new BlockItem(ModBlocks.ROD_STAND.get(), new Item.Properties()));
+
     private ModItems() {}
 
     public static void register(IEventBus modBus)

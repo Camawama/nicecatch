@@ -85,7 +85,8 @@ public final class NiceCatchCommands
         FISH_TYPE_CACHE.clear();
     }
 
-    private static boolean isFishType(EntityType<?> type, ServerLevel level)
+    /** Public: the fish tank's insertion filter asks the same question. Works with any Level. */
+    public static boolean isFishType(EntityType<?> type, net.minecraft.world.level.Level level)
     {
         return FISH_TYPE_CACHE.computeIfAbsent(type, t -> {
             try {

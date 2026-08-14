@@ -5,6 +5,96 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed (big-pass follow-up)
+- **Fish tanks actually connect now**: tanks placed together merge into one aquarium —
+  shared glass walls and interior water seams vanish, so a 2x2x2 or 3x3x3 reads as a
+  single glass box of water. The occupant SWIMS the whole connected build on a slow
+  wandering path, facing along its motion, upright (no more sideways spinning) and
+  finning at real-time speed (the display's animation clock was frozen and its "dry fish"
+  pose flopped it on its side — both fixed). Bigger builds genuinely hold bigger fish.
+  Only LIVE fish go in: a stamped caught fish, a fish bucket, or a fish spawn egg —
+  loot-table fillets are dinner, not pets.
+- **Rod stands are usable**: right-clicking a stand with a cast rod now actually parks it
+  (the reel-control interception let the click through to blocks it belongs to), the
+  weird floating rod arm is gone from the ITEM model, an attached bell now renders as a
+  small bell on the stand and can be snipped off with shears, and a parked line survives
+  its owner logging out (frozen until they return).
+- **Water murk v2**: smoothly interpolated noise (no more blocky patches, seamless across
+  chunks), and murk now scales with DEPTH — shore shallows stay readable, the drop-off
+  past them goes dark. Exactly like standing over real water.
+- **Bubble jet**: reach doubled (12 default, up to 32), intake bubbles now drift into the
+  soul-sand sides so the pump visibly breathes in and out, and jets idle for free when no
+  player is near.
+- **Fish schools stopped pitching in unison**: each fish now smooths its swim pitch at
+  its own rate and carries its own quiet undulation, so a school reads as individuals in
+  the same current instead of one animation stamped eight times.
+- **No cut-line rod cooldown in creative.**
+- **Fish Trap and Rod Stand moved to the Functional Blocks creative tab.**
+- **Old worlds finally get retuned defaults**: config files now carry a version stamp,
+  and values still sitting on a superseded default are migrated automatically on load
+  (anything you customized is never touched). Applies retroactively to every default
+  retuned so far (bite chance, dart window, net cooldown, school spawn weight, the
+  difficulty-ladder threshold, tension tuning).
+- Plus the rest of REVIEW_NOTES.md: chain-bite tension grace, client crank cap honoring
+  crankOverdrive, tamed pets exempt from aggressive fish, stale-yaw fish jumps, dead
+  config/code removed, vibration and bubble-jet cost caps, weight/trait cache work, and
+  a network protocol version bump.
+
+### Added (the big pass)
+- **Bubble Jet block**: a horizontal bubble column. Submerged, it blows a sideways
+  current of bubbles through open water (config `blocks.bubbleJetRange`/`bubbleJetPush`),
+  pushing items, fish, boats, and swimmers along the stream. Crafted from iron, soul
+  sand, and magma.
+- **Fish Tank block**: a glass display case. Right-click with a caught fish to set it
+  swimming inside — the real fish model at the caught individual's stamped size (fitted
+  to the glass), slowly finning — and right-click empty-handed to take it back, weight
+  and traits intact. For the trophy too good to eat.
+- **Rod Stand block**: cast a line, right-click the stand with the rod to park it — the
+  line STAYS OUT with nobody holding it, and your hands are free to cast another rod.
+  Manage a whole row of lines. Parked lines attract and hook fish on their own (patient
+  bite window, `blocks.standBiteWindowTicks`); the bobber churns the whole time, and a
+  BELL right-clicked onto the stand rings out when something takes it. Grabbing the rod
+  with a fish on sets the hook instantly — the fight starts on the spot. The line renders
+  from the stand, not from your empty hands.
+- **Patchy water murk** (`client.waterMurk*`): the water surface darkens in irregular
+  noise patches, so fish under a murky patch are hard to spot from above and a bite gets
+  its surprise back. Underwater visibility is untouched. (Baked into chunk geometry;
+  shader packs that replace the water renderer bypass it.)
+- **Fish jump** (`jumps:true` in fishProfiles — salmon and tropical fish by default,
+  `species.fishJumpChance`): idle near-surface fish occasionally leap clear of the water.
+- **Weather matters** (`species.rainBiteMultiplier` / `thunderBiteMultiplier`): rain on
+  the water puts fish on the feed; a thunderstorm sends them deep and off it (they also
+  idle in the bottom band until it passes).
+- **Heavyweights hold the deep** (`species.deepWaterPreferenceLbs`): fish past the
+  threshold idle in the deepest water available, and the surface clamp now pushes
+  proportionally harder the further a body pokes out — no more trophy backs cruising in
+  open air.
+- **Aggressive fish** (`aggressive:true` in fishProfiles — sharks, pike, thrashers by
+  default): predators with the flag attack ANY creature swimming in their water that is
+  small enough to be prey by hitbox ratio. A rabbit paddling over a big pike is having a
+  bad day. Non-fish prey takes real damage instead of being swallowed; players are exempt
+  unless `species.aggressiveAttackPlayers` says otherwise.
+- **Moving bait** (`lure_movement` in fishProfiles, `species.lureMovementBonus`): species
+  that hunt movement strike a drifting or slowly-reeled bobber far more readily than a
+  dead-still one — and a slow reel-in no longer stops the line attracting at all, so you
+  can genuinely WORK the lure. Defaults researched per species: pike/tuna/salmon chase
+  drift hard, cod and pufferfish prefer it still.
+- **Six fishing-rod enchantments** (enchanting table + anvil, vanilla and Aquaculture
+  rods alike): Quick Reel I-III (+10%/lvl reel speed everywhere), Long Cast I-III
+  (+15%/lvl cast power), Iron Line I-II (+25%/lvl tension tolerance), Sure Hook I-II
+  (+30%/lvl bite window), Alluring I-II (wider attraction radius), and Auto Attract I
+  (the bobber twitches itself like a worked lure — pairs with moving-bait species).
+- **Supplemental spawning respects `doMobSpawning`** (also in this pass, see below).
+
+### Fixed (the big pass)
+- **The robotic synchronized bobber dance is gone.** Fish aimed their feet-origin at a
+  fixed depth below the bobber, so a big fish's body breached, the surface clamp shoved
+  it down, the approach pushed it back up — and every schoolmate, hitting the same
+  surface at the same math, bobbed in perfect eerie unison. All bobber-approach depths
+  are now measured for the fish's BODY (its top stays under), bite reach scales with
+  body size so big mouths can still reach the hook, and orbit speeds get a per-fish
+  offset so schools drift out of phase.
+
 ### Balance (multiplayer playtest feedback)
 - **The difficulty ladder — every demand a fish can make is now weight-gated.**
   Under 5 lbs (`fight.soundPhaseMinWeightLbs`): a pure basic reel — the fish NEVER runs

@@ -1,0 +1,35 @@
+{
+  "parent": "minecraft:block/block",
+  "render_type": "translucent",
+  "textures": {
+    "glass": "minecraft:block/glass",
+    "water": "minecraft:block/light_blue_stained_glass",
+    "particle": "minecraft:block/glass"
+  },
+  "elements": [
+    {
+      "from": [1, 1, 1],
+      "to": [15, 14, 15],
+      "faces": {
+        "north": { "texture": "#water", "cullface": "north" },
+        "south": { "texture": "#water", "cullface": "south" },
+        "east":  { "texture": "#water", "cullface": "east" },
+        "west":  { "texture": "#water", "cullface": "west" },
+        "up":    { "texture": "#water", "cullface": "up" },
+        "down":  { "texture": "#water", "cullface": "down" }
+      }
+    },
+    {
+      "from": [0, 0, 0],
+      "to": [16, 16, 16],
+      "faces": {
+        "north": { "texture": "#glass", "cullface": "north" },
+        "south": { "texture": "#glass", "cullface": "south" },
+        "east":  { "texture": "#glass", "cullface": "east" },
+        "west":  { "texture": "#glass", "cullface": "west" },
+        "up":    { "texture": "#glass", "cullface": "up" },
+        "down":  { "texture": "#glass", "cullface": "down" }
+      }
+    }
+  ]
+}

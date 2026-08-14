@@ -84,11 +84,24 @@ public class ClientEvents
                     }
                 } else if (ClientFishing.gradualReelEnabled()) {
                     // Bobber is out: block the vanilla instant retract; hold to reel it in.
-                    event.setCanceled(true);
-                    event.setSwingHand(false);
+                    // EXCEPT when aiming at a rod stand — that click PARKS the rod, line
+                    // and all, and must reach the block.
+                    if (!aimingAtRodStand(mc)) {
+                        event.setCanceled(true);
+                        event.setSwingHand(false);
+                    }
                 }
             }
         }
+    }
+
+    /** Whether the crosshair rests on a rod stand block (its use handles rod clicks itself). */
+    private static boolean aimingAtRodStand(Minecraft mc)
+    {
+        return mc.hitResult instanceof net.minecraft.world.phys.BlockHitResult blockHit
+                && mc.level != null
+                && mc.level.getBlockState(blockHit.getBlockPos())
+                        .is(net.camacraft.nicecatch.registry.ModBlocks.ROD_STAND.get());
     }
 
     /**

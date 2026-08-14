@@ -164,9 +164,17 @@ public class FollowBobberGoal extends Goal
         double lead = 3.0D;
         double chaseBoost = hookSpeed * 1.6D;
 
+        // Every depth below is measured for the fish's BODY, not its feet origin: aiming a
+        // trophy's origin just under the bobber used to shove its whole back into the air,
+        // where the surface clamp slapped it down, the goal pushed it back up, and an entire
+        // school bobbed against the surface in eerie robotic unison. The fish's TOP stays
+        // under the bobber; only a nibble presses the mouth up to it.
+        double body = fish.getBbHeight();
+
         if (state.biteBobber != null) {
-            // Nibbling: press right up under the bobber, wiggling, tracking it as it drifts.
-            Vec3 target = new Vec3(hook.getX() + hookVel.x * lead, hook.getY() - 0.25D, hook.getZ() + hookVel.z * lead);
+            // Nibbling: press the MOUTH right up under the bobber, wiggling, tracking drift.
+            Vec3 target = new Vec3(hook.getX() + hookVel.x * lead,
+                    hook.getY() - 0.1D - body, hook.getZ() + hookVel.z * lead);
             FishSteering.swimToward(fish, target, 0.035D + hookSpeed * 0.05D, 0.3D + chaseBoost);
             if (fish.tickCount % 4 == 0) {
                 FishSteering.jink(fish, 0.04D);
@@ -174,9 +182,11 @@ public class FollowBobberGoal extends Goal
             return;
         }
 
+        double closeSq = Math.pow(2.5D + body * 0.5D, 2.0D);
         double distSq = fish.distanceToSqr(hook);
-        if (distSq > 6.25D) { // > 2.5 blocks: dart over with purpose, leading the drift
-            Vec3 target = new Vec3(hook.getX() + hookVel.x * lead, hook.getY() - 0.6D, hook.getZ() + hookVel.z * lead);
+        if (distSq > closeSq) { // beyond loitering range: dart over with purpose, leading the drift
+            Vec3 target = new Vec3(hook.getX() + hookVel.x * lead,
+                    hook.getY() - 0.4D - body, hook.getZ() + hookVel.z * lead);
             FishSteering.swimToward(fish, target, 0.03D + hookSpeed * 0.05D, 0.33D + chaseBoost);
             return;
         }
@@ -204,10 +214,12 @@ public class FollowBobberGoal extends Goal
             }
         }
 
-        orbitAngle += orbitDir * 0.09D;
+        // Slightly different orbital speeds per fish, so schoolmates circling one bobber
+        // drift out of phase instead of wheeling in lockstep.
+        orbitAngle += orbitDir * (0.07D + ((fish.getId() & 7) * 0.008D));
         Vec3 target = new Vec3(
                 hook.getX() + hookVel.x * lead + Math.cos(orbitAngle) * orbitRadius,
-                hook.getY() - orbitDepth,
+                hook.getY() - orbitDepth - fish.getBbHeight(),
                 hook.getZ() + hookVel.z * lead + Math.sin(orbitAngle) * orbitRadius);
         FishSteering.swimToward(fish, target, 0.022D, 0.2D + chaseBoost);
     }

@@ -45,4 +45,35 @@ public abstract class FishingHookRendererMixin
         // Copy first — the dispatcher hands back a shared quaternion that must not be mutated.
         return new Quaternionf(orientation).mul(Axis.ZP.rotationDegrees(degrees));
     }
+
+    /**
+     * A stand-parked line anchors to the STAND, not the absent rod: vanilla computes the
+     * line's rod-tip end (locals d4/d5/d6, world position) from the owner's arm, which for
+     * a parked rod would draw the line to a player standing empty-handed across the pond.
+     * Each coordinate's store is swapped for the stand tip when the hook is registered as
+     * stand-held; ordinary lines are untouched.
+     */
+    // require = 0 on all three: these lean on vanilla's local-variable ordering, which a
+    // Forge or mapping update could shuffle. If they ever fail to apply, the line merely
+    // falls back to drawing toward the player instead of crashing the game on load.
+    @org.spongepowered.asm.mixin.injection.ModifyVariable(method = "render", at = @At("STORE"), ordinal = 4, require = 0)
+    private double nicecatch$standAnchorX(double value, FishingHook hook)
+    {
+        var anchor = net.camacraft.nicecatch.client.StandLines.lineAnchor(hook.getId());
+        return anchor != null ? anchor.x : value;
+    }
+
+    @org.spongepowered.asm.mixin.injection.ModifyVariable(method = "render", at = @At("STORE"), ordinal = 5, require = 0)
+    private double nicecatch$standAnchorY(double value, FishingHook hook)
+    {
+        var anchor = net.camacraft.nicecatch.client.StandLines.lineAnchor(hook.getId());
+        return anchor != null ? anchor.y : value;
+    }
+
+    @org.spongepowered.asm.mixin.injection.ModifyVariable(method = "render", at = @At("STORE"), ordinal = 6, require = 0)
+    private double nicecatch$standAnchorZ(double value, FishingHook hook)
+    {
+        var anchor = net.camacraft.nicecatch.client.StandLines.lineAnchor(hook.getId());
+        return anchor != null ? anchor.z : value;
+    }
 }

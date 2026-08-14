@@ -120,11 +120,20 @@ public final class FishPitchRenderer
                     -MAX_PITCH_DEGREES, MAX_PITCH_DEGREES);
         }
 
+        // Schooled fish MOVE in near-lockstep (boids alignment), which made their pitch a
+        // single synchronized wave that read as robotic. Two per-fish breakers: each fish
+        // smooths at its own slightly different rate, and each carries its own quiet
+        // undulation offset — same water, individual bodies.
+        int seed = entity.getId();
+        float personalSmoothing = (float) SMOOTHING + ((seed % 7) - 3) * 0.015F;
+        float undulation = Mth.sin((entity.tickCount + Minecraft.getInstance().getPartialTick()
+                + (seed & 63) * 5.1F) * (0.055F + (seed % 5) * 0.012F)) * 2.5F;
+
         float frameTicks = Minecraft.getInstance().getDeltaFrameTime();
-        float ease = 1.0F - (float) Math.pow(SMOOTHING, frameTicks);
+        float ease = 1.0F - (float) Math.pow(personalSmoothing, frameTicks);
         float pitch = SMOOTHED.getOrDefault(entity, 0.0F);
         pitch += (target - pitch) * ease;
         SMOOTHED.put(entity, pitch);
-        return pitch;
+        return pitch + undulation;
     }
 }

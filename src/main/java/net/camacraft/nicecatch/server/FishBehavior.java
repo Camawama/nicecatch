@@ -94,6 +94,15 @@ public final class FishBehavior
         public boolean vibrationUrgent;
         /** Game time until which this fish wants nothing to do with any bobber (snapped a line off its lip). */
         public long bobberShyUntil;
+        /** Game time until which this fish is mid-leap and exempt from the surface clamp. */
+        public long jumpingUntil;
+    }
+
+    /** Mid-leap: the surface clamp must not slap a jumping salmon back under. */
+    public static boolean isJumping(PathfinderMob fish)
+    {
+        FishState state = STATES.get(fish);
+        return state != null && fish.level().getGameTime() < state.jumpingUntil;
     }
 
     public static FishState state(PathfinderMob fish)
@@ -189,6 +198,7 @@ public final class FishBehavior
                 SCHOOL_SPAWN_CACHE.clear();
                 FishProfiles.clearCache();
                 FishTraits.clearCache();
+                FishSizing.clearWeightCache();
                 NiceCatchCommands.clearCache();
             }
         }
@@ -294,8 +304,9 @@ public final class FishBehavior
         fish.goalSelector.addGoal(3, new FoodInterestGoal(fish));
         fish.goalSelector.addGoal(4, new HuntPreyGoal(fish));
         fish.goalSelector.addGoal(5, new SchoolBoidsGoal(fish));
+        fish.goalSelector.addGoal(6, new net.camacraft.nicecatch.server.goal.FishJumpGoal(fish));
         if (habitat) {
-            fish.goalSelector.addGoal(6, new HabitatGoal(fish));
+            fish.goalSelector.addGoal(7, new HabitatGoal(fish));
         }
     }
 
@@ -327,17 +338,21 @@ public final class FishBehavior
         // Special-trait fish (cosmic, glimmering...) shimmer at all times — hooked included.
         FishTraits.tickAura((ServerLevel) fish.level(), fish);
 
-        if (!fish.isInWater() || isHooked(fish)) return;
+        if (!fish.isInWater() || isHooked(fish) || isJumping(fish)) return;
 
         BlockPos pos = fish.blockPosition();
         FluidState fluid = fish.level().getFluidState(pos);
         if (!fluid.is(FluidTags.WATER)) return;
         if (fish.level().getFluidState(pos.above()).is(FluidTags.WATER)) return; // deep water, fine
 
+        // The push scales with how far the fish already pokes out: the old fixed nudge was
+        // no match for a tall trophy body, which cruised with its back in the open air.
         double surfaceY = pos.getY() + fluid.getHeight(fish.level(), pos);
-        if (fish.getY() + fish.getBbHeight() > surfaceY - 0.03D) {
+        double overshoot = fish.getY() + fish.getBbHeight() - (surfaceY - 0.03D);
+        if (overshoot > 0.0D) {
             Vec3 v = fish.getDeltaMovement();
-            fish.setDeltaMovement(v.x, Math.min(v.y, 0.0D) - 0.03D, v.z);
+            fish.setDeltaMovement(v.x,
+                    Math.min(v.y, 0.0D) - Math.min(0.14D, 0.03D + overshoot * 0.1D), v.z);
         }
     }
 
@@ -377,8 +392,13 @@ public final class FishBehavior
     {
         if (hook == null || !hook.isAlive()) return false;
         if (hook.currentState != FishingHook.FishHookState.BOBBING) return false;
-        if (!(hook.getPlayerOwner() instanceof ServerPlayer owner) || owner.fishing != hook) return false;
-        return !ServerFishingManager.isBusy(owner);
+        if (!(hook.getPlayerOwner() instanceof ServerPlayer owner)) return false;
+        // A line parked on a rod stand attracts fish with nobody holding it at all.
+        if (owner.fishing != hook
+                && !net.camacraft.nicecatch.block.RodStandBlockEntity.isStandHeld(hook)) return false;
+        // Only an active FIGHT stops a line from attracting: a slow reel-in is the opposite
+        // of a dead line — the drift works the bobber like a lure (see lure_movement).
+        return !ServerFishingManager.isFighting(owner);
     }
 
     public static double attractRadius(FishingHook hook)
@@ -390,6 +410,9 @@ public final class FishBehavior
             if (hand != null) {
                 ItemStack rod = owner.getItemInHand(hand);
                 radius += 1.5D * EnchantmentHelper.getItemEnchantmentLevel(Enchantments.FISHING_SPEED, rod);
+                // Alluring: the bobber calls fish in from further out.
+                radius += 1.5D * net.camacraft.nicecatch.registry.ModEnchantments.level(
+                        rod, net.camacraft.nicecatch.registry.ModEnchantments.ALLURING);
             }
         }
         return radius;
@@ -434,7 +457,10 @@ public final class FishBehavior
             if (state.bobber != hook || state.hooked || state.biteBobber != null) continue;
             if (now < state.bobberShyUntil) continue;
             if (!fish.isAlive() || isScattering(fish) || now < state.biteCooldownUntil) continue;
-            if (fish.distanceToSqr(hook) > range * range) continue;
+            // Reach scales with the fish: a trophy's CENTER can never get within a small
+            // fish's biting distance of the bobber — its mouth still can.
+            double reach = range + (fish.getBbWidth() + fish.getBbHeight()) * 0.5D;
+            if (fish.distanceToSqr(hook) > reach * reach) continue;
             out.add(fish);
         }
         return out;
@@ -562,6 +588,21 @@ public final class FishBehavior
     {
         return level.getBiome(pos).value().coldEnoughToSnow(pos)
                 ? NiceCatchConfig.SERVER.coldBiteMultiplier.get().floatValue() : 1.0F;
+    }
+
+    /**
+     * Weather's say in the fishing: rain on the water puts fish ON the feed (surface churn
+     * hides them, food washes in), a thunderstorm sends them deep and off it.
+     */
+    public static float weatherFactor(net.minecraft.world.level.Level level, BlockPos pos)
+    {
+        if (level.isThundering()) {
+            return NiceCatchConfig.SERVER.thunderBiteMultiplier.get().floatValue();
+        }
+        if (level.isRainingAt(pos.above())) {
+            return NiceCatchConfig.SERVER.rainBiteMultiplier.get().floatValue();
+        }
+        return 1.0F;
     }
 
     /** How fast this bobber grows fish interest (Aquaculture bait speeds it up). */

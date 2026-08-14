@@ -60,6 +60,15 @@ public abstract class FishingHookMixin
         FishingHook self = (FishingHook) (Object) this;
         if (self.level().isClientSide) return;
 
+        // A stand-parked line survives its owner logging off: vanilla's tick discards any
+        // hook whose owner can't be resolved, so the hook is frozen in place instead until
+        // they come back (the stand keeps custody the whole time).
+        if (self.getPlayerOwner() == null
+                && net.camacraft.nicecatch.block.RodStandBlockEntity.isStandHeld(self)) {
+            ci.cancel();
+            return;
+        }
+
         // Remember which rod owns this line while it is still in hand — by the time the
         // owner stows it (and vanilla gives up on the line), the hand only holds whatever
         // replaced it, and the abandoned-line cooldown below needs the rod itself.
@@ -174,6 +183,20 @@ public abstract class FishingHookMixin
     }
 
     /**
+     * A line parked on a rod stand is HELD — by the stand. Vanilla's give-up check would
+     * instantly retract it (no rod in the owner's hands), so it is suppressed outright for
+     * stand-held hooks; the stand itself keeps custody until the rod is taken back.
+     */
+    @Inject(method = "shouldStopFishing", at = @At("HEAD"), cancellable = true)
+    private void nicecatch$standHoldsTheRod(Player player, CallbackInfoReturnable<Boolean> cir)
+    {
+        FishingHook self = (FishingHook) (Object) this;
+        if (net.camacraft.nicecatch.block.RodStandBlockEntity.isStandHeld(self)) {
+            cir.setReturnValue(false);
+        }
+    }
+
+    /**
      * Abandoning a line out on the water — switching hotbar slots, stowing the rod, or
      * walking out past the line's absolute range — IS cutting it: the tackle is gone
      * either way, so it gets the full cut-line treatment, identical to the keybind's:
@@ -186,7 +209,7 @@ public abstract class FishingHookMixin
     private void nicecatch$abandonedLineCooldown(Player player, CallbackInfoReturnable<Boolean> cir)
     {
         if (!cir.getReturnValueZ() || nicecatch$lastRod == null) return;
-        if (player.isRemoved() || !player.isAlive()) return;
+        if (player.isRemoved() || !player.isAlive() || player.isCreative()) return;
         int cooldown = NiceCatchConfig.SERVER.cutLineCooldownTicks.get();
         if (cooldown > 0 && player.getCooldowns().isOnCooldown(nicecatch$lastRod)) return;
         if (cooldown > 0) {

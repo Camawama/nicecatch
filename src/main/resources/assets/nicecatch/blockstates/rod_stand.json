@@ -1,0 +1,9 @@
+{
+  "multipart": [
+    { "apply": { "model": "nicecatch:block/rod_stand" } },
+    { "when": { "has_rod": "true" },
+      "apply": { "model": "nicecatch:block/rod_stand_arm" } },
+    { "when": { "has_bell": "true" },
+      "apply": { "model": "nicecatch:block/rod_stand_bell" } }
+  ]
+}

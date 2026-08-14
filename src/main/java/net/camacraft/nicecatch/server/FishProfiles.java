@@ -62,6 +62,12 @@ public final class FishProfiles
         public float foodAffinity = 1.0F;
         /** Hunts much smaller fish. */
         public boolean predator = false;
+        /** A predator so bold it also attacks NON-fish creatures swimming in its water (rabbits beware). */
+        public boolean aggressive = false;
+        /** Leaps clear of the water now and then, salmon-style. */
+        public boolean jumps = false;
+        /** 0..1: how much a MOVING bobber excites this species (lure hunters strike drift). */
+        public float lureMovement = 0.35F;
         /** Minimum (own hitbox area / prey hitbox area) for a fish to count as prey. */
         public float preyRatio = 2.5F;
         /** Preferred idle depth band. */
@@ -154,6 +160,9 @@ public final class FishProfiles
                     case "stamina" -> p.stamina = clampMult(value);
                     case "food" -> p.foodAffinity = clampMult(value);
                     case "predator" -> p.predator = Boolean.parseBoolean(value);
+                    case "aggressive" -> p.aggressive = Boolean.parseBoolean(value);
+                    case "jumps" -> p.jumps = Boolean.parseBoolean(value);
+                    case "lure_movement" -> p.lureMovement = Mth.clamp(Float.parseFloat(value), 0.0F, 1.0F);
                     case "prey_ratio" -> p.preyRatio = Mth.clamp(Float.parseFloat(value), 1.2F, 100.0F);
                     case "depth" -> p.depth = Depth.parse(value, p.depth);
                     case "cover" -> p.cover = Mth.clamp(Float.parseFloat(value), 0.0F, 1.0F);

@@ -1,0 +1,8 @@
+{
+  "variants": {
+    "facing=north": { "model": "nicecatch:block/bubble_jet" },
+    "facing=east":  { "model": "nicecatch:block/bubble_jet", "y": 90 },
+    "facing=south": { "model": "nicecatch:block/bubble_jet", "y": 180 },
+    "facing=west":  { "model": "nicecatch:block/bubble_jet", "y": 270 }
+  }
+}

@@ -60,6 +60,8 @@ public class FishFight
     public int phaseTicks;
     public int graceTicks;
     public int ticks;
+    /** Fight tick the early-tension grace counts from; chain bites re-arm it for the new fish. */
+    public int tensionEaseStart;
 
     // Erratic-swimming state: the fish's lateral heading offset (radians off the straight
     // away-from-player line), eased toward a target that gets re-picked every few ticks.

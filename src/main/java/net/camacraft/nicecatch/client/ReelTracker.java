@@ -100,9 +100,15 @@ public class ReelTracker
     public Result consume(boolean holding, boolean dartActive)
     {
         // Scroll and circling are ALTERNATIVE cranks, not additive — the faster of the two
-        // wins, so working both at once buys nothing. The cap leaves headroom above the
-        // server's base full-crank rate: genuinely fast circling overdrives the reel.
-        float outCrank = Math.min(Math.max(crank, scrollCrank), 0.5F);
+        // wins, so working both at once buys nothing. The cap tracks the server's actual
+        // ceiling (base rate x overdrive, synced config), so no overdrive setting is ever
+        // silently truncated client-side.
+        float cap = 0.5F;
+        if (NiceCatchConfig.SERVER_SPEC.isLoaded()) {
+            cap = (float) (NiceCatchConfig.SERVER.maxRevolutionsPerTick.get()
+                    * NiceCatchConfig.SERVER.crankOverdrive.get());
+        }
+        float outCrank = Math.min(Math.max(crank, scrollCrank), cap);
         float outLift = liftLevel;
         float outSide = net.minecraft.util.Mth.clamp(side, -1.2F, 1.2F);
         crank = 0.0F;

@@ -175,9 +175,20 @@ public class HabitatGoal extends Goal
         double surfaceY = fish.getY() + up + 0.8D;
         double bottomY = fish.getY() - down;
 
+        // Heavyweights belong in the deep — a species preference never lets a trophy loll
+        // along the surface with its back in the air — and a thunderstorm sends every fish
+        // down to wait it out.
+        FishProfiles.Depth band = profile.depth;
+        double lbsGate = net.camacraft.nicecatch.NiceCatchConfig.SERVER.deepWaterPreferenceLbs.get();
+        if (net.camacraft.nicecatch.server.FishSizing.weightLbs(fish) >= lbsGate
+                || fish.level().isThundering()) {
+            band = FishProfiles.Depth.BOTTOM;
+        }
+
         double jitter = random.nextDouble() * 1.5D;
-        return switch (profile.depth) {
-            case SURFACE -> surfaceY - 1.2D - jitter;
+        return switch (band) {
+            // Even surface-lovers keep their whole body under: the margin grows with height.
+            case SURFACE -> surfaceY - Math.max(1.2D, fish.getBbHeight() + 0.6D) - jitter;
             case BOTTOM -> bottomY + 0.6D + jitter;
             case OPEN -> bottomY + (surfaceY - bottomY) * (0.35D + random.nextDouble() * 0.3D);
         };

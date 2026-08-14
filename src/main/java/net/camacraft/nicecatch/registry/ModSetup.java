@@ -20,7 +20,12 @@ public final class ModSetup
         }
         if (event.getTabKey() == CreativeModeTabs.TOOLS_AND_UTILITIES) {
             event.accept(ModItems.FISHING_NET.get());
+        }
+        if (event.getTabKey() == CreativeModeTabs.FUNCTIONAL_BLOCKS) {
             event.accept(ModItems.FISH_TRAP.get());
+            event.accept(ModItems.ROD_STAND.get());
+            event.accept(ModItems.BUBBLE_JET.get());
+            event.accept(ModItems.FISH_TANK.get());
         }
     }
 }

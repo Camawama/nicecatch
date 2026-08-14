@@ -25,6 +25,7 @@ public class NiceCatch
         ModEntities.register(modBus);
         ModBlockEntities.register(modBus);
         ModMenus.register(modBus);
+        net.camacraft.nicecatch.registry.ModEnchantments.register(modBus);
 
         context.registerConfig(ModConfig.Type.SERVER, NiceCatchConfig.SERVER_SPEC);
         context.registerConfig(ModConfig.Type.CLIENT, NiceCatchConfig.CLIENT_SPEC);

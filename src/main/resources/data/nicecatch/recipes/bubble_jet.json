@@ -1,0 +1,10 @@
+{
+  "type": "minecraft:crafting_shaped",
+  "pattern": [ "III", "SMS", "III" ],
+  "key": {
+    "I": { "item": "minecraft:iron_ingot" },
+    "S": { "item": "minecraft:soul_sand" },
+    "M": { "item": "minecraft:magma_block" }
+  },
+  "result": { "item": "nicecatch:bubble_jet" }
+}

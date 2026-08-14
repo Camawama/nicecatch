@@ -9,7 +9,8 @@ import net.minecraftforge.network.simple.SimpleChannel;
 
 public class NiceCatchNet
 {
-    private static final String PROTOCOL_VERSION = "1";
+    /** Bump whenever any message's wire format changes, so mismatched jars fail fast at login. */
+    private static final String PROTOCOL_VERSION = "2";
 
     public static final SimpleChannel CHANNEL = NetworkRegistry.newSimpleChannel(
             ResourceLocation.fromNamespaceAndPath(NiceCatch.MODID, "main"),

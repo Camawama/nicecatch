@@ -23,6 +23,10 @@ public class NiceCatchConfig
 
     public static class Server
     {
+        /** Bumped when shipped defaults change; ConfigMigrations upgrades stale world files. */
+        public static final int CURRENT_CONFIG_VERSION = 2;
+        public final ForgeConfigSpec.IntValue configVersion;
+
         public final ForgeConfigSpec.DoubleValue castPowerMin;
         public final ForgeConfigSpec.DoubleValue castPowerMax;
         public final ForgeConfigSpec.DoubleValue biteWindowMultiplier;
@@ -40,7 +44,6 @@ public class NiceCatchConfig
         public final ForgeConfigSpec.DoubleValue fatiguePerRevolution;
         public final ForgeConfigSpec.DoubleValue fatiguePerRunTick;
         public final ForgeConfigSpec.DoubleValue fatigueRecoverPerTick;
-        public final ForgeConfigSpec.DoubleValue slackTakeFactor;
         public final ForgeConfigSpec.DoubleValue chargeChance;
         public final ForgeConfigSpec.DoubleValue tensionPerRevolutionRun;
         public final ForgeConfigSpec.DoubleValue tensionPerRevolutionCalm;
@@ -99,6 +102,17 @@ public class NiceCatchConfig
         public final ForgeConfigSpec.IntValue predationSatiationTicks;
         public final ForgeConfigSpec.BooleanValue habitatMovementEnabled;
         public final ForgeConfigSpec.DoubleValue coldBiteMultiplier;
+        public final ForgeConfigSpec.DoubleValue rainBiteMultiplier;
+        public final ForgeConfigSpec.DoubleValue thunderBiteMultiplier;
+        public final ForgeConfigSpec.DoubleValue fishJumpChance;
+        public final ForgeConfigSpec.BooleanValue aggressiveAttackPlayers;
+        public final ForgeConfigSpec.DoubleValue lureMovementBonus;
+        public final ForgeConfigSpec.DoubleValue deepWaterPreferenceLbs;
+
+        // New blocks
+        public final ForgeConfigSpec.IntValue bubbleJetRange;
+        public final ForgeConfigSpec.DoubleValue bubbleJetPush;
+        public final ForgeConfigSpec.IntValue standBiteWindowTicks;
 
         // Weight, size variance & traits
         public final ForgeConfigSpec.EnumValue<WeightUnit> weightUnit;
@@ -196,6 +210,15 @@ public class NiceCatchConfig
 
         Server(ForgeConfigSpec.Builder b)
         {
+            b.push("meta");
+            // DEFAULT 0, deliberately: a pre-existing world's file gains this key AT the
+            // default, and 0 is what marks it as "never migrated". Fresh worlds no-op
+            // through the migrations (their values already sit on the new defaults) and
+            // get stamped current immediately.
+            configVersion = b.comment("Internal: which generation of shipped defaults this file has seen. When the mod updates a default, values the user never customized are migrated to the new default automatically (customized values are always left alone). Do not edit.")
+                    .defineInRange("configVersion", 0, 0, Integer.MAX_VALUE);
+            b.pop();
+
             b.push("casting");
             castPowerMin = b.comment("Velocity multiplier of the weakest (instant-click) cast, relative to vanilla.")
                     .defineInRange("castPowerMin", 0.30D, 0.05D, 1.0D);
@@ -229,8 +252,6 @@ public class NiceCatchConfig
                     .defineInRange("fatiguePerRunTick", 0.003D, 0.0D, 0.05D);
             fatigueRecoverPerTick = b.comment("Fish stamina regained per tick while you give it slack — don't let it rest.")
                     .defineInRange("fatigueRecoverPerTick", 0.0015D, 0.0D, 0.05D);
-            slackTakeFactor = b.comment("Unused since the fight-phase rework (the run phases strip line intrinsically); kept for config compatibility.")
-                    .defineInRange("slackTakeFactor", 0.7D, 0.0D, 1.5D);
             chargeChance = b.comment("How strongly the Charge tactic is weighted when the fish picks its next move: it sprints back toward you, dumping slack you must crank up. 0 makes it never charge.")
                     .defineInRange("chargeChance", 0.2D, 0.0D, 1.0D);
             maxRevolutionsPerTick = b.comment("Crank speed (mouse revolutions per tick) that counts as a FULL crank — the base reel-in rate. Circling faster than this keeps helping, up to crankOverdrive times the base pull.")
@@ -440,21 +461,21 @@ public class NiceCatchConfig
             b.pop();
 
             b.push("species");
-            fishProfiles = b.comment("Per-species behavior overrides as 'entityid=trait:value,trait:value'. Traits: boldness (0-1, approach willingness), curiosity (interest gain mult), bite (bite chance mult), strength (fight strength mult), stamina (tires slower >1), food (thrown-food attraction mult), predator (true/false), prey_ratio (min own/prey hitbox area ratio to hunt), depth (surface|open|bottom), cover (0-1 kelp/seagrass lurking), size_min/size_max (species size band replacing the global weight.sizeVariance range — grow undersized species like Aquaculture's tuna to trophy size, or set both to 1 to opt a species out of size variance). Species not listed get sensible size-based defaults: small fish are bold, weak and quick to tire; big fish are wary, strong, and lurk near cover.")
+            fishProfiles = b.comment("Per-species behavior overrides as 'entityid=trait:value,trait:value'. Traits: boldness (0-1, approach willingness), curiosity (interest gain mult), bite (bite chance mult), strength (fight strength mult), stamina (tires slower >1), food (thrown-food attraction mult), predator (true/false), aggressive (true/false — also attacks NON-fish creatures swimming in its water, hitbox-size gated), jumps (true/false — leaps clear of the water now and then), lure_movement (0-1 — how much a MOVING bobber excites it; work your line like a lure for these), prey_ratio (min own/prey hitbox area ratio to hunt), depth (surface|open|bottom), cover (0-1 kelp/seagrass lurking), size_min/size_max (species size band replacing the global weight.sizeVariance range — grow undersized species like Aquaculture's tuna to trophy size, or set both to 1 to opt a species out of size variance). Species not listed get sensible size-based defaults: small fish are bold, weak and quick to tire; big fish are wary, strong, and lurk near cover.")
                     .defineListAllowEmpty("fishProfiles",
                             java.util.List.of(
-                                    "minecraft:cod=boldness:0.65,curiosity:1.2,depth:open",
-                                    "minecraft:salmon=boldness:0.45,strength:1.2,stamina:1.15,predator:true,prey_ratio:3.5,depth:open",
-                                    "minecraft:tropical_fish=boldness:0.75,curiosity:1.3,strength:0.8,stamina:0.75,depth:surface,cover:0.5",
-                                    "minecraft:pufferfish=boldness:0.3,curiosity:0.7,food:0.6,cover:0.4",
-                                    "aquaculture:tuna=size_min:0.9,size_max:2.6,strength:1.25,stamina:1.35,boldness:0.4,depth:open",
-                                    "upgrade_aquatic:pike=predator:true,prey_ratio:2.2,strength:1.15,cover:0.7,depth:bottom",
+                                    "minecraft:cod=boldness:0.65,curiosity:1.2,depth:open,lure_movement:0.2",
+                                    "minecraft:salmon=boldness:0.45,strength:1.2,stamina:1.15,predator:true,prey_ratio:3.5,depth:open,jumps:true,lure_movement:0.7",
+                                    "minecraft:tropical_fish=boldness:0.75,curiosity:1.3,strength:0.8,stamina:0.75,depth:surface,cover:0.5,jumps:true",
+                                    "minecraft:pufferfish=boldness:0.3,curiosity:0.7,food:0.6,cover:0.4,lure_movement:0.1",
+                                    "aquaculture:tuna=size_min:0.9,size_max:2.6,strength:1.25,stamina:1.35,boldness:0.4,depth:open,lure_movement:0.8",
+                                    "upgrade_aquatic:pike=predator:true,aggressive:true,prey_ratio:2.2,strength:1.15,cover:0.7,depth:bottom,lure_movement:0.85",
                                     "upgrade_aquatic:lionfish=boldness:0.55,curiosity:0.9,cover:0.5",
-                                    "upgrade_aquatic:thrasher=predator:true,strength:1.3,stamina:1.35,boldness:0.5",
-                                    "upgrade_aquatic:great_thrasher=predator:true,strength:1.45,stamina:1.5,boldness:0.6",
-                                    "unusualfishmod:clownthorn_shark=predator:true,strength:1.35,stamina:1.4,boldness:0.35",
-                                    "unusualfishmod:jungleshark=predator:true,strength:1.35,stamina:1.4,boldness:0.35",
-                                    "unusualfishmod:spoon_shark=predator:true,strength:1.25,stamina:1.3,boldness:0.35",
+                                    "upgrade_aquatic:thrasher=predator:true,aggressive:true,strength:1.3,stamina:1.35,boldness:0.5,lure_movement:0.7",
+                                    "upgrade_aquatic:great_thrasher=predator:true,aggressive:true,strength:1.45,stamina:1.5,boldness:0.6,lure_movement:0.7",
+                                    "unusualfishmod:clownthorn_shark=predator:true,aggressive:true,strength:1.35,stamina:1.4,boldness:0.35,lure_movement:0.7",
+                                    "unusualfishmod:jungleshark=predator:true,aggressive:true,strength:1.35,stamina:1.4,boldness:0.35,lure_movement:0.7",
+                                    "unusualfishmod:spoon_shark=predator:true,aggressive:true,strength:1.25,stamina:1.3,boldness:0.35",
                                     "unusualfishmod:gnasher=predator:true,strength:1.2,stamina:1.2,boldness:0.45",
                                     "unusualfishmod:ripper=predator:true,strength:1.2,stamina:1.2,boldness:0.5"),
                             o -> o instanceof String s && s.contains("="));
@@ -478,6 +499,27 @@ public class NiceCatchConfig
                     .define("habitatMovementEnabled", true);
             coldBiteMultiplier = b.comment("Bite/interest multiplier in snowy-cold water (biome cold enough to snow at the bobber). Fish still bite, just noticeably slower.")
                     .defineInRange("coldBiteMultiplier", 0.5D, 0.05D, 1.0D);
+            rainBiteMultiplier = b.comment("Bite/interest multiplier while rain falls on the water. Real fish feed in the rain: the surface churn hides them and washes food in.")
+                    .defineInRange("rainBiteMultiplier", 1.35D, 0.2D, 3.0D);
+            thunderBiteMultiplier = b.comment("Bite/interest multiplier during a thunderstorm. Storms send fish deep and off the feed (they also idle in deeper water until it passes).")
+                    .defineInRange("thunderBiteMultiplier", 0.55D, 0.05D, 1.0D);
+            fishJumpChance = b.comment("Chance (per ~2-second check) that an idle, near-surface fish of a jumping species (jumps:true in fishProfiles — salmon and the like) leaps clear of the water. Pure spectacle. 0 disables all jumping.")
+                    .defineInRange("fishJumpChance", 0.03D, 0.0D, 1.0D);
+            aggressiveAttackPlayers = b.comment("Whether aggressive species (aggressive:true in fishProfiles — sharks, pike, thrashers) will also attack swimming PLAYERS small enough to count as prey. Off by default; the rabbits are on their own regardless.")
+                    .define("aggressiveAttackPlayers", false);
+            lureMovementBonus = b.comment("How strongly a MOVING bobber excites species that hunt movement (lure_movement in fishProfiles): bite chance x (1 + preference x this) at full drift, while a dead-still bobber slightly bores them. Reel your line in slowly to work it like a lure.")
+                    .defineInRange("lureMovementBonus", 1.6D, 0.0D, 5.0D);
+            deepWaterPreferenceLbs = b.comment("Fish at or above this weight (pounds) idle in the deepest water available (their habitat depth preference is forced to the bottom band), so a monster never lolls half out of the shallows. 0 applies it to everything.")
+                    .defineInRange("deepWaterPreferenceLbs", 25.0D, 0.0D, 100000.0D);
+            b.pop();
+
+            b.push("blocks");
+            bubbleJetRange = b.comment("How many blocks of open water a bubble jet pushes through (the current stops at the first non-water block).")
+                    .defineInRange("bubbleJetRange", 12, 1, 32);
+            bubbleJetPush = b.comment("Acceleration the bubble jet's current applies per tick to entities in its beam.")
+                    .defineInRange("bubbleJetPush", 0.06D, 0.005D, 0.5D);
+            standBiteWindowTicks = b.comment("How long a fish that takes a rod-stand line stays on before it spits the hook (a stand bite is far more forgiving than a hand-held one — you have to walk over). Right-click the stand during the window to grab the rod and the fight starts instantly.")
+                    .defineInRange("standBiteWindowTicks", 160, 40, 1200);
             b.pop();
 
             b.push("weight");
@@ -624,6 +666,8 @@ public class NiceCatchConfig
         public final ForgeConfigSpec.BooleanValue rodAnimationsEnabled;
         public final ForgeConfigSpec.BooleanValue fishCarryEnabled;
         public final ForgeConfigSpec.DoubleValue scrollReelPerNotch;
+        public final ForgeConfigSpec.BooleanValue waterMurkEnabled;
+        public final ForgeConfigSpec.DoubleValue waterMurkStrength;
 
         Client(ForgeConfigSpec.Builder b)
         {
@@ -663,6 +707,10 @@ public class NiceCatchConfig
                     .define("fishCarryEnabled", true);
             scrollReelPerNotch = b.comment("Crank revolutions added per scroll-wheel notch while working the reel (scroll DOWN = wind line in, scroll UP = deliberately pay line out, easing tension at the cost of ground — matching a real reel handle's motion). 0 disables scroll controls entirely.")
                     .defineInRange("scrollReelPerNotch", 0.12D, 0.0D, 1.0D);
+            waterMurkEnabled = b.comment("Patchy surface murk: the water surface darkens in irregular noise patches, so fish under it are harder to spot from above and a bite stays a surprise. Underwater visibility is untouched (only surface-layer water is tinted). Purely visual, client-side; shader packs that replace the water renderer bypass it.")
+                    .define("waterMurkEnabled", true);
+            waterMurkStrength = b.comment("How dark the murkiest surface patches get (0 = invisible, 1 = near-black).")
+                    .defineInRange("waterMurkStrength", 0.5D, 0.0D, 1.0D);
         }
     }
 }

@@ -1,0 +1,11 @@
+{
+  "textures": { "gold": "minecraft:block/gold_block", "dark": "minecraft:block/dark_oak_log", "particle": "minecraft:block/gold_block" },
+  "elements": [
+    { "from": [10.5, 11, 7.5], "to": [13.5, 11.5, 8.5],
+      "faces": { "north": {"texture": "#dark"}, "south": {"texture": "#dark"}, "east": {"texture": "#dark"}, "west": {"texture": "#dark"}, "up": {"texture": "#dark"}, "down": {"texture": "#dark"} } },
+    { "from": [11.5, 9, 7],  "to": [13.5, 11, 9],
+      "faces": { "north": {"texture": "#gold"}, "south": {"texture": "#gold"}, "east": {"texture": "#gold"}, "west": {"texture": "#gold"}, "up": {"texture": "#gold"}, "down": {"texture": "#gold"} } },
+    { "from": [12, 8.5, 7.5], "to": [13, 9, 8.5],
+      "faces": { "north": {"texture": "#gold"}, "south": {"texture": "#gold"}, "east": {"texture": "#gold"}, "west": {"texture": "#gold"}, "down": {"texture": "#gold"} } }
+  ]
+}
